@@ -50,14 +50,21 @@ jobs:
 
       - name: Update formula
         run: |
-          VERSION="${{ steps.version.outputs.version }}"
-          FORMULA="homebrew-floci/Formula/floci.rb"
-          sed -i "s/version \".*\"/version \"${VERSION}\"/" "$FORMULA"
-          sed -i "/darwin-amd64/ { n; s/sha256 \".*\"/sha256 \"${{ steps.sha.outputs.darwin_amd64 }}\"/ }" "$FORMULA"
-          sed -i "/darwin-arm64/ { n; s/sha256 \".*\"/sha256 \"${{ steps.sha.outputs.darwin_arm64 }}\"/ }" "$FORMULA"
-          sed -i "/linux-amd64/ { n; s/sha256 \".*\"/sha256 \"${{ steps.sha.outputs.linux_amd64 }}\"/ }" "$FORMULA"
-          sed -i "/linux-arm64/ { n; s/sha256 \".*\"/sha256 \"${{ steps.sha.outputs.linux_arm64 }}\"/ }" "$FORMULA"
+         VERSION="${{ steps.version.outputs.version }}"
+         FORMULA="homebrew-floci/Formula/floci.rb"
 
+         sed -i "s/version \".*\"/version \"${VERSION}\"/" "$FORMULA"
+         sed -i "s/{{VERSION}}/${VERSION}/g" "$FORMULA"
+         sed -i "s/{{SHA256_DARWIN_AMD64}}/${{ steps.sha.outputs.darwin_amd64 }}/g" "$FORMULA"
+         sed -i "s/{{SHA256_DARWIN_ARM64}}/${{ steps.sha.outputs.darwin_arm64 }}/g" "$FORMULA"
+         sed -i "s/{{SHA256_LINUX_AMD64}}/${{ steps.sha.outputs.linux_amd64 }}/g" "$FORMULA"
+         sed -i "s/{{SHA256_LINUX_ARM64}}/${{ steps.sha.outputs.linux_arm64 }}/g" "$FORMULA"
+
+         sed -i "/darwin-amd64/ { n; s/sha256 \".*\"/sha256 \"${{ steps.sha.outputs.darwin_amd64 }}\"/ }" "$FORMULA"
+         sed -i "/darwin-arm64/ { n; s/sha256 \".*\"/sha256 \"${{ steps.sha.outputs.darwin_arm64 }}\"/ }" "$FORMULA"
+         sed -i "/linux-amd64/ { n; s/sha256 \".*\"/sha256 \"${{ steps.sha.outputs.linux_amd64 }}\"/ }" "$FORMULA"
+         sed -i "/linux-arm64/ { n; s/sha256 \".*\"/sha256 \"${{ steps.sha.outputs.linux_arm64 }}\"/ }" "$FORMULA"
+     
       - name: Open PR
         uses: peter-evans/create-pull-request@v7
         with:
