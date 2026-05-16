@@ -3,7 +3,7 @@ name: Homebrew Bump
 # Triggered after release.yml succeeds on a version tag.
 # Opens a PR in floci-io/homebrew-floci with the new version and SHA256.
 #
-# Required secrets: HOMEBREW_BUMP_TOKEN (PAT with repo scope on homebrew-floci repo)
+# Required secrets: GH_TOKEN (PAT with repo scope on homebrew-floci repo)
 
 on:
   workflow_run:
@@ -53,6 +53,7 @@ jobs:
          FORMULA="homebrew-floci/Formula/floci.rb"
 
          sed -i "s/version \".*\"/version \"${VERSION}\"/" "$FORMULA"
+         sed -i "s|releases/download/[^/]*/|releases/download/${VERSION}/|g" "$FORMULA"
          sed -i "s/{{VERSION}}/${VERSION}/g" "$FORMULA"
          sed -i "s/{{SHA256_DARWIN_ARM64}}/${{ steps.sha.outputs.darwin_arm64 }}/g" "$FORMULA"
          sed -i "s/{{SHA256_LINUX_AMD64}}/${{ steps.sha.outputs.linux_amd64 }}/g" "$FORMULA"
