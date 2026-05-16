@@ -7,9 +7,11 @@ import io.floci.cli.output.OutputFormat;
 import io.floci.cli.output.Printer;
 import picocli.CommandLine.*;
 
+import java.io.InputStream;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Properties;
 import java.util.concurrent.Callable;
 
 @Command(
@@ -19,7 +21,18 @@ import java.util.concurrent.Callable;
 )
 public class VersionCommand implements Callable<Integer> {
 
-    public static final String CLI_VERSION = "0.1.0";
+    public static final String CLI_VERSION = loadVersion();
+
+    private static String loadVersion() {
+        try (InputStream is = VersionCommand.class.getResourceAsStream("/io/floci/cli/version.properties")) {
+            if (is == null) return "unknown";
+            Properties props = new Properties();
+            props.load(is);
+            return props.getProperty("version", "unknown");
+        } catch (Exception e) {
+            return "unknown";
+        }
+    }
 
     @Mixin
     GlobalOptions global;
