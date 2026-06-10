@@ -7,6 +7,10 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- `install.sh` no longer reports a misleading "Checksum mismatch" when a download transiently fails. A failed `sha256sums.txt` fetch inside a command-substitution pipeline was masked by `set -e`, leaving the expected checksum empty and falsely flagging a mismatch against a correctly-downloaded binary. The installer now retries every download with backoff — an explicit loop (4 attempts by default, tunable via `FLOCI_DOWNLOAD_RETRIES`) that treats both transient HTTP errors and 0-byte responses as retryable, on top of `curl --retry` — fetches checksums to a file so download failures are caught, and emits distinct errors for "couldn't fetch checksum" vs. an actual mismatch. Adds `FLOCI_SKIP_CHECKSUM=1` to bypass verification (floci-io/floci#1236)
+
 ## [0.1.4] — 2026-06-02
 
 ### Fixed
