@@ -73,6 +73,45 @@ jobs:
           name: floci-darwin-arm64
           path: target/floci-darwin-arm64
 
+  build-darwin-amd64:
+    name: Build — darwin/amd64 (Rosetta)
+    # GraalVM native-image cannot cross-compile architectures, and GitHub's Intel
+    # macOS runners (macos-13) queue for hours and are being deprecated — a past
+    # release sat 9.5h on macos-13 before being cancelled. Instead we run an
+    # x86_64 GraalVM under Rosetta 2 on the reliable Apple Silicon runner.
+    # setup-graalvm has no arch override, so the x86_64 JDK is installed manually.
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rosetta 2
+        run: sudo softwareupdate --install-rosetta --agree-to-license
+
+      - name: Install x86_64 GraalVM
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/graalvm-x64.tar.gz" \
+            https://download.oracle.com/graalvm/25/latest/graalvm-jdk-25_macos-x64_bin.tar.gz
+          mkdir -p "$RUNNER_TEMP/graalvm-x64"
+          tar -xzf "$RUNNER_TEMP/graalvm-x64.tar.gz" -C "$RUNNER_TEMP/graalvm-x64" --strip-components 1
+          echo "JAVA_HOME=$RUNNER_TEMP/graalvm-x64/Contents/Home" >> "$GITHUB_ENV"
+          echo "$RUNNER_TEMP/graalvm-x64/Contents/Home/bin" >> "$GITHUB_PATH"
+
+      - name: Verify x86_64 toolchain
+        run: arch -x86_64 "$JAVA_HOME/bin/java" -XshowSettings:properties -version 2>&1 | grep 'os.arch'
+
+      - name: Build native binary (x86_64 under Rosetta)
+        run: arch -x86_64 mvn clean package -Pnative -DskipTests -B
+
+      - name: Verify binary is x86_64
+        run: file target/floci | grep -q x86_64
+
+      - run: mv target/floci target/floci-darwin-amd64
+      - uses: actions/upload-artifact@v4
+        with:
+          name: floci-darwin-amd64
+          path: target/floci-darwin-amd64
+
   build-windows-amd64:
     name: Build — windows/amd64
     runs-on: windows-latest
@@ -111,7 +150,7 @@ jobs:
 
   release:
     name: Create GitHub Release
-    needs: [build-linux-amd64, build-linux-arm64, build-darwin-arm64, build-windows-amd64, build-jar]
+    needs: [build-linux-amd64, build-linux-arm64, build-darwin-amd64, build-darwin-arm64, build-windows-amd64, build-jar]
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -159,6 +198,7 @@ jobs:
           files: |
             dist/floci-linux-amd64/floci-linux-amd64
             dist/floci-linux-arm64/floci-linux-arm64
+            dist/floci-darwin-amd64/floci-darwin-amd64
             dist/floci-darwin-arm64/floci-darwin-arm64
             dist/floci-windows-amd64/floci-windows-amd64.exe
             dist/floci-jar/floci.jar

@@ -1,0 +1,49 @@
+name: Test — darwin/amd64 (Rosetta)
+
+# TEMPORARY: manual smoke test for the x86_64-under-Rosetta native build used by
+# release.yml's build-darwin-amd64 job. Trigger it from the Actions tab (or
+# `gh workflow run`) to validate the toolchain without cutting a tag/release.
+# Delete this file once the approach is confirmed working.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-darwin-amd64:
+    name: Build — darwin/amd64 (Rosetta)
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rosetta 2
+        run: sudo softwareupdate --install-rosetta --agree-to-license
+
+      - name: Install x86_64 GraalVM
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/graalvm-x64.tar.gz" \
+            https://download.oracle.com/graalvm/25/latest/graalvm-jdk-25_macos-x64_bin.tar.gz
+          mkdir -p "$RUNNER_TEMP/graalvm-x64"
+          tar -xzf "$RUNNER_TEMP/graalvm-x64.tar.gz" -C "$RUNNER_TEMP/graalvm-x64" --strip-components 1
+          echo "JAVA_HOME=$RUNNER_TEMP/graalvm-x64/Contents/Home" >> "$GITHUB_ENV"
+          echo "$RUNNER_TEMP/graalvm-x64/Contents/Home/bin" >> "$GITHUB_PATH"
+
+      - name: Verify x86_64 toolchain
+        run: |
+          arch -x86_64 "$JAVA_HOME/bin/java" -XshowSettings:properties -version 2>&1 | grep 'os.arch'
+          arch -x86_64 "$JAVA_HOME/bin/native-image" --version
+
+      - name: Build native binary (x86_64 under Rosetta)
+        run: arch -x86_64 mvn clean package -Pnative -DskipTests -B
+
+      - name: Verify binary is x86_64
+        run: file target/floci | tee /dev/stderr | grep -q x86_64
+
+      - run: mv target/floci target/floci-darwin-amd64
+      - uses: actions/upload-artifact@v4
+        with:
+          name: floci-darwin-amd64
+          path: target/floci-darwin-amd64
