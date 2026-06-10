@@ -209,6 +209,38 @@ floci az start --port 4578           # custom host port
 floci az start --persist ./data      # persist state to a host directory
 ```
 
+#### Docker daemon resolution (Podman, rootless, remote contexts)
+
+The Floci container needs access to a Docker-compatible daemon (for Lambda, EC2,
+EKS, MSK, ECR, CodeBuild, and Kafka/Redpanda support). By default `floci start`
+bind-mounts `/var/run/docker.sock`, but it honors the standard `DOCKER_HOST`
+environment variable, so Podman, rootless setups, and remote Docker contexts work
+without extra flags:
+
+```sh
+# Rootless Podman
+export DOCKER_HOST=unix:///run/user/1000/podman/podman.sock
+floci start
+
+# Rootful Podman
+export DOCKER_HOST=unix:///run/podman/podman.sock
+floci start
+
+# Remote daemon over TCP
+export DOCKER_HOST=tcp://10.0.0.5:2375
+floci start
+```
+
+Resolution precedence:
+
+1. **`DOCKER_HOST`** — the standard Docker/Podman variable (`unix://` socket, `tcp://` daemon, or `npipe://` on Windows)
+2. **`DOCKER_SOCK`** — legacy override (a bare socket path)
+3. **OS default** — `/var/run/docker.sock` on Linux/macOS, or the Docker named pipe on Windows
+
+For a `unix://` socket the resolved path is bind-mounted into the container; for a
+remote `tcp://` daemon the `DOCKER_HOST` value is passed through to the container
+instead. Run `floci doctor` to see which endpoint was resolved.
+
 ### `floci stop` / `floci az stop`
 
 ```sh
@@ -386,6 +418,11 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
 ```
+
+> Using Podman or a non-default daemon? Swap the host side of the socket mount for
+> your daemon's socket (e.g. `/run/user/1000/podman/podman.sock:/var/run/docker.sock`).
+> With the CLI, setting `DOCKER_HOST` is enough — see
+> [Docker daemon resolution](#docker-daemon-resolution-podman-rootless-remote-contexts).
 
 ### Azure CI
 

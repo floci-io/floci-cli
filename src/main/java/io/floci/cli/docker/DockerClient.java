@@ -173,9 +173,74 @@ public class DockerClient {
         }
     }
 
+    /** How the Docker daemon is reached, resolved from the environment. */
+    public enum Kind { UNIX, TCP, NPIPE }
+
+    /**
+     * Parsed Docker daemon endpoint. {@code socketPath} is the local socket/pipe path
+     * for {@link Kind#UNIX}/{@link Kind#NPIPE}, and null for {@link Kind#TCP}.
+     */
+    public record DockerHost(Kind kind, String socketPath, String raw) {}
+
+    private static final String DEFAULT_UNIX_SOCKET = "/var/run/docker.sock";
+    private static final String DEFAULT_WINDOWS_PIPE = "\\\\.\\pipe\\docker_engine";
+
+    /** Resolve the Docker endpoint from the current process environment and OS. */
+    public static DockerHost dockerHost() {
+        return parseDockerHost(
+                System.getenv("DOCKER_HOST"),
+                System.getenv("DOCKER_SOCK"),
+                System.getProperty("os.name", ""));
+    }
+
+    /**
+     * Pure resolver for the Docker endpoint. Precedence: {@code DOCKER_HOST}
+     * (standard) → {@code DOCKER_SOCK} (legacy override) → OS default.
+     */
+    public static DockerHost parseDockerHost(String dockerHostEnv, String dockerSockEnv, String osName) {
+        boolean windows = osName != null && osName.toLowerCase().contains("win");
+
+        if (dockerHostEnv != null && !dockerHostEnv.isBlank()) {
+            String value = dockerHostEnv.trim();
+            if (value.startsWith("unix://")) {
+                return new DockerHost(Kind.UNIX, value.substring("unix://".length()), value);
+            }
+            if (value.startsWith("tcp://") || value.startsWith("http://") || value.startsWith("https://")) {
+                return new DockerHost(Kind.TCP, null, value);
+            }
+            if (value.startsWith("npipe://")) {
+                return new DockerHost(Kind.NPIPE, value.substring("npipe://".length()), value);
+            }
+            // No scheme — treat as a bare socket/pipe path.
+            return new DockerHost(windows ? Kind.NPIPE : Kind.UNIX, value, value);
+        }
+
+        if (dockerSockEnv != null && !dockerSockEnv.isBlank()) {
+            return new DockerHost(Kind.UNIX, dockerSockEnv.trim(), dockerSockEnv.trim());
+        }
+
+        if (windows) {
+            return new DockerHost(Kind.NPIPE, DEFAULT_WINDOWS_PIPE, null);
+        }
+        return new DockerHost(Kind.UNIX, DEFAULT_UNIX_SOCKET, null);
+    }
+
+    /** Back-compat accessor for the resolved local socket/pipe path (null for TCP). */
     public static String socketPath() {
-        String os = System.getProperty("os.name", "").toLowerCase();
-        if (os.contains("win")) return "\\\\.\\pipe\\docker_engine";
-        return System.getenv().getOrDefault("DOCKER_SOCK", "/var/run/docker.sock");
+        return dockerHost().socketPath();
+    }
+
+    /**
+     * The {@code docker run} arguments needed to give a container access to the host
+     * Docker daemon. Unix sockets are bind-mounted at the canonical in-container path;
+     * remote TCP daemons are passed through via {@code DOCKER_HOST}.
+     */
+    public static List<String> dockerSocketRunArgs() {
+        DockerHost host = dockerHost();
+        return switch (host.kind()) {
+            case TCP -> List.of("-e", "DOCKER_HOST=" + host.raw());
+            case UNIX -> List.of("-v", host.socketPath() + ":" + DEFAULT_UNIX_SOCKET);
+            case NPIPE -> List.of("-v", DEFAULT_UNIX_SOCKET + ":" + DEFAULT_UNIX_SOCKET);
+        };
     }
 }

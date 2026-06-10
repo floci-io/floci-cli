@@ -7,6 +7,10 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- `floci start` (and `floci az`/`floci gcp start`) now honor the standard `DOCKER_HOST` environment variable, so Podman, rootless setups, and remote Docker contexts work without assuming `/var/run/docker.sock`. `DOCKER_HOST` is resolved into a unix socket, remote TCP daemon, or Windows named pipe — unix sockets are bind-mounted, remote TCP daemons are passed through to the container via `DOCKER_HOST`. Precedence is `DOCKER_HOST` → `DOCKER_SOCK` (legacy override) → OS default. `floci doctor`'s `docker.socket` check reports the resolved endpoint ([#3](https://github.com/floci-io/floci-cli/issues/3))
+
 ## [0.1.4] — 2026-06-02
 
 ### Fixed
