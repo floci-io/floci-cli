@@ -7,6 +7,10 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- Release ships a `darwin/amd64` (Intel macOS) native binary again — built with an x86_64 GraalVM under Rosetta 2 on the Apple Silicon runner, avoiding the unreliable/queue-bound `macos-13` Intel runner that previously caused the target to be dropped (a past release sat 9.5h on `macos-13` before being cancelled). The Homebrew formula bump again wires the `darwin/amd64` SHA, so `brew install` and the install script resolve a real Intel binary instead of 404ing ([#2](https://github.com/floci-io/floci-cli/issues/2))
+
 ## [0.1.4] — 2026-06-02
 
 ### Fixed
