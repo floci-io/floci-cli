@@ -76,7 +76,7 @@ public class AzStartCommand implements Callable<Integer> {
         List<String> args = new ArrayList<>();
         args.addAll(List.of("-d", "--name", global.container));
         args.addAll(List.of("-p", port + ":4577"));
-        args.addAll(List.of("-v", "/var/run/docker.sock:/var/run/docker.sock"));
+        args.addAll(DockerClient.dockerSocketRunArgs());
         if (persistDir != null) {
             args.addAll(List.of("-v", persistDir + ":/app/data"));
         }

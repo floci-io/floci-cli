@@ -11,17 +11,23 @@ public class DockerSocketCheck implements Check {
 
     @Override
     public CheckResult run(String endpoint, String container) {
-        String socketPath = DockerClient.socketPath();
-        String os = System.getProperty("os.name", "").toLowerCase();
-        if (os.contains("win")) {
-            return CheckResult.ok("docker.socket", "Windows named pipe (" + socketPath + ")");
+        DockerClient.DockerHost host = DockerClient.dockerHost();
+        switch (host.kind()) {
+            case NPIPE:
+                return CheckResult.ok("docker.socket", "Windows named pipe (" + host.socketPath() + ")");
+            case TCP:
+                return CheckResult.ok("docker.socket", "remote daemon (" + host.raw() + ")");
+            default:
+                break;
         }
+        String socketPath = host.socketPath();
         if (Files.exists(Path.of(socketPath))) {
             return CheckResult.ok("docker.socket", socketPath + " accessible");
         }
+        String os = System.getProperty("os.name", "").toLowerCase();
         String fix = os.contains("mac")
                 ? "Open Docker Desktop — the socket is created when Docker Desktop is running"
-                : "sudo chmod 666 /var/run/docker.sock  OR  add your user to the docker group";
+                : "sudo chmod 666 " + socketPath + "  OR  add your user to the docker group";
         return CheckResult.fail("docker.socket", socketPath + " not found or not accessible", fix);
     }
 }
