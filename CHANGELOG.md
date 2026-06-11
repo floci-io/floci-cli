@@ -7,6 +7,10 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- `floci doctor`'s `docker.daemon` check reported "Docker daemon not reachable" under Podman even when the daemon was clearly up (container running, endpoint reachable). The probe used `docker info --format '{{.ServerVersion}}'`, a Docker-only template field that errors under `podman info`. It now checks daemon reachability by exit code alone (`docker info` / `podman info` exit 0 when reachable), with output discarded to avoid a pipe-buffer deadlock
+
 ## [0.1.5] — 2026-06-10
 
 ### Added
