@@ -30,8 +30,16 @@ public class DockerClient {
 
     public boolean isDaemonReachable() {
         try {
-            int code = runProcess("docker", "info", "--format", "{{.ServerVersion}}").waitFor();
-            return code == 0;
+            // Probe connectivity by exit code only. `docker info` / `podman info`
+            // exit 0 when the daemon (or DOCKER_HOST socket) is reachable. Avoid a
+            // Docker-only template field like {{.ServerVersion}}, which errors under
+            // Podman and yields a false "daemon not reachable". Output is discarded
+            // so the unread pipe can't fill and deadlock waitFor().
+            Process p = new ProcessBuilder("docker", "info")
+                    .redirectOutput(ProcessBuilder.Redirect.DISCARD)
+                    .redirectError(ProcessBuilder.Redirect.DISCARD)
+                    .start();
+            return p.waitFor() == 0;
         } catch (Exception e) {
             return false;
         }
