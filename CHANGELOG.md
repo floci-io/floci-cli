@@ -7,6 +7,12 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.1.7] — 2026-06-20
+
+### Fixed
+
+- `floci start` mounted the host persistent path to `/var/lib/floci` inside the container, but the floci server reads and writes its persisted state under `/app/data`. State therefore never survived a container recreate despite `--persist` being set. The bind mount now targets `/app/data`, matching the server's data directory ([#8](https://github.com/floci-io/floci-cli/issues/8))
+
 ## [0.1.6] — 2026-06-11
 
 ### Fixed
