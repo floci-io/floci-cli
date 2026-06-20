@@ -83,7 +83,7 @@ public class StartCommand implements Callable<Integer> {
         args.addAll(List.of("-p", port + ":4566"));
         args.addAll(DockerClient.dockerSocketRunArgs());
         if (persistDir != null) {
-            args.addAll(List.of("-v", persistDir + ":/var/lib/floci"));
+            args.addAll(List.of("-v", persistDir + ":/app/data"));
         }
         if (services != null && !services.isBlank()) {
             args.addAll(List.of("-e", "FLOCI_SERVICES=" + services));
