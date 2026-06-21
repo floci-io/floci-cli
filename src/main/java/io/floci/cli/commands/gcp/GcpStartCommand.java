@@ -79,6 +79,9 @@ public class GcpStartCommand implements Callable<Integer> {
         args.addAll(DockerClient.dockerSocketRunArgs());
         if (persistDir != null) {
             args.addAll(List.of("-v", persistDir + ":/app/data"));
+            // The server defaults to in-memory storage; enable persistent mode so
+            // state is actually written to the mounted directory and survives restarts.
+            args.addAll(List.of("-e", "FLOCI_GCP_STORAGE_MODE=persistent"));
         }
         if (services != null && !services.isBlank()) {
             args.addAll(List.of("-e", "FLOCI_GCP_SERVICES=" + services));
