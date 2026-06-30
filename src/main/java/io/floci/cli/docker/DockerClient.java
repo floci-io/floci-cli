@@ -18,7 +18,6 @@ public class DockerClient {
             String id,
             String name,
             String image,
-            String status,
             String state,
             String ports) {}
 
@@ -47,18 +46,19 @@ public class DockerClient {
 
     public Optional<ContainerInfo> inspectContainer(String name) throws DockerException {
         try {
-            String out = run("docker", "inspect", "--format",
-                    "{{.Id}}|{{.Name}}|{{.Config.Image}}|{{.State.Status}}|{{.State.Status}}|{{range $p, $b := .NetworkSettings.Ports}}{{if $b}}{{(index $b 0).HostPort}}->{{$p}} {{end}}{{end}}",
+            String out = run("docker", "container", "inspect",
+                    "--format",
+                    "{{.Id}}|{{.Name}}|{{.Config.Image}}|{{.State.Status}}|" +
+                            "{{range $p, $b := .NetworkSettings.Ports}}{{if $b}}{{(index $b 0).HostPort}}->{{$p}} {{end}}{{end}}",
                     name);
             if (out.isBlank()) return Optional.empty();
             String[] parts = out.trim().split("\\|", -1);
             return Optional.of(new ContainerInfo(
-                    parts.length > 0 ? parts[0] : "",
+                    parts.length > 0 ? parts[0] : "",                       // id
                     parts.length > 1 ? parts[1].replaceFirst("^/", "") : name,
-                    parts.length > 2 ? parts[2] : "",
-                    parts.length > 3 ? parts[3] : "",
-                    parts.length > 4 ? parts[4] : "",
-                    parts.length > 5 ? parts[5].trim() : ""));
+                    parts.length > 2 ? parts[2] : "",                       // image
+                    parts.length > 3 ? parts[3] : "",                       // status
+                    parts.length > 4 ? parts[4].trim() : ""));              // ports
         } catch (DockerException e) {
             if (e.getMessage() != null && e.getMessage().toLowerCase().contains("no such")) {
                 return Optional.empty();
