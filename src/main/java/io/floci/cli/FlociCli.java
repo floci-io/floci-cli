@@ -8,6 +8,7 @@ import io.floci.cli.commands.config.ConfigCommand;
 import io.floci.cli.commands.snapshot.SnapshotCommand;
 import io.floci.cli.config.GlobalConfigStore;
 import io.floci.cli.output.Ansi;
+import io.floci.cli.update.UpdateNotifier;
 import picocli.CommandLine;
 import picocli.CommandLine.*;
 
@@ -21,7 +22,8 @@ import picocli.CommandLine.*;
                 "  floci env       — print environment variables%n" +
                 "  floci aws       — explicit AWS emulator commands%n" +
                 "  floci az        — Azure emulator commands%n" +
-                "  floci gcp       — GCP emulator commands%n",
+                "  floci gcp       — GCP emulator commands%n" +
+                "  floci update    — Update the CLI to the latest release",
         mixinStandardHelpOptions = true,
         versionProvider = FlociCli.VersionProvider.class,
         subcommands = {
@@ -82,10 +84,29 @@ public class FlociCli implements Runnable {
             }
         }
 
+        // npm/gh-style update hint: announce a newer version (from the local cache — no
+        // network) before the command runs, and refresh that cache in the background at
+        // most once per 24h. Skipped for scripts/CI (non-interactive) and for 'update'
+        // itself, which already talks about versions.
+        boolean notify = UpdateNotifier.interactiveRunEnabled() && !isUpdateCommand(effectiveArgs);
+        if (notify) {
+            UpdateNotifier.pendingNotice(VersionCommand.CLI_VERSION).ifPresent(latest ->
+                    System.err.println(Ansi.yellow("A new release of floci is available: "
+                            + VersionCommand.CLI_VERSION + " → " + latest + "\n"
+                            + "Run 'floci update' to install it") + "\n"));
+            UpdateNotifier.refreshInBackground();
+        }
+
         int exitCode = new CommandLine(new FlociCli())
                 .setExecutionExceptionHandler(new ExceptionHandler())
                 .setCaseInsensitiveEnumValuesAllowed(true)
                 .execute(effectiveArgs);
+
+        if (notify) {
+            // Fast commands would otherwise exit before the background check persists
+            // the cache for the next run.
+            UpdateNotifier.awaitRefresh(java.time.Duration.ofMillis(250));
+        }
         System.exit(exitCode);
     }
 
@@ -96,6 +117,14 @@ public class FlociCli implements Runnable {
             if (arg.startsWith("-")) continue;
             return "aws".equals(arg) || "az".equals(arg) || "gcp".equals(arg)
                     || "config".equals(arg) || "completion".equals(arg) || "help".equals(arg);
+        }
+        return false;
+    }
+
+    private static boolean isUpdateCommand(String[] args) {
+        for (String arg : args) {
+            if (arg.startsWith("-")) continue;
+            return "update".equals(arg);
         }
         return false;
     }
