@@ -8,7 +8,9 @@ import io.floci.cli.output.Printer;
 import io.floci.cli.update.ReleaseChannel;
 import picocli.CommandLine.*;
 
+import java.io.BufferedInputStream;
 import java.io.IOException;
+import java.io.OutputStream;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -17,6 +19,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.attribute.PosixFilePermissions;
+import java.security.DigestInputStream;
 import java.security.MessageDigest;
 import java.time.Duration;
 import java.util.HexFormat;
@@ -40,7 +43,8 @@ import java.util.concurrent.Callable;
 )
 public class UpdateCommand implements Callable<Integer> {
 
-    @Option(names = "--check", description = "Only report whether an update is available")
+    @Option(names = "--check",
+            description = "Only report whether an update is available (exit 0: up to date, 1: update available)")
     boolean check;
 
     // No mixinStandardHelpOptions here: its -V/--version would collide with this option.
@@ -79,7 +83,8 @@ public class UpdateCommand implements Callable<Integer> {
             printer.println("update available: " + current + " → " + Ansi.bold(target));
             if (check) {
                 printer.println(Ansi.gray("run 'floci update' to install it"));
-                return 0;
+                // Non-zero so scripts can gate on staleness: floci update --check || floci update
+                return 1;
             }
 
             Path binary = resolveSelf();
@@ -172,11 +177,11 @@ public class UpdateCommand implements Callable<Integer> {
     }
 
     private static void requireWritable(Path binary) {
+        // The atomic rename replaces a directory entry — it only needs write access to the
+        // parent directory, never to the binary itself (which installers often leave 555).
         Path dir = binary.getParent();
-        boolean ok = dir != null && Files.isWritable(dir)
-                && (!Files.exists(binary) || Files.isWritable(binary));
-        if (!ok) {
-            throw new UpdateException("no write permission for " + binary + " — run: sudo floci update");
+        if (dir == null || !Files.isWritable(dir)) {
+            throw new UpdateException("no write permission for " + dir + " — run: sudo floci update");
         }
     }
 
@@ -243,8 +248,13 @@ public class UpdateCommand implements Callable<Integer> {
                 .map(p -> p[0])
                 .findFirst()
                 .orElseThrow(() -> new UpdateException(asset + " not found in sha256sums.txt — aborting"));
-        byte[] digest = MessageDigest.getInstance("SHA-256").digest(Files.readAllBytes(file));
-        String actual = HexFormat.of().formatHex(digest);
+        // Stream the digest — the binary is tens of MB and must not be held in heap whole.
+        MessageDigest sha256 = MessageDigest.getInstance("SHA-256");
+        try (var in = new DigestInputStream(
+                new BufferedInputStream(Files.newInputStream(file)), sha256)) {
+            in.transferTo(OutputStream.nullOutputStream());
+        }
+        String actual = HexFormat.of().formatHex(sha256.digest());
         if (!actual.equals(expected)) {
             throw new UpdateException("checksum mismatch for " + asset + "\n  expected: " + expected
                     + "\n  actual:   " + actual + "\nThe download may be corrupt or tampered with. Aborting.");
@@ -257,11 +267,22 @@ public class UpdateCommand implements Callable<Integer> {
         // Stage in the TARGET's directory (same filesystem), then atomically rename over it.
         // The running process keeps its old inode; the path now serves the new binary.
         Path staged = target.resolveSibling("." + target.getFileName() + ".new");
-        Files.copy(fresh, staged, StandardCopyOption.REPLACE_EXISTING);
-        if (staged.getFileSystem().supportedFileAttributeViews().contains("posix")) {
-            Files.setPosixFilePermissions(staged, PosixFilePermissions.fromString("rwxr-xr-x"));
+        try {
+            Files.copy(fresh, staged, StandardCopyOption.REPLACE_EXISTING);
+            if (staged.getFileSystem().supportedFileAttributeViews().contains("posix")) {
+                Files.setPosixFilePermissions(staged, PosixFilePermissions.fromString("rwxr-xr-x"));
+            }
+            Files.move(staged, target, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+        } catch (IOException e) {
+            // Don't leave .<binary>.new debris next to the production binary — the temp-dir
+            // cleanup in call() never sees this file.
+            try {
+                Files.deleteIfExists(staged);
+            } catch (IOException _) {
+                // best effort; the original failure is what matters
+            }
+            throw e;
         }
-        Files.move(staged, target, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
     }
 
     private static void deleteRecursively(Path root) {
