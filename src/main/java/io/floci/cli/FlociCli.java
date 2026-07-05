@@ -41,7 +41,8 @@ import picocli.CommandLine.*;
                 AwsCommand.class,
                 AzCommand.class,
                 GcpCommand.class,
-                HelpCommand.class
+                HelpCommand.class,
+                UpdateCommand.class,
         }
 )
 public class FlociCli implements Runnable {
