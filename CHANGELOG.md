@@ -7,6 +7,18 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- `floci update` — self-update for native-binary installs. Downloads the platform binary from the GitHub release (same source as `install.sh`), verifies its sha256 against the release's `sha256sums.txt`, and atomically replaces the running binary (staged in the same directory so the `ATOMIC_MOVE` can never leave a half-written executable). `--check` reports staleness without installing (exit 0 = up to date, 1 = update available, script-friendly as `floci update --check || floci update`); `--version <v>` pins a target version. Homebrew-managed installs are detected and refused with a pointer to `brew upgrade floci` ([#12](https://github.com/floci-io/floci-cli/pull/12))
+- `AGENTS.md` — tracked, repository-specific guidance for AI coding agents (architecture, native-image constraints, scope rules, conventions), following the [AGENTS.md standard](https://agents.md/)
+- `CONTRIBUTING.md` — build/test setup, commit message and changelog conventions, PR guidelines, testing policy, and the tag-driven release process — plus a pull request template
+- README now documents the `floci gcp` command group (quick start, command reference, global flags, `floci gcp env` variables, CI usage) — it was fully shipped since 0.1.3 but absent from the README, which claimed the CLI covered "AWS and Azure" only
+
+### Fixed
+
+- `ContainerInfo` fields realigned with the `docker inspect` `--format` template order in `DockerClient` — field/value mismatches could surface wrong container metadata (e.g. status/ports swapped) in `status` and port auto-detection ([#11](https://github.com/floci-io/floci-cli/pull/11))
+- README and release notes claimed the fat JAR runs on Java 21+, but it is built with `--release 25` and fails with `UnsupportedClassVersionError` on Java 21–24 — corrected to Java 25+
+
 ## [0.1.8] — 2026-06-21
 
 ### Fixed
