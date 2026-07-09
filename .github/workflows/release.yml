@@ -192,7 +192,7 @@ jobs:
             iwr https://floci.io/install.ps1 | iex
             ```
 
-            **JVM fallback** (requires Java 21+): `floci.jar`
+            **JVM fallback** (requires Java 25+): `floci.jar`
 
             See [CHANGELOG.md](CHANGELOG.md) for what's new.
           files: |
