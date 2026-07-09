@@ -116,7 +116,8 @@ public class FlociCli implements Runnable {
         for (String arg : args) {
             if (arg.startsWith("-")) continue;
             return "aws".equals(arg) || "az".equals(arg) || "gcp".equals(arg)
-                    || "config".equals(arg) || "completion".equals(arg) || "help".equals(arg);
+                    || "config".equals(arg) || "completion".equals(arg) || "help".equals(arg)
+                    || "update".equals(arg);
         }
         return false;
     }
