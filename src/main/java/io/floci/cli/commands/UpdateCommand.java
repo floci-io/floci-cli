@@ -6,6 +6,7 @@ import io.floci.cli.output.Ansi;
 import io.floci.cli.output.OutputFormat;
 import io.floci.cli.output.Printer;
 import io.floci.cli.update.ReleaseChannel;
+import io.floci.cli.update.Version;
 import picocli.CommandLine.*;
 
 import java.io.BufferedInputStream;
@@ -75,7 +76,10 @@ public class UpdateCommand implements Callable<Integer> {
             boolean pinned = to != null && !to.isBlank();
             String target = pinned ? to.trim() : fetchLatestVersion();
 
-            if (target.equals(current)) {
+            // Unpinned updates are semantic, not string-equal: a pre-release/snapshot build
+            // (0.1.9-rc.1) must not be silently downgraded to the latest stable (0.1.8).
+            // Pinned --version keeps exact equality so deliberate downgrades still work.
+            if (pinned ? target.equals(current) : !Version.isNewer(target, current)) {
                 printer.println(Ansi.green("✓") + " floci " + current + " is up to date");
                 return 0;
             }
@@ -123,8 +127,10 @@ public class UpdateCommand implements Callable<Integer> {
         try {
             JsonNode release = JSON.readTree(fetchString(ReleaseChannel.latestReleaseUrl()));
             String tag = release.path("tag_name").asText("");
-            if (tag.isBlank()) {
-                throw new IOException("no tag_name in the GitHub API response");
+            // Same shape-check as UpdateNotifier: a captive portal or proxy error page must
+            // not end up spliced into a download URL.
+            if (!Version.isValid(tag)) {
+                throw new IOException("GitHub API response did not contain a release version");
             }
             return tag;
         } catch (InterruptedException e) {
@@ -214,8 +220,12 @@ public class UpdateCommand implements Callable<Integer> {
 
     private String fetchString(String url) throws IOException, InterruptedException {
         HttpResponse<String> resp = http.send(get(url), HttpResponse.BodyHandlers.ofString());
-        if (resp.statusCode() != 200 || resp.body().isBlank()) {
+        if (resp.statusCode() != 200) {
             throw new IOException("GET " + url + " → HTTP " + resp.statusCode());
+        }
+        if (resp.body().isBlank()) {
+            // GitHub's CDN can intermittently return 200 with an empty body (see install.sh).
+            throw new IOException("GET " + url + " returned an empty body — please retry");
         }
         return resp.body();
     }

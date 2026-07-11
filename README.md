@@ -158,6 +158,7 @@ Commands are organized into three product groups — `floci aws` (or bare `floci
 | `floci config default-product` | Set the default product (aws, gcp, or az) |
 | `floci update` | Self-update the CLI to the latest release |
 | `floci completion bash\|zsh` | Generate shell completion scripts |
+| `floci update` | Update the CLI to the latest release |
 
 ### AWS commands (`floci` / `floci aws`)
 
@@ -503,6 +504,24 @@ Homebrew-managed installs are refused — use `brew upgrade floci` instead.
 floci completion bash >> ~/.bashrc
 floci completion zsh  >> ~/.zshrc
 ```
+
+### `floci update`
+
+Self-update the CLI in place: downloads the release binary from GitHub, verifies its
+sha256 against the release's `sha256sums.txt`, and atomically replaces the running binary.
+
+```sh
+floci update                      # update to the latest release
+floci update --check              # exit 0: up to date, exit 1: update available
+floci update --version 0.1.7      # install a specific version
+```
+
+Homebrew installs are managed by brew and are detected and refused — use `brew upgrade floci` there instead.
+
+When run from an interactive terminal, floci also checks for new releases in the
+background (at most once per 24h, cached in `~/.floci/update-check.json`) and prints a
+hint before the command output when one is available. Set `FLOCI_NO_UPDATE_CHECK=1` to
+opt out; the check is automatically disabled in CI and for piped output.
 
 ---
 
