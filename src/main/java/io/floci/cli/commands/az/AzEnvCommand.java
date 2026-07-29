@@ -1,6 +1,7 @@
 package io.floci.cli.commands.az;
 
-import io.floci.cli.AzGlobalOptions;
+import io.floci.cli.GlobalOptions;
+import io.floci.cli.ProductProfile;
 import io.floci.cli.docker.DockerClient;
 import io.floci.cli.doctor.checks.AzCliConnectionStringCheck;
 import io.floci.cli.output.Ansi;
@@ -31,7 +32,7 @@ public class AzEnvCommand implements Callable<Integer> {
             Set.of("blob", "queue", "table", "functions", "app-config", "key-vault");
 
     @Mixin
-    AzGlobalOptions global;
+    GlobalOptions global = new GlobalOptions(ProductProfile.AZ);
 
     @Option(names = {"--format"},
             description = "Output mode: connection-string, sdk-vars (default: connection-string)",

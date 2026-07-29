@@ -1,6 +1,7 @@
 package io.floci.cli.commands;
 
 import io.floci.cli.GlobalOptions;
+import io.floci.cli.ProductProfile;
 import io.floci.cli.docker.DockerClient;
 import io.floci.cli.docker.DockerException;
 import io.floci.cli.output.Ansi;
@@ -13,15 +14,28 @@ import java.util.concurrent.Callable;
 
 @Command(
         name = "start",
-        description = "Start the Floci container",
+        description = "Start the Floci AWS emulator container",
         mixinStandardHelpOptions = true
 )
 public class StartCommand implements Callable<Integer> {
 
-    @Mixin
-    GlobalOptions global;
+    protected final ProductProfile profile;
 
-    @Option(names = {"--port"}, description = "Host port to bind (default: 4566)", defaultValue = "4566", paramLabel = "<port>")
+    @Mixin
+    protected GlobalOptions global;
+
+    public StartCommand() {
+        this(ProductProfile.AWS);
+    }
+
+    protected StartCommand(ProductProfile profile) {
+        this.profile = profile;
+        this.global = new GlobalOptions(profile);
+        this.port = profile.defaultPort();
+        this.image = profile.defaultImageRef();
+    }
+
+    @Option(names = {"--port"}, description = "Host port to bind (default: ${DEFAULT-VALUE})", paramLabel = "<port>")
     int port;
 
     @Option(names = {"--persist"}, description = "Host directory for persistent state", paramLabel = "<dir>")
@@ -33,7 +47,7 @@ public class StartCommand implements Callable<Integer> {
     @Option(names = {"--detach"}, description = "Return immediately without waiting for readiness")
     boolean detach;
 
-    @Option(names = {"--image"}, description = "Image reference to use (default: floci/floci:latest)", defaultValue = "floci/floci:latest", paramLabel = "<ref>")
+    @Option(names = {"--image"}, description = "Image reference to use (default: ${DEFAULT-VALUE})", paramLabel = "<ref>")
     String image;
 
     @Option(names = {"--pull"}, description = "Image pull policy: always, missing, never", defaultValue = "missing", paramLabel = "always|missing|never")
@@ -56,7 +70,7 @@ public class StartCommand implements Callable<Integer> {
             if (existing.isPresent()) {
                 String state = existing.get().state();
                 if ("running".equals(state)) {
-                    printer.error("Container '" + global.container + "' is already running.\nRun 'floci stop' first or pass --container <name> to use a different name.");
+                    printer.error("Container '" + global.container + "' is already running.\nRun '" + profile.commandPrefix() + " stop' first or pass --container <name> to use a different name.");
                     return 1;
                 }
                 // Remove stopped container so we can start fresh
@@ -73,28 +87,28 @@ public class StartCommand implements Callable<Integer> {
             printer.println(Ansi.gray("Checking image " + image + " (policy: " + pull + ")..."));
             docker.pull(image, pull);
         } catch (DockerException e) {
-            printer.error("Failed to pull image: " + e.getMessage() + "\nRun 'floci start --pull never' to skip pulling.");
+            printer.error("Failed to pull image: " + e.getMessage() + "\nRun '" + profile.commandPrefix() + " start --pull never' to skip pulling.");
             return 1;
         }
 
         // Build docker run arguments
         List<String> args = new ArrayList<>();
         args.addAll(List.of("-d", "--name", global.container));
-        args.addAll(List.of("-p", port + ":4566"));
+        args.addAll(List.of("-p", port + ":" + profile.defaultPort()));
         args.addAll(DockerClient.dockerSocketRunArgs());
         if (persistDir != null) {
             args.addAll(List.of("-v", persistDir + ":/app/data"));
             // The server defaults to in-memory storage; enable persistent mode so
             // state is actually written to the mounted directory and survives restarts.
-            args.addAll(List.of("-e", "FLOCI_STORAGE_MODE=persistent"));
+            args.addAll(List.of("-e", profile.envVar("STORAGE_MODE") + "=persistent"));
         }
         if (services != null && !services.isBlank()) {
-            args.addAll(List.of("-e", "FLOCI_SERVICES=" + services));
+            args.addAll(List.of("-e", profile.envVar("SERVICES") + "=" + services));
         }
         args.add(image);
 
         try {
-            printer.println("Starting " + Ansi.gold("Floci") + " container...");
+            printer.println("Starting " + Ansi.gold(profile.displayName()) + " container...");
             String id = docker.startContainer(args);
             printer.println(Ansi.green("Container started") + " (" + id.substring(0, Math.min(12, id.length())) + ")");
         } catch (DockerException e) {
@@ -103,7 +117,7 @@ public class StartCommand implements Callable<Integer> {
         }
 
         if (detach) {
-            printer.println(Ansi.gray("Detached. Run 'floci wait' to poll for readiness."));
+            printer.println(Ansi.gray("Detached. Run '" + profile.commandPrefix() + " wait' to poll for readiness."));
             return 0;
         }
 
@@ -111,8 +125,8 @@ public class StartCommand implements Callable<Integer> {
         global.endpoint = "http://localhost:" + port;
 
         // Wait for readiness
-        printer.println(Ansi.gray("Waiting for Floci to be ready..."));
-        WaitCommand wait = new WaitCommand();
+        printer.println(Ansi.gray("Waiting for " + profile.displayName() + " to be ready..."));
+        WaitCommand wait = new WaitCommand(profile);
         wait.global = global;
         wait.timeout = "30s";
         return wait.call();

@@ -1,6 +1,6 @@
 package io.floci.cli.unit;
 
-import io.floci.cli.commands.WaitCommand;
+import io.floci.cli.util.Durations;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
@@ -18,11 +18,11 @@ class WaitCommandParseTest {
             "10,   10000"
     })
     void testDurationParsing(String input, long expectedMillis) {
-        assertEquals(expectedMillis, WaitCommand.parseDuration(input.trim()));
+        assertEquals(expectedMillis, Durations.parseDuration(input.trim()));
     }
 
     @Test
     void testNullDuration() {
-        assertEquals(30_000, WaitCommand.parseDuration(null));
+        assertEquals(30_000, Durations.parseDuration(null));
     }
 }

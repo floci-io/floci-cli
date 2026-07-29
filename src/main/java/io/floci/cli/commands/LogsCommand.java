@@ -1,6 +1,7 @@
 package io.floci.cli.commands;
 
 import io.floci.cli.GlobalOptions;
+import io.floci.cli.ProductProfile;
 import io.floci.cli.docker.DockerClient;
 import io.floci.cli.docker.DockerException;
 import io.floci.cli.output.Printer;
@@ -10,13 +11,24 @@ import java.util.concurrent.Callable;
 
 @Command(
         name = "logs",
-        description = "Fetch logs from the Floci container",
+        description = "Fetch logs from the Floci AWS container",
         mixinStandardHelpOptions = true
 )
 public class LogsCommand implements Callable<Integer> {
 
+    protected final ProductProfile profile;
+
     @Mixin
-    GlobalOptions global;
+    protected GlobalOptions global;
+
+    public LogsCommand() {
+        this(ProductProfile.AWS);
+    }
+
+    protected LogsCommand(ProductProfile profile) {
+        this.profile = profile;
+        this.global = new GlobalOptions(profile);
+    }
 
     @Option(names = {"--follow", "-f"}, description = "Follow log output")
     boolean follow;
@@ -38,7 +50,7 @@ public class LogsCommand implements Callable<Integer> {
         try {
             var info = docker.inspectContainer(global.container);
             if (info.isEmpty()) {
-                printer.error("Container '" + global.container + "' not found.\nRun 'floci start' to launch one.");
+                printer.error("Container '" + global.container + "' not found.\nRun '" + profile.commandPrefix() + " start' to launch one.");
                 return 1;
             }
         } catch (DockerException e) {

@@ -5,7 +5,7 @@ import picocli.CommandLine.*;
 
 @Command(
         name = "snapshot",
-        description = "Manage Floci GCP state snapshots (coming soon)",
+        description = "Manage Floci GCP state snapshots",
         mixinStandardHelpOptions = true,
         subcommands = {
                 GcpSnapshotSaveCommand.class,

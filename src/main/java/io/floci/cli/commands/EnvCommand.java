@@ -14,7 +14,7 @@ import java.util.concurrent.Callable;
 
 @Command(
         name = "env",
-        description = "Print AWS environment variables to connect to Floci",
+        description = "Print AWS environment variables to connect to Floci AWS",
         mixinStandardHelpOptions = true
 )
 public class EnvCommand implements Callable<Integer> {

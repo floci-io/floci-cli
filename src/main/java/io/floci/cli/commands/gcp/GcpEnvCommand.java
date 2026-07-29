@@ -1,6 +1,7 @@
 package io.floci.cli.commands.gcp;
 
-import io.floci.cli.GcpGlobalOptions;
+import io.floci.cli.GlobalOptions;
+import io.floci.cli.ProductProfile;
 import io.floci.cli.docker.DockerClient;
 import io.floci.cli.output.Ansi;
 import io.floci.cli.output.OutputFormat;
@@ -26,7 +27,7 @@ public class GcpEnvCommand implements Callable<Integer> {
             Set.of("gcs", "pubsub", "firestore", "datastore", "secretmanager", "iam");
 
     @Mixin
-    GcpGlobalOptions global;
+    GlobalOptions global = new GlobalOptions(ProductProfile.GCP);
 
     @Option(names = {"--service"},
             description = "Comma-separated services: gcs,pubsub,firestore,datastore,secretmanager,iam",

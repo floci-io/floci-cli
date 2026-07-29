@@ -1,6 +1,7 @@
 package io.floci.cli.commands.oci;
 
-import io.floci.cli.OciGlobalOptions;
+import io.floci.cli.GlobalOptions;
+import io.floci.cli.ProductProfile;
 import io.floci.cli.output.Ansi;
 import io.floci.cli.output.OutputFormat;
 import io.floci.cli.output.Printer;
@@ -36,7 +37,7 @@ public class OciSetupCommand implements Callable<Integer> {
     static final String KEY_FILE_NAME = "floci_key.pem";
 
     @Mixin
-    OciGlobalOptions global;
+    GlobalOptions global = new GlobalOptions(ProductProfile.OCI);
 
     @Option(names = {"--profile-name"},
             description = "Profile section name to write in ~/.oci/config (default: FLOCI)",

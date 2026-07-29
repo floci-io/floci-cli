@@ -1,6 +1,7 @@
 package io.floci.cli.commands.snapshot;
 
 import io.floci.cli.GlobalOptions;
+import io.floci.cli.ProductProfile;
 import io.floci.cli.http.FlociException;
 import io.floci.cli.http.FlociHttpClient;
 import io.floci.cli.output.Ansi;
@@ -11,13 +12,24 @@ import java.util.concurrent.Callable;
 
 @Command(
         name = "delete",
-        description = "Delete a snapshot",
+        description = "Delete a Floci AWS snapshot",
         mixinStandardHelpOptions = true
 )
 public class SnapshotDeleteCommand implements Callable<Integer> {
 
+    protected final ProductProfile profile;
+
     @Mixin
-    GlobalOptions global;
+    protected GlobalOptions global;
+
+    public SnapshotDeleteCommand() {
+        this(ProductProfile.AWS);
+    }
+
+    protected SnapshotDeleteCommand(ProductProfile profile) {
+        this.profile = profile;
+        this.global = new GlobalOptions(profile);
+    }
 
     @Parameters(index = "0", description = "Snapshot name", paramLabel = "<name>")
     String name;
@@ -25,7 +37,7 @@ public class SnapshotDeleteCommand implements Callable<Integer> {
     @Override
     public Integer call() {
         Printer printer = global.printer();
-        FlociHttpClient client = new FlociHttpClient(global.endpoint);
+        FlociHttpClient client = new FlociHttpClient(global.endpoint, profile.controlPrefix());
         try {
             client.deleteSnapshot(name);
             printer.println(Ansi.green("Snapshot deleted:") + " " + name);

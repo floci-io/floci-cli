@@ -18,13 +18,19 @@ public class CompletionCommand implements Callable<Integer> {
     @Mixin
     GlobalOptions global;
 
+    @Spec
+    Model.CommandSpec spec;
+
     @Parameters(index = "0", description = "Shell type: bash, zsh, fish, powershell", paramLabel = "bash|zsh|fish|powershell")
     String shell;
 
     @Override
     public Integer call() {
         Printer printer = global.printer();
-        CommandLine root = new CommandLine(new io.floci.cli.FlociCli());
+        // The installed shell command is always `floci`, and the root tree contains every
+        // product subtree — so the root script is the correct completion no matter which
+        // group (root, aws, gcp, az, oci) this command was invoked under.
+        CommandLine root = spec.root().commandLine();
 
         String script = switch (shell.toLowerCase()) {
             case "bash" -> AutoComplete.bash("floci", root);

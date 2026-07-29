@@ -1,7 +1,9 @@
 package io.floci.cli.commands;
 
 import io.floci.cli.GlobalOptions;
+import io.floci.cli.ProductProfile;
 import io.floci.cli.http.FlociHttpClient;
+import io.floci.cli.util.Durations;
 import io.floci.cli.output.Ansi;
 import io.floci.cli.output.OutputFormat;
 import io.floci.cli.output.Printer;
@@ -15,13 +17,24 @@ import java.util.concurrent.Callable;
 
 @Command(
         name = "wait",
-        description = "Wait until Floci is ready to accept requests",
+        description = "Wait until Floci AWS is ready to accept requests",
         mixinStandardHelpOptions = true
 )
 public class WaitCommand implements Callable<Integer> {
 
+    protected final ProductProfile profile;
+
     @Mixin
-    GlobalOptions global;
+    protected GlobalOptions global;
+
+    public WaitCommand() {
+        this(ProductProfile.AWS);
+    }
+
+    protected WaitCommand(ProductProfile profile) {
+        this.profile = profile;
+        this.global = new GlobalOptions(profile);
+    }
 
     @Option(names = {"--timeout"}, description = "Maximum time to wait (e.g. 30s, 2m)", defaultValue = "30s", paramLabel = "<duration>")
     String timeout;
@@ -32,9 +45,9 @@ public class WaitCommand implements Callable<Integer> {
     @Override
     public Integer call() {
         Printer printer = global.printer();
-        long timeoutMillis = parseDuration(timeout);
+        long timeoutMillis = Durations.parseDuration(timeout);
         String effectiveEndpoint = global.resolvedEndpoint(new io.floci.cli.docker.DockerClient());
-        FlociHttpClient client = new FlociHttpClient(effectiveEndpoint);
+        FlociHttpClient client = new FlociHttpClient(effectiveEndpoint, profile.controlPrefix());
         Instant deadline = Instant.now().plusMillis(timeoutMillis);
 
         while (Instant.now().isBefore(deadline)) {
@@ -42,7 +55,7 @@ public class WaitCommand implements Callable<Integer> {
                 if (printer.format() != OutputFormat.text) {
                     printer.structured(Map.of("ready", true, "endpoint", effectiveEndpoint));
                 } else {
-                    printer.println(Ansi.green("Floci is ready") + " (" + effectiveEndpoint + ")");
+                    printer.println(Ansi.green(profile.displayName() + " is ready") + " (" + effectiveEndpoint + ")");
                 }
                 return 0;
             }
@@ -53,7 +66,8 @@ public class WaitCommand implements Callable<Integer> {
             }
         }
 
-        printer.error("Timed out waiting for Floci after " + timeout + ".\nIs the container running? Try 'floci status'.");
+        printer.error("Timed out waiting for " + profile.displayName() + " after " + timeout
+                + ".\nIs the container running? Try '" + profile.commandPrefix() + " status'.");
         return 1;
     }
 
@@ -75,13 +89,4 @@ public class WaitCommand implements Callable<Integer> {
         printer.print("\r" + Ansi.gray("Waiting... (" + remaining + "s remaining)") + "   ");
     }
 
-    public static long parseDuration(String s) {
-        if (s == null || s.isBlank()) return 30_000;
-        s = s.trim().toLowerCase();
-        if (s.endsWith("ms")) return Long.parseLong(s.substring(0, s.length() - 2));
-        if (s.endsWith("s"))  return Long.parseLong(s.substring(0, s.length() - 1)) * 1000;
-        if (s.endsWith("m"))  return Long.parseLong(s.substring(0, s.length() - 1)) * 60_000;
-        if (s.endsWith("h"))  return Long.parseLong(s.substring(0, s.length() - 1)) * 3_600_000;
-        return Long.parseLong(s) * 1000;
-    }
 }

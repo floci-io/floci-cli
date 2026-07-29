@@ -44,18 +44,26 @@ java -jar target/floci.jar <command>
 
 Bare commands (`floci start`) route to the configured default product (`aws` unless changed via `floci config default-product aws|gcp|az|oci`). Explicit product groups are `floci aws` (same classes as the root tree), `floci gcp`, `floci az`, and `floci oci`.
 
-### The four product trees — CRITICAL
+### The unified product tree — CRITICAL
 
-The GCP (`commands/gcp/`), Azure (`commands/az/`), and OCI (`commands/oci/`) command trees are near-verbatim copies of the root/AWS tree (`commands/`), each with its own `GlobalOptions` variant:
+There is ONE implementation of every shared command, in `commands/`, parameterized by `ProductProfile` (`io.floci.cli.ProductProfile`) — the single source of per-product config:
 
-| Tree | Mixin | Default endpoint | Container | Env prefix | Control prefix |
-|------|-------|------------------|-----------|------------|----------------|
-| root / `aws` | `GlobalOptions` | `http://localhost:4566` | `floci` | `FLOCI_*` | `/_floci` |
-| `gcp` | `GcpGlobalOptions` | `http://localhost:4588` | `floci-gcp` | `FLOCI_GCP_*` | `/_floci-gcp` |
-| `az` | `AzGlobalOptions` | `http://localhost:4577` | `floci-az` | `FLOCI_AZ_*` | `/_floci` (same as AWS — intentional) |
-| `oci` | `OciGlobalOptions` | `http://localhost:4599` | `floci-oci` | `FLOCI_OCI_*` | `/_floci-oci` |
+| Profile | Default endpoint | Container | Env prefix | Control prefix |
+|---------|------------------|-----------|------------|----------------|
+| `AWS` (root tree) | `http://localhost:4566` | `floci` | `FLOCI_*` | `/_floci` |
+| `GCP` | `http://localhost:4588` | `floci-gcp` | `FLOCI_GCP_*` | `/_floci-gcp` |
+| `AZ` | `http://localhost:4577` | `floci-az` | `FLOCI_AZ_*` | `/_floci` (same as AWS — intentional) |
+| `OCI` | `http://localhost:4599` | `floci-oci` | `FLOCI_OCI_*` | `/_floci-oci` |
 
-**Until the trees are unified: any change to a shared command MUST be applied to all four trees** (e.g. `StartCommand`, `GcpStartCommand`, `AzStartCommand`, `OciStartCommand`). Drift between the copies is a known bug source — check the sibling trees before and after editing. Only `EnvCommand`/`GcpEnvCommand`/`AzEnvCommand`/`OciEnvCommand` are genuinely product-specific, plus the OCI-only `OciSetupCommand` (the OCI CLI/SDKs require a config file + signing key, so `floci oci setup` scaffolds them; no other tree needs an equivalent).
+The `commands/gcp/`, `commands/az/`, and `commands/oci/` leaf classes are **~8-line shims**: `GcpStartCommand extends StartCommand { super(ProductProfile.GCP); }` with their own `@Command` annotation carrying the per-product description. `ProductProfileTest` pins every profile field; `ProductTreesParsingTest` pins each tree's defaults.
+
+Rules for the unified tree:
+
+- **Every parameterized command pre-initializes its mixin in the constructor**: `this.global = new GlobalOptions(profile)`. Picocli uses a non-null `@Mixin` field instance as-is; a command that forgets gets AWS defaults in every tree (the per-tree parse tests catch this).
+- **Per-product option defaults are constructor-set field values**, not annotation `defaultValue`s (annotation strings are compile-time constants). Use `(default: ${DEFAULT-VALUE})` in the option description to render them in help.
+- **Never subclass a group command** (`GcpCommand`, `*ConfigCommand`, `*SnapshotCommand` groups): picocli registers the `subcommands` arrays of both super and subclass — instant duplicate-name crash. Groups stay standalone registration-only classes.
+- Product-varying strings come from the profile: `displayName()` for banners, `commandPrefix()` for hint strings, `envVar("SERVICES")` for container env vars, `controlPrefix()` for `FlociHttpClient`, `serverRepo()` for issue-tracker links.
+- Only `EnvCommand`/`GcpEnvCommand`/`AzEnvCommand`/`OciEnvCommand` are genuinely product-specific (not shims), plus the OCI-only `OciSetupCommand` (the OCI CLI/SDKs require a config file + signing key, so `floci oci setup` scaffolds them; no other tree needs an equivalent).
 
 Commands call `global.printer()` at the start of `call()` — never store a `Printer` as a field.
 
@@ -83,12 +91,9 @@ if (printer.format() != OutputFormat.text) {
 
 `Check` is a `@FunctionalInterface` taking `(endpoint, container)` and returning `CheckResult`. Order matters: Docker checks run before server checks because later checks depend on Docker being up.
 
-The structure differs per tree (do not assume they match):
+One `DoctorCommand` serves every tree: `dockerChecks(profile)` builds the 9 Docker/server checks (image and control prefix from the profile), and the constructor appends the product's companion list — `AWS_COMPANION_CHECKS` (AWS CLI checks), `AZ_COMPANION_CHECKS` (az CLI checks), empty for GCP/OCI. `DoctorCheckListTest` pins each product's composition and order.
 
-- **AWS** (`commands/DoctorCommand.java`): `DOCKER_CHECKS` (static list of the 9 Docker/server checks) + `AWS_COMPANION_CHECKS` (AWS CLI checks), combined via constructor into an instance `allChecks` list.
-- **GCP/Azure/OCI** (`GcpDoctorCommand`/`AzDoctorCommand`/`OciDoctorCommand`): a single static `ALL_CHECKS` list built in a static initializer.
-
-To add a check: create a class in `doctor/checks/`, then append it to the relevant list(s) — in all trees where it applies.
+To add a check: create a class in `doctor/checks/`, then add it to `dockerChecks()` (all products) or the relevant companion list.
 
 ### Config profiles
 

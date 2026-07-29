@@ -1,28 +1,17 @@
 package io.floci.cli.commands.gcp.snapshot;
 
-import io.floci.cli.GcpGlobalOptions;
-import io.floci.cli.output.Ansi;
-import picocli.CommandLine.*;
-
-import java.util.concurrent.Callable;
+import io.floci.cli.ProductProfile;
+import io.floci.cli.commands.snapshot.SnapshotDeleteCommand;
+import picocli.CommandLine.Command;
 
 @Command(
         name = "delete",
         description = "Delete a Floci GCP snapshot",
         mixinStandardHelpOptions = true
 )
-public class GcpSnapshotDeleteCommand implements Callable<Integer> {
+public class GcpSnapshotDeleteCommand extends SnapshotDeleteCommand {
 
-    @Mixin
-    GcpGlobalOptions global;
-
-    @Parameters(index = "0", description = "Snapshot name", paramLabel = "<name>")
-    String name;
-
-    @Override
-    public Integer call() {
-        global.printer().println(Ansi.yellow("Snapshots are not yet available for Floci GCP.") +
-                "\nTrack progress: https://github.com/floci-io/floci-gcp/issues");
-        return 0;
+    public GcpSnapshotDeleteCommand() {
+        super(ProductProfile.GCP);
     }
 }

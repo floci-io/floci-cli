@@ -2,6 +2,7 @@ package io.floci.cli.commands;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.floci.cli.CliVersion;
 import io.floci.cli.output.Ansi;
 import io.floci.cli.output.OutputFormat;
 import io.floci.cli.output.Printer;
@@ -72,7 +73,7 @@ public class UpdateCommand implements Callable<Integer> {
         }
         Printer printer = new Printer(System.out, System.err, OutputFormat.text, false);
         try {
-            String current = VersionCommand.CLI_VERSION;
+            String current = CliVersion.CLI_VERSION;
             boolean pinned = to != null && !to.isBlank();
             String target = pinned ? to.trim() : fetchLatestVersion();
 

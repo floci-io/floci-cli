@@ -584,7 +584,7 @@ floci snapshot export <name> -o tarball.tar.gz
 floci snapshot import tarball.tar.gz
 ```
 
-> GCP, Azure, and OCI snapshots (`floci gcp snapshot` / `floci az snapshot` / `floci oci snapshot`) are not yet available — they require server-side endpoints not yet implemented in Floci GCP / Floci Azure / Floci OCI. `floci snapshot export|import` (AWS) are also pending server support.
+> GCP, Azure, and OCI snapshots (`floci gcp snapshot` / `floci az snapshot` / `floci oci snapshot`) require server-side endpoints not yet implemented in Floci GCP / Floci Azure / Floci OCI — until then those commands report the missing API and exit 1. `floci snapshot export|import` (AWS) are also pending server support and exit 1.
 
 ### `floci update`
 

@@ -1,6 +1,7 @@
 package io.floci.cli.commands;
 
 import io.floci.cli.GlobalOptions;
+import io.floci.cli.ProductProfile;
 import io.floci.cli.docker.DockerClient;
 import io.floci.cli.docker.DockerException;
 import io.floci.cli.output.Ansi;
@@ -11,13 +12,24 @@ import java.util.concurrent.Callable;
 
 @Command(
         name = "stop",
-        description = "Stop the Floci container",
+        description = "Stop the Floci AWS container",
         mixinStandardHelpOptions = true
 )
 public class StopCommand implements Callable<Integer> {
 
+    protected final ProductProfile profile;
+
     @Mixin
-    GlobalOptions global;
+    protected GlobalOptions global;
+
+    public StopCommand() {
+        this(ProductProfile.AWS);
+    }
+
+    protected StopCommand(ProductProfile profile) {
+        this.profile = profile;
+        this.global = new GlobalOptions(profile);
+    }
 
     @Option(names = {"--remove", "-r"}, description = "Remove the container after stopping")
     boolean remove;
@@ -33,7 +45,7 @@ public class StopCommand implements Callable<Integer> {
         try {
             var info = docker.inspectContainer(global.container);
             if (info.isEmpty()) {
-                printer.error("Container '" + global.container + "' not found.\nRun 'floci start' to launch one.");
+                printer.error("Container '" + global.container + "' not found.\nRun '" + profile.commandPrefix() + " start' to launch one.");
                 return 1;
             }
             if (!"running".equals(info.get().state())) {
@@ -50,7 +62,7 @@ public class StopCommand implements Callable<Integer> {
         }
 
         try {
-            printer.println("Stopping " + Ansi.gold("Floci") + " container '" + global.container + "'...");
+            printer.println("Stopping " + Ansi.gold(profile.displayName()) + " container '" + global.container + "'...");
             docker.stopContainer(global.container, timeout);
             printer.println(Ansi.green("Stopped."));
         } catch (DockerException e) {

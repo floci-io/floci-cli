@@ -1,6 +1,7 @@
 package io.floci.cli.commands.config;
 
 import io.floci.cli.GlobalOptions;
+import io.floci.cli.ProductProfile;
 import io.floci.cli.config.Profile;
 import io.floci.cli.config.ProfileStore;
 import io.floci.cli.output.Ansi;
@@ -13,14 +14,25 @@ import java.util.concurrent.Callable;
 
 @Command(
         name = "profile",
-        description = "Manage Floci configuration profiles",
+        description = "Manage Floci AWS configuration profiles",
         mixinStandardHelpOptions = true,
         subcommands = {HelpCommand.class}
 )
 public class ConfigProfileCommand implements Callable<Integer> {
 
+    protected final ProductProfile profile;
+
     @Mixin
-    GlobalOptions global;
+    protected GlobalOptions global;
+
+    public ConfigProfileCommand() {
+        this(ProductProfile.AWS);
+    }
+
+    protected ConfigProfileCommand(ProductProfile profile) {
+        this.profile = profile;
+        this.global = new GlobalOptions(profile);
+    }
 
     @Parameters(index = "0", description = "Action: list, show, create, delete", paramLabel = "list|show|create|delete")
     String action;
@@ -49,7 +61,7 @@ public class ConfigProfileCommand implements Callable<Integer> {
         try {
             List<Profile> profiles = store.list();
             if (profiles.isEmpty()) {
-                printer.println(Ansi.gray("No profiles found. Create one with: floci config profile create <name>"));
+                printer.println(Ansi.gray("No profiles found. Create one with: " + profile.commandPrefix() + " config profile create <name>"));
                 return 0;
             }
             printer.println(Ansi.bold("Profiles:"));

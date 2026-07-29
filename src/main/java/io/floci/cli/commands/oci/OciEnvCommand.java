@@ -1,6 +1,7 @@
 package io.floci.cli.commands.oci;
 
-import io.floci.cli.OciGlobalOptions;
+import io.floci.cli.GlobalOptions;
+import io.floci.cli.ProductProfile;
 import io.floci.cli.docker.DockerClient;
 import io.floci.cli.output.Ansi;
 import io.floci.cli.output.OutputFormat;
@@ -20,7 +21,7 @@ import java.util.concurrent.Callable;
 public class OciEnvCommand implements Callable<Integer> {
 
     @Mixin
-    OciGlobalOptions global;
+    GlobalOptions global = new GlobalOptions(ProductProfile.OCI);
 
     @Option(names = {"--shell"},
             description = "Shell format: bash, fish, powershell (default: bash)",
