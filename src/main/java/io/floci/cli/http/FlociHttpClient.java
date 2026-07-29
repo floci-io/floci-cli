@@ -8,6 +8,8 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -45,9 +47,21 @@ public class FlociHttpClient {
         return new HealthInfo(
                 node.path("version").asText("unknown"),
                 node.path("original_edition").asText(node.path("edition").asText("community")),
-                node.path("services").isArray()
-                        ? MAPPER.convertValue(node.path("services"), String[].class)
-                        : new String[0]);
+                serviceNames(node.path("services")));
+    }
+
+    // AWS/GCP/Azure report services as an array of names; OCI reports a
+    // {name: status} object. Accept both.
+    private static String[] serviceNames(JsonNode services) {
+        if (services.isArray()) {
+            return MAPPER.convertValue(services, String[].class);
+        }
+        if (services.isObject()) {
+            List<String> names = new ArrayList<>();
+            services.fieldNames().forEachRemaining(names::add);
+            return names.toArray(String[]::new);
+        }
+        return new String[0];
     }
 
     public Optional<HealthInfo> healthOptional() {

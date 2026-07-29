@@ -1,0 +1,84 @@
+package io.floci.cli.commands.oci;
+
+import io.floci.cli.OciGlobalOptions;
+import io.floci.cli.docker.DockerClient;
+import io.floci.cli.output.Ansi;
+import io.floci.cli.output.OutputFormat;
+import io.floci.cli.output.Printer;
+import picocli.CommandLine.*;
+
+import java.nio.file.Path;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.concurrent.Callable;
+
+@Command(
+        name = "env",
+        description = "Print OCI environment variables to connect to Floci OCI",
+        mixinStandardHelpOptions = true
+)
+public class OciEnvCommand implements Callable<Integer> {
+
+    @Mixin
+    OciGlobalOptions global;
+
+    @Option(names = {"--shell"},
+            description = "Shell format: bash, fish, powershell (default: bash)",
+            defaultValue = "bash",
+            paramLabel = "bash|fish|powershell")
+    String shell;
+
+    @Override
+    public Integer call() {
+        Printer printer = global.printer();
+        String endpoint = global.resolvedEndpoint(new DockerClient());
+
+        Map<String, String> vars = new LinkedHashMap<>();
+        // OCI SDKs and CLI take one endpoint for every service; ocilocal reads FLOCI_OCI_ENDPOINT.
+        vars.put("OCI_CLI_ENDPOINT", endpoint);
+        vars.put("FLOCI_OCI_ENDPOINT", endpoint);
+        // The oracle/oci Terraform provider routes via per-client host overrides.
+        vars.put("TF_VAR_CLIENT_HOST_OVERRIDES",
+                "oci_identity.IdentityClient=" + endpoint
+                        + ";oci_object_storage.ObjectStorageClient=" + endpoint);
+        // Select the throwaway profile written by 'floci oci setup', when present.
+        // DEFAULT needs no selection — the OCI CLI uses it implicitly.
+        try {
+            Path config = Path.of(System.getProperty("user.home"), ".oci", "config");
+            String setupProfile = OciSetupCommand.detectSetupProfile(config);
+            if (setupProfile != null && !"DEFAULT".equals(setupProfile)) {
+                vars.put("OCI_CLI_PROFILE", setupProfile);
+            }
+        } catch (Exception ignored) {
+        }
+
+        if (printer.format() != OutputFormat.text) {
+            printer.structured(vars);
+            return 0;
+        }
+
+        for (Map.Entry<String, String> entry : vars.entrySet()) {
+            printer.println(formatExport(shell, entry.getKey(), entry.getValue()));
+        }
+        printer.println("");
+        printer.println(Ansi.gray("# Run: eval $(floci oci env)"));
+        return 0;
+    }
+
+    /**
+     * Renders one export line. The output is documented as {@code eval} input, so values
+     * are single-quoted with per-shell escaping — no interpolation of {@code $}, backticks,
+     * or quotes can occur even for hostile {@code --endpoint} / env-var values.
+     */
+    public static String formatExport(String shell, String key, String value) {
+        return switch (shell.toLowerCase()) {
+            // fish single quotes: only \' and \\ are escapes, backslash must be doubled first
+            case "fish"               -> "set -x " + key + " '"
+                    + value.replace("\\", "\\\\").replace("'", "\\'") + "'";
+            // PowerShell single quotes: literal except '' for a quote
+            case "powershell", "ps1"  -> "$env:" + key + " = '" + value.replace("'", "''") + "'";
+            // POSIX single quotes: close, escaped quote, reopen
+            default                   -> "export " + key + "='" + value.replace("'", "'\\''") + "'";
+        };
+    }
+}

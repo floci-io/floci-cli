@@ -19,14 +19,14 @@ public class ConfigDefaultProductCommand implements Callable<Integer> {
     @Mixin
     GlobalOptions global;
 
-    @Parameters(index = "0", description = "Product to use by default: aws, az, gcp", paramLabel = "aws|az|gcp")
+    @Parameters(index = "0", description = "Product to use by default: aws, az, gcp, oci", paramLabel = "aws|az|gcp|oci")
     String product;
 
     @Override
     public Integer call() {
         Printer printer = global.printer();
-        if (!"aws".equals(product) && !"az".equals(product) && !"gcp".equals(product)) {
-            printer.error("Unknown product '" + product + "'. Use: aws, az, gcp");
+        if (!"aws".equals(product) && !"az".equals(product) && !"gcp".equals(product) && !"oci".equals(product)) {
+            printer.error("Unknown product '" + product + "'. Use: aws, az, gcp, oci");
             return 1;
         }
         GlobalConfigStore store = new GlobalConfigStore();

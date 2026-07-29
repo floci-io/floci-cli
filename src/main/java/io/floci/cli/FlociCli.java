@@ -4,6 +4,7 @@ import io.floci.cli.commands.*;
 import io.floci.cli.commands.aws.AwsCommand;
 import io.floci.cli.commands.az.AzCommand;
 import io.floci.cli.commands.gcp.GcpCommand;
+import io.floci.cli.commands.oci.OciCommand;
 import io.floci.cli.commands.config.ConfigCommand;
 import io.floci.cli.commands.snapshot.SnapshotCommand;
 import io.floci.cli.config.GlobalConfigStore;
@@ -23,6 +24,7 @@ import picocli.CommandLine.*;
                 "  floci aws       — explicit AWS emulator commands%n" +
                 "  floci az        — Azure emulator commands%n" +
                 "  floci gcp       — GCP emulator commands%n" +
+                "  floci oci       — OCI emulator commands%n" +
                 "  floci update    — Update the CLI to the latest release",
         mixinStandardHelpOptions = true,
         versionProvider = FlociCli.VersionProvider.class,
@@ -43,6 +45,7 @@ import picocli.CommandLine.*;
                 AwsCommand.class,
                 AzCommand.class,
                 GcpCommand.class,
+                OciCommand.class,
                 HelpCommand.class,
                 UpdateCommand.class,
         }
@@ -81,6 +84,8 @@ public class FlociCli implements Runnable {
                 effectiveArgs = prepend("az", args);
             } else if ("gcp".equals(defaultProduct)) {
                 effectiveArgs = prepend("gcp", args);
+            } else if ("oci".equals(defaultProduct)) {
+                effectiveArgs = prepend("oci", args);
             }
         }
 
@@ -115,7 +120,7 @@ public class FlociCli implements Runnable {
     private static boolean isExplicitProduct(String[] args) {
         for (String arg : args) {
             if (arg.startsWith("-")) continue;
-            return "aws".equals(arg) || "az".equals(arg) || "gcp".equals(arg)
+            return "aws".equals(arg) || "az".equals(arg) || "gcp".equals(arg) || "oci".equals(arg)
                     || "config".equals(arg) || "completion".equals(arg) || "help".equals(arg)
                     || "update".equals(arg);
         }

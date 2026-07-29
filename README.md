@@ -1,6 +1,6 @@
 # floci-cli
 
-Official command-line interface for [Floci](https://floci.io) — the free, open-source local cloud emulator for AWS, GCP, and Azure.
+Official command-line interface for [Floci](https://floci.io) — the free, open-source local cloud emulator for AWS, GCP, Azure, and OCI.
 
 ```sh
 # AWS (default)
@@ -17,6 +17,12 @@ gcloud storage buckets create gs://my-bucket
 floci az start
 eval $(floci az env)
 az storage container create --name mycontainer
+
+# OCI
+floci oci start
+floci oci setup
+eval $(floci oci env)
+oci os ns get
 ```
 
 ## Installation
@@ -132,6 +138,30 @@ az storage blob upload --container-name mycontainer --name hello.txt --data "hel
 floci az stop
 ```
 
+### OCI
+
+```sh
+# Start Floci OCI emulator
+floci oci start
+
+# Check environment
+floci oci doctor
+
+# One-time: create a throwaway OCI CLI profile (API key + ~/.oci/config)
+floci oci setup
+
+# Export OCI endpoint variables
+eval $(floci oci env)
+
+# Use OCI services normally
+oci os ns get
+oci os bucket create --namespace-name floci-local --name my-bucket \
+  --compartment-id ocid1.tenancy.oc1..flocilocaltenancy0000000000000000000000000000000000000000
+
+# Stop Floci OCI
+floci oci stop
+```
+
 ### Switch default product
 
 Bare commands like `floci start` route to the configured default product (AWS by default).
@@ -139,6 +169,7 @@ Bare commands like `floci start` route to the configured default product (AWS by
 ```sh
 floci config default-product gcp  # make floci gcp the default
 floci config default-product az   # make floci az the default
+floci config default-product oci  # make floci oci the default
 floci config default-product aws  # revert to aws
 ```
 
@@ -146,7 +177,7 @@ floci config default-product aws  # revert to aws
 
 ## Command Reference
 
-Commands are organized into three product groups — `floci aws` (or bare `floci`), `floci gcp`, and `floci az`. All groups expose the same lifecycle commands.
+Commands are organized into four product groups — `floci aws` (or bare `floci`), `floci gcp`, `floci az`, and `floci oci`. All groups expose the same lifecycle commands.
 
 ### Shared commands (product-independent)
 
@@ -155,7 +186,7 @@ Commands are organized into three product groups — `floci aws` (or bare `floci
 | `floci config show` | Show active configuration |
 | `floci config validate` | Validate a docker-compose.yml |
 | `floci config profile` | Manage named profiles |
-| `floci config default-product` | Set the default product (aws, gcp, or az) |
+| `floci config default-product` | Set the default product (aws, gcp, az, or oci) |
 | `floci update` | Self-update the CLI to the latest release |
 | `floci completion bash\|zsh` | Generate shell completion scripts |
 | `floci update` | Update the CLI to the latest release |
@@ -208,6 +239,23 @@ Commands are organized into three product groups — `floci aws` (or bare `floci
 | `floci az env` | Print Azure connection string / SDK env vars |
 | `floci az snapshot` | Snapshot commands (coming soon) |
 
+### OCI commands (`floci oci`)
+
+| Command | Description |
+|---------|-------------|
+| `floci oci start` | Launch the Floci OCI container |
+| `floci oci stop` | Stop (and optionally remove) the container |
+| `floci oci restart` | Stop then start |
+| `floci oci status` | Show container state and server health |
+| `floci oci logs` | Stream container logs |
+| `floci oci wait` | Poll until Floci OCI is ready (CI-friendly) |
+| `floci oci version` | Show CLI and server versions |
+| `floci oci services` | List enabled OCI services |
+| `floci oci doctor` | Run OCI environment diagnostics |
+| `floci oci env` | Print OCI endpoint variables |
+| `floci oci setup` | Create a local OCI CLI profile (API key + `~/.oci/config`) |
+| `floci oci snapshot` | Snapshot commands (coming soon) |
+
 All commands support `--help`.
 
 ---
@@ -250,6 +298,18 @@ All commands support `--help`.
 --profile <name>            Load settings from ~/.floci/profiles/<name>.yaml
 ```
 
+### OCI global flags
+
+```
+--endpoint <url>            Floci OCI server URL    (default: http://localhost:4599, env: FLOCI_OCI_ENDPOINT)
+--container <name>          Container name          (default: floci-oci, env: FLOCI_OCI_CONTAINER)
+--output|-o text|json|yaml  Output format           (default: text)
+--quiet, -q                 Suppress non-error output
+--verbose, -v               Debug logging to stderr
+--no-color                  Disable ANSI colors
+--profile <name>            Load settings from ~/.floci/profiles/<name>.yaml
+```
+
 > **Port auto-detection** — `status`, `version`, `wait`, and `env` automatically derive the correct
 > endpoint from the container's port mapping. You don't need to pass `--endpoint` when using
 > a non-default port, as long as `--container` points to the right container.
@@ -258,14 +318,14 @@ All commands support `--help`.
 
 ## Commands
 
-### `floci start` / `floci gcp start` / `floci az start`
+### `floci start` / `floci gcp start` / `floci az start` / `floci oci start`
 
 Pulls the image (if needed), starts the container, and waits for readiness.
 
 ```sh
 # AWS
 floci start                          # default port 4566
-floci start --port 4599              # custom host port
+floci start --port 4567              # custom host port
 floci start --services s3,dynamodb   # enable specific services
 floci start --persist ./data         # persist state to a host directory
 floci start --pull always            # always pull the latest image
@@ -279,6 +339,10 @@ floci gcp start --persist ./data     # persist state to a host directory
 floci az start                       # default port 4577
 floci az start --port 4578           # custom host port
 floci az start --persist ./data      # persist state to a host directory
+
+# OCI
+floci oci start                      # default port 4599
+floci oci start --persist ./data     # persist state to a host directory
 ```
 
 #### Docker daemon resolution (Podman, rootless, remote contexts)
@@ -313,7 +377,7 @@ For a `unix://` socket the resolved path is bind-mounted into the container; for
 remote `tcp://` daemon the `DOCKER_HOST` value is passed through to the container
 instead. Run `floci doctor` to see which endpoint was resolved.
 
-### `floci stop` / `floci gcp stop` / `floci az stop`
+### `floci stop` / `floci gcp stop` / `floci az stop` / `floci oci stop`
 
 ```sh
 floci stop                    # graceful stop (10s timeout)
@@ -321,7 +385,7 @@ floci stop --timeout 30       # wait up to 30s before force-kill
 floci stop --remove           # also remove the container after stopping
 ```
 
-### `floci status` / `floci gcp status` / `floci az status`
+### `floci status` / `floci gcp status` / `floci az status` / `floci oci status`
 
 ```sh
 floci status                          # auto-detects endpoint from container port mapping
@@ -408,7 +472,46 @@ floci az env -o json                                # structured output
 | `AZURE_APP_CONFIGURATION_ENDPOINT` | `http://localhost.floci.io:<port>/devstoreaccount1-appconfig` |
 | `AZURE_KEY_VAULT_ENDPOINT` | `http://localhost.floci.io:<port>/devstoreaccount1-keyvault` |
 
-### `floci logs` / `floci gcp logs` / `floci az logs`
+### `floci oci env`
+
+Prints OCI endpoint variables for the running Floci OCI instance. OCI SDKs and the
+`oci` CLI take a single endpoint for every service, so no per-service variables are needed.
+
+```sh
+eval $(floci oci env)                        # endpoint vars for CLI, wrappers, and Terraform
+
+floci oci env --shell fish | source          # fish
+floci oci env -o json                        # structured output
+```
+
+Variables exported:
+
+| Variable | Purpose |
+|----------|---------|
+| `OCI_CLI_ENDPOINT` | Default `--endpoint` for the `oci` CLI |
+| `FLOCI_OCI_ENDPOINT` | Used by this CLI and the `ocilocal` wrapper |
+| `TF_VAR_CLIENT_HOST_OVERRIDES` | Per-client host overrides for the `oracle/oci` Terraform provider |
+| `OCI_CLI_PROFILE` | The profile `floci oci setup` wrote (default `FLOCI`) — only exported when detected in `~/.oci/config`, and skipped for `DEFAULT` |
+
+### `floci oci setup`
+
+The OCI CLI and SDKs refuse to run without a config file and an API signing key — even
+against an emulator that never validates them. `floci oci setup` creates both in one step:
+a locally generated RSA-2048 key at `~/.oci/floci_key.pem` and a `[FLOCI]` profile in
+`~/.oci/config` with the emulator's canonical throwaway tenancy. Existing profiles are
+never touched; re-running is a no-op.
+
+```sh
+floci oci setup                        # create key + [FLOCI] profile
+floci oci setup --profile-name DEFAULT # write a different profile section
+floci oci setup -o json                # structured output
+
+# then connect:
+eval $(floci oci env)                  # exports OCI_CLI_PROFILE=FLOCI too
+oci os ns get
+```
+
+### `floci logs` / `floci gcp logs` / `floci az logs` / `floci oci logs`
 
 ```sh
 floci logs                       # last logs from the container
@@ -417,7 +520,7 @@ floci logs --since 5m            # logs from the last 5 minutes
 floci logs --follow              # stream live logs (Ctrl-C to stop)
 ```
 
-### `floci wait` / `floci gcp wait` / `floci az wait`
+### `floci wait` / `floci gcp wait` / `floci az wait` / `floci oci wait`
 
 ```sh
 floci wait                        # wait up to 30s (default)
@@ -426,7 +529,7 @@ floci wait --service dynamodb     # wait until a specific service is ready
 floci wait -o json                # machine-readable output
 ```
 
-### `floci doctor` / `floci gcp doctor` / `floci az doctor`
+### `floci doctor` / `floci gcp doctor` / `floci az doctor` / `floci oci doctor`
 
 ```sh
 floci doctor                      # run all checks
@@ -436,16 +539,17 @@ floci doctor -o json              # structured output for scripts
 
 floci gcp doctor                  # GCP-specific checks
 floci az doctor                   # Azure-specific checks (includes az CLI + connection string)
+floci oci doctor                  # OCI-specific checks
 ```
 
-### `floci version` / `floci gcp version` / `floci az version`
+### `floci version` / `floci gcp version` / `floci az version` / `floci oci version`
 
 ```sh
 floci version                     # CLI version, server version, image digest
 floci version -o json
 ```
 
-### `floci services` / `floci gcp services` / `floci az services`
+### `floci services` / `floci gcp services` / `floci az services` / `floci oci services`
 
 ```sh
 floci services                    # list all enabled services
@@ -456,7 +560,7 @@ floci services -o json
 
 ```sh
 floci config show                          # show active configuration
-floci config default-product aws|gcp|az    # set the default product (persisted to ~/.floci/config.yaml)
+floci config default-product aws|gcp|az|oci  # set the default product (persisted to ~/.floci/config.yaml)
 floci config profile list                  # list saved profiles
 floci config profile create <name>         # create a new profile
 floci config profile show <name>           # show a profile
@@ -480,7 +584,7 @@ floci snapshot export <name> -o tarball.tar.gz
 floci snapshot import tarball.tar.gz
 ```
 
-> GCP and Azure snapshots (`floci gcp snapshot` / `floci az snapshot`) are not yet available — they require server-side endpoints not yet implemented in Floci GCP / Floci Azure. `floci snapshot export|import` (AWS) are also pending server support.
+> GCP, Azure, and OCI snapshots (`floci gcp snapshot` / `floci az snapshot` / `floci oci snapshot`) are not yet available — they require server-side endpoints not yet implemented in Floci GCP / Floci Azure / Floci OCI. `floci snapshot export|import` (AWS) are also pending server support.
 
 ### `floci update`
 
@@ -598,13 +702,35 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
 ```
 
+### OCI CI
+
+```sh
+floci oci start --detach
+floci oci wait --timeout 60s
+eval $(floci oci env)
+pytest  # or your test command
+floci oci stop --remove
+```
+
+With Docker Compose:
+
+```yaml
+services:
+  floci-oci:
+    image: floci/floci-oci:latest
+    ports:
+      - "4599:4599"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+```
+
 ---
 
 ## Scope
 
 `floci-cli` manages Floci's lifecycle, config, state, and diagnostics.
-It does **not** wrap the AWS, GCP, or Azure CLIs, or manage cloud resources directly.
-Use `aws` with `AWS_ENDPOINT_URL`, `gcloud`/SDKs with the emulator host variables, or `az` with the appropriate connection string for resource operations.
+It does **not** wrap the AWS, GCP, Azure, or OCI CLIs, or manage cloud resources directly.
+Use `aws` with `AWS_ENDPOINT_URL`, `gcloud`/SDKs with the emulator host variables, `az` with the appropriate connection string, or `oci` with `OCI_CLI_ENDPOINT` for resource operations.
 
 ---
 
