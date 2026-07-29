@@ -42,10 +42,12 @@ public class OciEnvCommand implements Callable<Integer> {
                 "oci_identity.IdentityClient=" + endpoint
                         + ";oci_object_storage.ObjectStorageClient=" + endpoint);
         // Select the throwaway profile written by 'floci oci setup', when present.
+        // DEFAULT needs no selection — the OCI CLI uses it implicitly.
         try {
             Path config = Path.of(System.getProperty("user.home"), ".oci", "config");
-            if (OciSetupCommand.profileExists(config, "FLOCI")) {
-                vars.put("OCI_CLI_PROFILE", "FLOCI");
+            String setupProfile = OciSetupCommand.detectSetupProfile(config);
+            if (setupProfile != null && !"DEFAULT".equals(setupProfile)) {
+                vars.put("OCI_CLI_PROFILE", setupProfile);
             }
         } catch (Exception ignored) {
         }
@@ -56,19 +58,27 @@ public class OciEnvCommand implements Callable<Integer> {
         }
 
         for (Map.Entry<String, String> entry : vars.entrySet()) {
-            printer.println(formatExport(entry.getKey(), entry.getValue()));
+            printer.println(formatExport(shell, entry.getKey(), entry.getValue()));
         }
         printer.println("");
         printer.println(Ansi.gray("# Run: eval $(floci oci env)"));
         return 0;
     }
 
-    private String formatExport(String key, String value) {
-        // Values here can contain ';' (TF_VAR_CLIENT_HOST_OVERRIDES), so bash exports must be quoted.
+    /**
+     * Renders one export line. The output is documented as {@code eval} input, so values
+     * are single-quoted with per-shell escaping — no interpolation of {@code $}, backticks,
+     * or quotes can occur even for hostile {@code --endpoint} / env-var values.
+     */
+    public static String formatExport(String shell, String key, String value) {
         return switch (shell.toLowerCase()) {
-            case "fish"               -> "set -x " + key + " \"" + value + "\"";
-            case "powershell", "ps1"  -> "$env:" + key + " = \"" + value + "\"";
-            default                   -> "export " + key + "=\"" + value + "\"";
+            // fish single quotes: only \' and \\ are escapes, backslash must be doubled first
+            case "fish"               -> "set -x " + key + " '"
+                    + value.replace("\\", "\\\\").replace("'", "\\'") + "'";
+            // PowerShell single quotes: literal except '' for a quote
+            case "powershell", "ps1"  -> "$env:" + key + " = '" + value.replace("'", "''") + "'";
+            // POSIX single quotes: close, escaped quote, reopen
+            default                   -> "export " + key + "='" + value.replace("'", "'\\''") + "'";
         };
     }
 }

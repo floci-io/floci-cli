@@ -75,4 +75,26 @@ class OciSetupCommandTest {
         assertTrue(config.contains("[DEFAULT]"));
         assertFalse(config.contains("[FLOCI]"));
     }
+
+    @Test
+    void detectsTheProfileSetupWrote() throws Exception {
+        Path ociDir = tempDir.resolve(".oci");
+        assertNull(OciSetupCommand.detectSetupProfile(ociDir.resolve("config")));
+
+        assertEquals(0, run(ociDir, "--profile-name", "CUSTOM"));
+        assertEquals("CUSTOM", OciSetupCommand.detectSetupProfile(ociDir.resolve("config")));
+
+        // A second, FLOCI-named section sharing the setup key wins over CUSTOM
+        assertEquals(0, run(ociDir));
+        assertEquals("FLOCI", OciSetupCommand.detectSetupProfile(ociDir.resolve("config")));
+    }
+
+    @Test
+    void detectIgnoresForeignProfiles() throws Exception {
+        Path ociDir = tempDir.resolve(".oci");
+        Files.createDirectories(ociDir);
+        Files.writeString(ociDir.resolve("config"),
+                "[PROD]\nuser=ocid1.user.oc1..real\nkey_file=~/.oci/prod_key.pem\n");
+        assertNull(OciSetupCommand.detectSetupProfile(ociDir.resolve("config")));
+    }
 }

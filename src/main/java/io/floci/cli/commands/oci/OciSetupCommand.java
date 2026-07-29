@@ -127,6 +127,32 @@ public class OciSetupCommand implements Callable<Integer> {
                         .anyMatch(("[" + profileName + "]")::equals);
     }
 
+    /**
+     * Finds the profile section this command wrote, whatever {@code --profile-name} was used:
+     * the section whose {@code key_file} points at the setup-generated key. Prefers
+     * {@code FLOCI} (the default name) when several sections share the key.
+     * Returns {@code null} when no setup-written profile exists.
+     */
+    public static String detectSetupProfile(Path configFile) throws Exception {
+        if (!Files.exists(configFile)) return null;
+        String section = null;
+        String found = null;
+        for (String raw : Files.readAllLines(configFile)) {
+            String line = raw.trim();
+            if (line.startsWith("[") && line.endsWith("]")) {
+                section = line.substring(1, line.length() - 1);
+                continue;
+            }
+            if (section == null || !line.startsWith("key_file")) continue;
+            String[] kv = line.split("=", 2);
+            if (kv.length == 2 && kv[1].trim().endsWith(KEY_FILE_NAME)) {
+                if ("FLOCI".equals(section)) return section;
+                if (found == null) found = section;
+            }
+        }
+        return found;
+    }
+
     private static String toPem(byte[] pkcs8) {
         // 64-char lines per RFC 7468; the trailing OCI_API_KEY label is the marker the
         // OCI CLI looks for to confirm the key is API-only (suppresses its warning).

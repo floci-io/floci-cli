@@ -491,7 +491,7 @@ Variables exported:
 | `OCI_CLI_ENDPOINT` | Default `--endpoint` for the `oci` CLI |
 | `FLOCI_OCI_ENDPOINT` | Used by this CLI and the `ocilocal` wrapper |
 | `TF_VAR_CLIENT_HOST_OVERRIDES` | Per-client host overrides for the `oracle/oci` Terraform provider |
-| `OCI_CLI_PROFILE` | `FLOCI` — only exported when `floci oci setup` has written that profile |
+| `OCI_CLI_PROFILE` | The profile `floci oci setup` wrote (default `FLOCI`) — only exported when detected in `~/.oci/config`, and skipped for `DEFAULT` |
 
 ### `floci oci setup`
 
