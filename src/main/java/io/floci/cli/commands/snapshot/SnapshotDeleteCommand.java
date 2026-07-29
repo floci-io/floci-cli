@@ -2,6 +2,7 @@ package io.floci.cli.commands.snapshot;
 
 import io.floci.cli.GlobalOptions;
 import io.floci.cli.ProductProfile;
+import io.floci.cli.docker.DockerClient;
 import io.floci.cli.http.FlociException;
 import io.floci.cli.http.FlociHttpClient;
 import io.floci.cli.output.Ansi;
@@ -37,7 +38,10 @@ public class SnapshotDeleteCommand implements Callable<Integer> {
     @Override
     public Integer call() {
         Printer printer = global.printer();
-        FlociHttpClient client = new FlociHttpClient(global.endpoint, profile.controlPrefix());
+        // Resolve the endpoint from the container's port mapping, like status/services/wait do,
+        // so a container started with --port <n> is still found without --endpoint.
+        String effectiveEndpoint = global.resolvedEndpoint(new DockerClient());
+        FlociHttpClient client = new FlociHttpClient(effectiveEndpoint, profile.controlPrefix());
         try {
             client.deleteSnapshot(name);
             printer.println(Ansi.green("Snapshot deleted:") + " " + name);
