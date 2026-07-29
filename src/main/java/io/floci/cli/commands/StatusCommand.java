@@ -1,6 +1,7 @@
 package io.floci.cli.commands;
 
 import io.floci.cli.GlobalOptions;
+import io.floci.cli.ProductProfile;
 import io.floci.cli.docker.DockerClient;
 import io.floci.cli.docker.DockerException;
 import io.floci.cli.http.FlociHttpClient;
@@ -16,13 +17,24 @@ import java.util.concurrent.Callable;
 
 @Command(
         name = "status",
-        description = "Show Floci container and server status",
+        description = "Show Floci AWS container and server status",
         mixinStandardHelpOptions = true
 )
 public class StatusCommand implements Callable<Integer> {
 
+    protected final ProductProfile profile;
+
     @Mixin
-    GlobalOptions global;
+    protected GlobalOptions global;
+
+    public StatusCommand() {
+        this(ProductProfile.AWS);
+    }
+
+    protected StatusCommand(ProductProfile profile) {
+        this.profile = profile;
+        this.global = new GlobalOptions(profile);
+    }
 
     @Override
     public Integer call() {
@@ -50,7 +62,7 @@ public class StatusCommand implements Callable<Integer> {
         String serverVersion = "unavailable";
         String serverEdition = "";
         boolean reachable = false;
-        FlociHttpClient client = new FlociHttpClient(effectiveEndpoint);
+        FlociHttpClient client = new FlociHttpClient(effectiveEndpoint, profile.controlPrefix());
         try {
             var health = client.health();
             serverVersion = health.version();
@@ -73,7 +85,7 @@ public class StatusCommand implements Callable<Integer> {
             return 0;
         }
 
-        printer.println(Ansi.bold("Floci Status"));
+        printer.println(Ansi.bold(profile.displayName() + " Status"));
         printer.println("");
         String stateColor = switch (containerState) {
             case "running" -> Ansi.green(containerState);
@@ -92,7 +104,7 @@ public class StatusCommand implements Callable<Integer> {
 
         if (!reachable && !"running".equals(containerState)) {
             printer.println("");
-            printer.println(Ansi.gray("Run 'floci start' to launch Floci."));
+            printer.println(Ansi.gray("Run '" + profile.commandPrefix() + " start' to launch " + profile.displayName() + "."));
         }
 
         return 0;

@@ -7,6 +7,15 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- Internal: the four near-identical product command trees were unified into one `ProductProfile`-parameterized implementation — the `gcp`/`az`/`oci` command classes are now thin subclasses of the root commands, eliminating the copy-drift bug class
+- **Snapshot commands are now real API calls in every product tree.** `floci gcp|az|oci snapshot save/load/list/delete` call the product server's `/snapshots` control-plane endpoints and degrade gracefully when the server doesn't support them yet — previously they printed a "not yet available" note and exited 0. `snapshot export`/`import` now exit 1 with an error in all four trees (previously exit 0 with a note on gcp/az/oci); CI scripts that relied on the silent success of stubbed snapshot commands will now see failures. Snapshot error messages point at the product's GitHub issue tracker instead of the maintainer-only TODO.md
+- `floci gcp|az|oci logs` gained the `--service` flag and `services` gained `--mode`, matching the AWS tree (they had drifted apart); `version` on the AWS tree now prints the port-auto-detected endpoint in its "not reachable" hint like the other trees
+- `services` and `snapshot save/load/list/delete` now auto-detect the endpoint from the running container's port mapping in every tree (like `status`/`wait`/`env` always did), so a container started with `--port <n>` is found without passing `--endpoint`
+- Global `--endpoint`/`--container` help text now shows each product's default value
+- The AWS tree now brands itself **Floci AWS** in banners, messages, and help text ("Starting Floci AWS container...", "Floci AWS Doctor", "Show Floci AWS container and server status"), matching the Floci GCP / Floci Azure / Floci OCI naming
+
 ### Added
 
 - `floci oci` command group — full lifecycle support for the Floci OCI (Oracle Cloud) emulator (`floci-oci`, default port 4599): `start`, `stop`, `restart`, `status`, `logs`, `wait`, `version`, `services`, `doctor`, `env`, `config`, and stub `snapshot` commands, mirroring the GCP/Azure trees. `floci oci env` exports `OCI_CLI_ENDPOINT`, `FLOCI_OCI_ENDPOINT`, and `TF_VAR_CLIENT_HOST_OVERRIDES` for the OCI CLI, the `ocilocal` wrapper, and the `oracle/oci` Terraform provider. `floci config default-product oci` routes bare commands to the OCI tree

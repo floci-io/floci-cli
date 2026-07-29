@@ -1,31 +1,17 @@
 package io.floci.cli.commands.oci.snapshot;
 
-import io.floci.cli.OciGlobalOptions;
-import io.floci.cli.output.Ansi;
-import picocli.CommandLine.*;
-
-import java.util.concurrent.Callable;
+import io.floci.cli.ProductProfile;
+import io.floci.cli.commands.snapshot.SnapshotImportCommand;
+import picocli.CommandLine.Command;
 
 @Command(
         name = "import",
         description = "Import a Floci OCI snapshot from a tarball file",
         mixinStandardHelpOptions = true
 )
-public class OciSnapshotImportCommand implements Callable<Integer> {
+public class OciSnapshotImportCommand extends SnapshotImportCommand {
 
-    @Mixin
-    OciGlobalOptions global;
-
-    @Parameters(index = "0", description = "Snapshot name", paramLabel = "<name>")
-    String name;
-
-    @Option(names = {"--file", "-f"}, description = "Source file path", required = true, paramLabel = "<path>")
-    String inputFile;
-
-    @Override
-    public Integer call() {
-        global.printer().println(Ansi.yellow("Snapshots are not yet available for Floci OCI.") +
-                "\nTrack progress: https://github.com/floci-io/floci-oci/issues");
-        return 0;
+    public OciSnapshotImportCommand() {
+        super(ProductProfile.OCI);
     }
 }

@@ -5,7 +5,7 @@ import picocli.CommandLine.*;
 
 @Command(
         name = "snapshot",
-        description = "Manage Floci Azure state snapshots (coming soon)",
+        description = "Manage Floci Azure state snapshots",
         mixinStandardHelpOptions = true,
         subcommands = {
                 AzSnapshotSaveCommand.class,

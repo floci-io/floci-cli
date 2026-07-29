@@ -1,34 +1,17 @@
 package io.floci.cli.commands.az.snapshot;
 
-import io.floci.cli.AzGlobalOptions;
-import io.floci.cli.output.Ansi;
-import io.floci.cli.output.OutputFormat;
-import io.floci.cli.output.Printer;
-import picocli.CommandLine.*;
-
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.Callable;
+import io.floci.cli.ProductProfile;
+import io.floci.cli.commands.snapshot.SnapshotListCommand;
+import picocli.CommandLine.Command;
 
 @Command(
         name = "list",
         description = "List available Floci Azure snapshots",
         mixinStandardHelpOptions = true
 )
-public class AzSnapshotListCommand implements Callable<Integer> {
+public class AzSnapshotListCommand extends SnapshotListCommand {
 
-    @Mixin
-    AzGlobalOptions global;
-
-    @Override
-    public Integer call() {
-        Printer printer = global.printer();
-        if (printer.format() != OutputFormat.text) {
-            printer.structured(Map.of("snapshots", List.of(), "note", "not yet available"));
-            return 0;
-        }
-        printer.println(Ansi.gray("No snapshots found.") +
-                " (Snapshot support for Floci Azure is coming — https://github.com/floci-io/floci-az/issues)");
-        return 0;
+    public AzSnapshotListCommand() {
+        super(ProductProfile.AZ);
     }
 }

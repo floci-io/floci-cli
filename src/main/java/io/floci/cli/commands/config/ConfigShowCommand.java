@@ -1,6 +1,7 @@
 package io.floci.cli.commands.config;
 
 import io.floci.cli.GlobalOptions;
+import io.floci.cli.ProductProfile;
 import io.floci.cli.config.Profile;
 import io.floci.cli.config.ProfileStore;
 import io.floci.cli.output.Ansi;
@@ -16,13 +17,24 @@ import java.util.concurrent.Callable;
 
 @Command(
         name = "show",
-        description = "Show the active configuration",
+        description = "Show the active Floci AWS configuration",
         mixinStandardHelpOptions = true
 )
 public class ConfigShowCommand implements Callable<Integer> {
 
+    protected final ProductProfile profile;
+
     @Mixin
-    GlobalOptions global;
+    protected GlobalOptions global;
+
+    public ConfigShowCommand() {
+        this(ProductProfile.AWS);
+    }
+
+    protected ConfigShowCommand(ProductProfile profile) {
+        this.profile = profile;
+        this.global = new GlobalOptions(profile);
+    }
 
     @Override
     public Integer call() {
@@ -58,7 +70,7 @@ public class ConfigShowCommand implements Callable<Integer> {
             return 0;
         }
 
-        printer.println(Ansi.bold("Active Configuration"));
+        printer.println(Ansi.bold("Active Configuration (" + profile.displayName() + ")"));
         printer.println("");
         printer.println("  Profile:    " + active.name);
         printer.println("  Endpoint:   " + (active.endpoint != null ? active.endpoint : global.endpoint));

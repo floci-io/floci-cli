@@ -1,12 +1,15 @@
 package io.floci.cli.commands;
 
 import io.floci.cli.GlobalOptions;
+import io.floci.cli.ProductProfile;
 import io.floci.cli.doctor.Check;
 import io.floci.cli.doctor.CheckResult;
 import io.floci.cli.doctor.CheckStatus;
 import io.floci.cli.docker.DockerClient;
 import io.floci.cli.doctor.checks.AwsCliEndpointCheck;
 import io.floci.cli.doctor.checks.AwsCliS3PathStyleCheck;
+import io.floci.cli.doctor.checks.AzCliConnectionStringCheck;
+import io.floci.cli.doctor.checks.AzCliInstalledCheck;
 import io.floci.cli.doctor.checks.ContainerRunningCheck;
 import io.floci.cli.doctor.checks.DockerDaemonCheck;
 import io.floci.cli.doctor.checks.DockerInstalledCheck;
@@ -29,13 +32,15 @@ import java.util.concurrent.Callable;
 
 @Command(
         name = "doctor",
-        description = "Run environment diagnostics for Floci",
+        description = "Run environment diagnostics for Floci AWS",
         mixinStandardHelpOptions = true
 )
 public class DoctorCommand implements Callable<Integer> {
 
+    protected final ProductProfile profile;
+
     @Mixin
-    GlobalOptions global;
+    protected GlobalOptions global;
 
     @Option(names = {"--check"}, description = "Run only a specific check by name", paramLabel = "<name>")
     String checkName;
@@ -43,33 +48,48 @@ public class DoctorCommand implements Callable<Integer> {
     @Option(names = {"--fix"}, description = "Attempt to auto-fix fixable issues")
     boolean fix;
 
-    public static final List<Check> DOCKER_CHECKS = List.of(
-            new DockerInstalledCheck(),
-            new DockerDaemonCheck(),
-            new DockerSocketCheck(),
-            new DockerVersionCheck(),
-            new PortAvailableCheck(),
-            new ImagePresentCheck(),
-            new ImageVersionCheck(),
-            new ContainerRunningCheck(),
-            new EndpointReachableCheck()
-    );
+    /** The base environment checks every product runs, in order: Docker first, then server. */
+    public static List<Check> dockerChecks(ProductProfile profile) {
+        return List.of(
+                new DockerInstalledCheck(),
+                new DockerDaemonCheck(),
+                new DockerSocketCheck(),
+                new DockerVersionCheck(),
+                new PortAvailableCheck(),
+                new ImagePresentCheck(profile.image()),
+                new ImageVersionCheck(profile.image()),
+                new ContainerRunningCheck(),
+                new EndpointReachableCheck(profile.controlPrefix())
+        );
+    }
 
     public static final List<Check> AWS_COMPANION_CHECKS = List.of(
             new AwsCliEndpointCheck(),
             new AwsCliS3PathStyleCheck()
     );
 
+    public static final List<Check> AZ_COMPANION_CHECKS = List.of(
+            new AzCliInstalledCheck(),
+            new AzCliConnectionStringCheck()
+    );
+
     private final List<Check> allChecks;
 
     public DoctorCommand() {
-        this(AWS_COMPANION_CHECKS);
+        this(ProductProfile.AWS, AWS_COMPANION_CHECKS);
     }
 
-    public DoctorCommand(List<Check> companionChecks) {
-        List<Check> checks = new ArrayList<>(DOCKER_CHECKS);
+    /** Test seam and shim constructor: base docker checks for the profile + product companions. */
+    public DoctorCommand(ProductProfile profile, List<Check> companionChecks) {
+        this.profile = profile;
+        this.global = new GlobalOptions(profile);
+        List<Check> checks = new ArrayList<>(dockerChecks(profile));
         checks.addAll(companionChecks);
         this.allChecks = List.copyOf(checks);
+    }
+
+    public List<Check> allChecks() {
+        return allChecks;
     }
 
     @Override
@@ -81,7 +101,7 @@ public class DoctorCommand implements Callable<Integer> {
         boolean textMode = printer.format() == OutputFormat.text;
 
         if (textMode) {
-            printer.println(Ansi.bold("Floci Doctor") + " — checking your environment");
+            printer.println(Ansi.bold(profile.displayName() + " Doctor") + " — checking your environment");
             printer.println("");
         }
 

@@ -5,7 +5,7 @@ import picocli.CommandLine.*;
 
 @Command(
         name = "snapshot",
-        description = "Manage Floci OCI state snapshots (coming soon)",
+        description = "Manage Floci OCI state snapshots",
         mixinStandardHelpOptions = true,
         subcommands = {
                 OciSnapshotSaveCommand.class,

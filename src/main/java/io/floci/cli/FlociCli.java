@@ -55,7 +55,7 @@ public class FlociCli implements Runnable {
     static class VersionProvider implements IVersionProvider {
         @Override
         public String[] getVersion() {
-            return new String[]{"floci " + VersionCommand.CLI_VERSION};
+            return new String[]{"floci " + CliVersion.CLI_VERSION};
         }
     }
 
@@ -95,9 +95,9 @@ public class FlociCli implements Runnable {
         // itself, which already talks about versions.
         boolean notify = UpdateNotifier.interactiveRunEnabled() && !isUpdateCommand(effectiveArgs);
         if (notify) {
-            UpdateNotifier.pendingNotice(VersionCommand.CLI_VERSION).ifPresent(latest ->
+            UpdateNotifier.pendingNotice(CliVersion.CLI_VERSION).ifPresent(latest ->
                     System.err.println(Ansi.yellow("A new release of floci is available: "
-                            + VersionCommand.CLI_VERSION + " → " + latest + "\n"
+                            + CliVersion.CLI_VERSION + " → " + latest + "\n"
                             + "Run 'floci update' to install it") + "\n"));
             UpdateNotifier.refreshInBackground();
         }

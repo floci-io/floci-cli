@@ -7,18 +7,32 @@ import io.floci.cli.output.Printer;
 import picocli.CommandLine.Option;
 
 import java.net.URI;
+import java.util.function.UnaryOperator;
 
+/**
+ * Shared global options for every product tree, parameterized by {@link ProductProfile}.
+ *
+ * The per-product defaults for {@code --endpoint} and {@code --container} are set as
+ * field initial values in the constructor (env var override included) instead of
+ * annotation {@code defaultValue}s — annotation strings are compile-time constants and
+ * cannot vary by product. Picocli keeps a parsed-over field's initial value when the
+ * option has no defaultValue, and renders it for {@code ${DEFAULT-VALUE}} in help.
+ *
+ * Commands must pre-initialize their {@code @Mixin GlobalOptions} field in their
+ * constructor (picocli uses a non-null field instance as-is); a command that forgets
+ * gets AWS defaults — covered by the per-tree parse tests.
+ */
 public class GlobalOptions {
 
+    public final ProductProfile product;
+
     @Option(names = {"--endpoint"},
-            description = "Floci server endpoint URL",
-            defaultValue = "${FLOCI_ENDPOINT:-http://localhost:4566}",
+            description = "Floci server endpoint URL (default: ${DEFAULT-VALUE})",
             paramLabel = "<url>")
     public String endpoint;
 
     @Option(names = {"--container"},
-            description = "Floci container name",
-            defaultValue = "${FLOCI_CONTAINER:-floci}",
+            description = "Floci container name (default: ${DEFAULT-VALUE})",
             paramLabel = "<name>")
     public String container;
 
@@ -41,6 +55,27 @@ public class GlobalOptions {
 
     @Option(names = {"--no-color"}, description = "Disable ANSI colors")
     public boolean noColor;
+
+    public GlobalOptions() {
+        this(ProductProfile.AWS);
+    }
+
+    public GlobalOptions(ProductProfile product) {
+        this(product, System::getenv);
+    }
+
+    /** Test seam: {@code envLookup} replaces {@code System.getenv}. */
+    public GlobalOptions(ProductProfile product, UnaryOperator<String> envLookup) {
+        this.product = product;
+        this.endpoint = envOr(envLookup, product.envVar("ENDPOINT"), product.defaultEndpoint());
+        this.container = envOr(envLookup, product.envVar("CONTAINER"), product.defaultContainer());
+    }
+
+    // Matches picocli's ${VAR:-fallback}: only a NULL env var falls back — empty counts as set.
+    private static String envOr(UnaryOperator<String> env, String var, String fallback) {
+        String value = env.apply(var);
+        return value != null ? value : fallback;
+    }
 
     public Printer printer() {
         if (noColor || !isStdoutTty()) {
@@ -66,7 +101,7 @@ public class GlobalOptions {
         if (ports == null || ports.isBlank()) return fallback;
         try {
             int containerPort = URI.create(fallback).getPort();
-            if (containerPort == -1) containerPort = 4566;
+            if (containerPort == -1) containerPort = product.defaultPort();
             for (String mapping : ports.trim().split("\\s+")) {
                 int arrow = mapping.indexOf("->");
                 if (arrow < 0) continue;
