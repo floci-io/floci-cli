@@ -28,6 +28,7 @@ public class GlobalConfigStore {
             GlobalConfig config = YAML.readValue(configFile.toFile(), GlobalConfig.class);
             if ("az".equals(config.defaultProduct)) return "az";
             if ("gcp".equals(config.defaultProduct)) return "gcp";
+            if ("oci".equals(config.defaultProduct)) return "oci";
             return "aws";
         } catch (IOException e) {
             return "aws";

@@ -42,19 +42,20 @@ java -jar target/floci.jar <command>
 
 `FlociCli` is the Picocli root command. Every subcommand is registered in its `subcommands = {}` array. All commands implement `Callable<Integer>` and return an exit code.
 
-Bare commands (`floci start`) route to the configured default product (`aws` unless changed via `floci config default-product aws|gcp|az`). Explicit product groups are `floci aws` (same classes as the root tree), `floci gcp`, and `floci az`.
+Bare commands (`floci start`) route to the configured default product (`aws` unless changed via `floci config default-product aws|gcp|az|oci`). Explicit product groups are `floci aws` (same classes as the root tree), `floci gcp`, `floci az`, and `floci oci`.
 
-### The three product trees — CRITICAL
+### The four product trees — CRITICAL
 
-The GCP (`commands/gcp/`) and Azure (`commands/az/`) command trees are near-verbatim copies of the root/AWS tree (`commands/`), each with its own `GlobalOptions` variant:
+The GCP (`commands/gcp/`), Azure (`commands/az/`), and OCI (`commands/oci/`) command trees are near-verbatim copies of the root/AWS tree (`commands/`), each with its own `GlobalOptions` variant:
 
 | Tree | Mixin | Default endpoint | Container | Env prefix | Control prefix |
 |------|-------|------------------|-----------|------------|----------------|
 | root / `aws` | `GlobalOptions` | `http://localhost:4566` | `floci` | `FLOCI_*` | `/_floci` |
 | `gcp` | `GcpGlobalOptions` | `http://localhost:4588` | `floci-gcp` | `FLOCI_GCP_*` | `/_floci-gcp` |
 | `az` | `AzGlobalOptions` | `http://localhost:4577` | `floci-az` | `FLOCI_AZ_*` | `/_floci` (same as AWS — intentional) |
+| `oci` | `OciGlobalOptions` | `http://localhost:4599` | `floci-oci` | `FLOCI_OCI_*` | `/_floci-oci` |
 
-**Until the trees are unified: any change to a shared command MUST be applied to all three trees** (e.g. `StartCommand`, `GcpStartCommand`, `AzStartCommand`). Drift between the copies is a known bug source — check the sibling trees before and after editing. Only `EnvCommand`/`GcpEnvCommand`/`AzEnvCommand` are genuinely product-specific.
+**Until the trees are unified: any change to a shared command MUST be applied to all four trees** (e.g. `StartCommand`, `GcpStartCommand`, `AzStartCommand`, `OciStartCommand`). Drift between the copies is a known bug source — check the sibling trees before and after editing. Only `EnvCommand`/`GcpEnvCommand`/`AzEnvCommand`/`OciEnvCommand` are genuinely product-specific, plus the OCI-only `OciSetupCommand` (the OCI CLI/SDKs require a config file + signing key, so `floci oci setup` scaffolds them; no other tree needs an equivalent).
 
 Commands call `global.printer()` at the start of `call()` — never store a `Printer` as a field.
 
@@ -85,13 +86,13 @@ if (printer.format() != OutputFormat.text) {
 The structure differs per tree (do not assume they match):
 
 - **AWS** (`commands/DoctorCommand.java`): `DOCKER_CHECKS` (static list of the 9 Docker/server checks) + `AWS_COMPANION_CHECKS` (AWS CLI checks), combined via constructor into an instance `allChecks` list.
-- **GCP/Azure** (`GcpDoctorCommand`/`AzDoctorCommand`): a single static `ALL_CHECKS` list built in a static initializer.
+- **GCP/Azure/OCI** (`GcpDoctorCommand`/`AzDoctorCommand`/`OciDoctorCommand`): a single static `ALL_CHECKS` list built in a static initializer.
 
 To add a check: create a class in `doctor/checks/`, then append it to the relevant list(s) — in all trees where it applies.
 
 ### Config profiles
 
-`ProfileStore` reads/writes YAML files under `~/.floci/profiles/<name>.yaml` via Jackson. `Profile` is a plain bean — keep it `@JsonIgnoreProperties(ignoreUnknown = true)` to stay forward-compatible. The store is shared by all three product trees (no per-product namespacing). `GlobalConfigStore` persists `~/.floci/config.yaml` (currently just `default-product`).
+`ProfileStore` reads/writes YAML files under `~/.floci/profiles/<name>.yaml` via Jackson. `Profile` is a plain bean — keep it `@JsonIgnoreProperties(ignoreUnknown = true)` to stay forward-compatible. The store is shared by all four product trees (no per-product namespacing). `GlobalConfigStore` persists `~/.floci/config.yaml` (currently just `default-product`).
 
 ### Self-update
 
@@ -122,7 +123,7 @@ To add a check: create a class in `doctor/checks/`, then append it to the releva
 - **No cloud resource commands.** This CLI manages Floci itself (lifecycle, config, diagnostics, state). Resource operations belong to the vendor CLIs pointed at the emulator: `aws` + `AWS_ENDPOINT_URL`, `gcloud`/SDK emulator-host vars, `az` + connection string.
 - **No telemetry, no TUI, no Floci Cloud commands.**
 - **Self-update is in scope** (`floci update`) — but it must never auto-run; updates happen only on explicit user invocation.
-- **Snapshot commands:** the AWS `save/load/list/delete` call `/_floci/snapshots/*` and degrade gracefully (404/501 → "not available"); `export/import` and the entire GCP/Azure snapshot subtrees are stubs pending server-side endpoints in `floci-io/floci`, `floci-io/floci-gcp`, and `floci-io/floci-az`. Do not invent client-side snapshot behavior — the server API contract comes first.
+- **Snapshot commands:** the AWS `save/load/list/delete` call `/_floci/snapshots/*` and degrade gracefully (404/501 → "not available"); `export/import` and the entire GCP/Azure/OCI snapshot subtrees are stubs pending server-side endpoints in `floci-io/floci`, `floci-io/floci-gcp`, `floci-io/floci-az`, and `floci-io/floci-oci`. Do not invent client-side snapshot behavior — the server API contract comes first.
 
 ---
 
@@ -138,6 +139,6 @@ printer.error("Container 'floci' not found.\nRun 'floci start' to launch one.");
 
 ## Documentation Rules
 
-- `README.md` documents all three product trees (AWS, GCP, Azure). If you add/change a command or flag, update the README in the same change.
+- `README.md` documents all four product trees (AWS, GCP, Azure, OCI). If you add/change a command or flag, update the README in the same change.
 - `CHANGELOG.md` follows Keep a Changelog. Every user-visible change gets an entry under `[Unreleased]` in the same PR.
 - `CLAUDE.md` is gitignored (maintainer-local); this file (`AGENTS.md`) is the tracked source of truth for agent guidance. Update it here.

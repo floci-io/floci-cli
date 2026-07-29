@@ -50,7 +50,7 @@ java -jar target/floci.jar stop
 
 ## Architecture
 
-See [AGENTS.md](AGENTS.md) for the architecture: command wiring, the three product trees (AWS/GCP/Azure), the Docker and HTTP I/O boundaries, the output pipeline, native-image constraints, and scope rules.
+See [AGENTS.md](AGENTS.md) for the architecture: command wiring, the four product trees (AWS/GCP/Azure/OCI), the Docker and HTTP I/O boundaries, the output pipeline, native-image constraints, and scope rules.
 
 `AGENTS.md` is the canonical agent instructions file for this repository, following the [AGENTS.md standard](https://agents.md/). If your coding agent expects a different filename, create a local symlink instead of copying the file:
 
@@ -61,7 +61,7 @@ ln -s AGENTS.md GEMINI.md
 
 ### Rules that trip up most PRs
 
-- **Three product trees.** The `gcp` and `az` command trees mirror the root/AWS tree. A change to a shared command (start, stop, status, logs, wait, doctor, …) must be applied to **all three trees** — `StartCommand`, `GcpStartCommand`, and `AzStartCommand` — until they are unified.
+- **Four product trees.** The `gcp`, `az`, and `oci` command trees mirror the root/AWS tree. A change to a shared command (start, stop, status, logs, wait, doctor, …) must be applied to **all four trees** — `StartCommand`, `GcpStartCommand`, `AzStartCommand`, and `OciStartCommand` — until they are unified.
 - **Native image.** New Jackson DTOs must be registered in `reflect-config.json`; prefer passing `Map`/`JsonNode` to `printer.structured(...)`, which needs no registration. No reflection-heavy dependencies.
 - **Error messages.** Every `printer.error(...)` must end with a suggested next step:
 

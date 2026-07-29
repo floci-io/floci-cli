@@ -7,6 +7,12 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- `floci oci` command group — full lifecycle support for the Floci OCI (Oracle Cloud) emulator (`floci-oci`, default port 4599): `start`, `stop`, `restart`, `status`, `logs`, `wait`, `version`, `services`, `doctor`, `env`, `config`, and stub `snapshot` commands, mirroring the GCP/Azure trees. `floci oci env` exports `OCI_CLI_ENDPOINT`, `FLOCI_OCI_ENDPOINT`, and `TF_VAR_CLIENT_HOST_OVERRIDES` for the OCI CLI, the `ocilocal` wrapper, and the `oracle/oci` Terraform provider. `floci config default-product oci` routes bare commands to the OCI tree
+- `floci oci setup` — one-step OCI CLI/SDK client setup: generates a local RSA-2048 API signing key (`~/.oci/floci_key.pem`, with the `OCI_API_KEY` label and a real computed fingerprint) and writes a `[FLOCI]` profile to `~/.oci/config` using the emulator's canonical throwaway tenancy. Idempotent; never modifies existing profiles; `--profile-name` overrides the section name. `floci oci env` additionally exports `OCI_CLI_PROFILE=FLOCI` when that profile exists, so `eval $(floci oci env)` is the only connect step needed
+- `FlociHttpClient` now accepts both health-endpoint `services` shapes: the array of names reported by the AWS/GCP/Azure servers and the `{name: status}` object reported by floci-oci (previously the object shape read as zero services in `status`/`services`/`wait`)
+
 ## [0.1.9] — 2026-07-24
 
 ### Added
