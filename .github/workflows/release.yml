@@ -174,27 +174,6 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           name: "floci ${{ steps.version.outputs.version }}"
-          body: |
-            ## Installation
-
-            **Homebrew:**
-            ```sh
-            brew install floci-io/floci/floci
-            ```
-
-            **Direct download (Linux/macOS):**
-            ```sh
-            curl -fsSL https://floci.io/install.sh | sh
-            ```
-
-            **Windows:**
-            ```powershell
-            iwr https://floci.io/install.ps1 | iex
-            ```
-
-            **JVM fallback** (requires Java 25+): `floci.jar`
-
-            See [CHANGELOG.md](CHANGELOG.md) for what's new.
           files: |
             dist/floci-linux-amd64/floci-linux-amd64
             dist/floci-linux-arm64/floci-linux-arm64
