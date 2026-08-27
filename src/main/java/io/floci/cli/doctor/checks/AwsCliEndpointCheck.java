@@ -2,6 +2,7 @@ package io.floci.cli.doctor.checks;
 
 import io.floci.cli.doctor.Check;
 import io.floci.cli.doctor.CheckResult;
+import io.floci.cli.output.ShellExport;
 
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -21,14 +22,14 @@ public class AwsCliEndpointCheck implements Check {
                 String corrected = replacePort(envVar, effectivePort);
                 return CheckResult.warn("aws.cli.endpoint",
                         "AWS_ENDPOINT_URL=" + envVar + " (port mismatch — Floci is on port " + effectivePort + ")",
-                        "export AWS_ENDPOINT_URL=" + corrected);
+                        ShellExport.formatExport("bash", "AWS_ENDPOINT_URL", corrected));
             }
             return CheckResult.ok("aws.cli.endpoint", "AWS_ENDPOINT_URL=" + envVar);
         }
         String suggested = "http://localhost.floci.io:" + (effectivePort != -1 ? effectivePort : 4566);
         return CheckResult.warn("aws.cli.endpoint",
                 "AWS_ENDPOINT_URL is not set",
-                "export AWS_ENDPOINT_URL=" + suggested);
+                ShellExport.formatExport("bash", "AWS_ENDPOINT_URL", suggested));
     }
 
     private int extractPort(String url) {

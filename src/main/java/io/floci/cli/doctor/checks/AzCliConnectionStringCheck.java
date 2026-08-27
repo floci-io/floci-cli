@@ -2,6 +2,7 @@ package io.floci.cli.doctor.checks;
 
 import io.floci.cli.doctor.Check;
 import io.floci.cli.doctor.CheckResult;
+import io.floci.cli.output.ShellExport;
 
 import java.net.URI;
 import java.util.regex.Matcher;
@@ -25,7 +26,7 @@ public class AzCliConnectionStringCheck implements Check {
                     String corrected = connStr.replaceAll(":(\\d+)/", ":" + effectivePort + "/");
                     return CheckResult.warn("az.cli.connection-string",
                             "AZURE_STORAGE_CONNECTION_STRING port mismatch — floci-az is on port " + effectivePort,
-                            "export AZURE_STORAGE_CONNECTION_STRING=\"" + corrected + "\"");
+                            ShellExport.formatExport("bash", "AZURE_STORAGE_CONNECTION_STRING", corrected));
                 }
             }
             return CheckResult.ok("az.cli.connection-string", "AZURE_STORAGE_CONNECTION_STRING is set");
@@ -35,7 +36,7 @@ public class AzCliConnectionStringCheck implements Check {
         String suggested = buildConnectionString("devstoreaccount1", "localhost.floci.io", port);
         return CheckResult.warn("az.cli.connection-string",
                 "AZURE_STORAGE_CONNECTION_STRING is not set",
-                "export AZURE_STORAGE_CONNECTION_STRING=\"" + suggested + "\"");
+                ShellExport.formatExport("bash", "AZURE_STORAGE_CONNECTION_STRING", suggested));
     }
 
     private int extractPort(String url) {

@@ -7,6 +7,7 @@ import io.floci.cli.doctor.checks.AzCliConnectionStringCheck;
 import io.floci.cli.output.Ansi;
 import io.floci.cli.output.OutputFormat;
 import io.floci.cli.output.Printer;
+import io.floci.cli.output.ShellExport;
 import picocli.CommandLine.*;
 
 import java.net.URI;
@@ -90,14 +91,14 @@ public class AzEnvCommand implements Callable<Integer> {
 
         if (!sdkVarsMode) {
             String connStr = AzCliConnectionStringCheck.buildConnectionString(account, host, port);
-            printer.println(formatExport("AZURE_STORAGE_CONNECTION_STRING", connStr));
+            printer.println(ShellExport.formatExport(shell, "AZURE_STORAGE_CONNECTION_STRING", connStr));
             printer.println("");
             printer.println(Ansi.gray("# Run: eval $(floci az env)"));
         } else {
-            printer.println(formatExport("AZURE_STORAGE_ACCOUNT", account));
-            printer.println(formatExport("AZURE_STORAGE_KEY", DEV_KEY));
+            printer.println(ShellExport.formatExport(shell, "AZURE_STORAGE_ACCOUNT", account));
+            printer.println(ShellExport.formatExport(shell, "AZURE_STORAGE_KEY", DEV_KEY));
             for (String svc : requestedServices) {
-                printer.println(formatExport(envVarName(svc), buildEndpointUrl(svc, host, port, account)));
+                printer.println(ShellExport.formatExport(shell, envVarName(svc), buildEndpointUrl(svc, host, port, account)));
             }
             printer.println("");
             printer.println(Ansi.gray("# Run: eval $(floci az env --format sdk-vars)"));
@@ -140,14 +141,6 @@ public class AzEnvCommand implements Callable<Integer> {
             case "app-config" -> base + "-appconfig";
             case "key-vault"  -> base + "-keyvault";
             default           -> base + "-" + service;
-        };
-    }
-
-    private String formatExport(String key, String value) {
-        return switch (shell.toLowerCase()) {
-            case "fish"               -> "set -x " + key + " \"" + value + "\"";
-            case "powershell", "ps1"  -> "$env:" + key + " = \"" + value + "\"";
-            default                   -> "export " + key + "=" + value;
         };
     }
 
