@@ -443,6 +443,7 @@ Variables exported (per enabled service):
 ### `floci az env`
 
 Prints Azure connection variables for the running Floci Azure instance.
+The connection string contains `;` separators, so the emitted value is single-quoted (as it is in every tree's `env` output) and is safe to `eval`.
 
 ```sh
 eval $(floci az env)                                # connection string (default)

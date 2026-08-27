@@ -6,6 +6,7 @@ import io.floci.cli.docker.DockerClient;
 import io.floci.cli.output.Ansi;
 import io.floci.cli.output.OutputFormat;
 import io.floci.cli.output.Printer;
+import io.floci.cli.output.ShellExport;
 import picocli.CommandLine.*;
 
 import java.net.URI;
@@ -63,7 +64,7 @@ public class GcpEnvCommand implements Callable<Integer> {
         }
 
         for (Map.Entry<String, String> entry : vars.entrySet()) {
-            printer.println(formatExport(entry.getKey(), entry.getValue()));
+            printer.println(ShellExport.formatExport(shell, entry.getKey(), entry.getValue()));
         }
         printer.println("");
         printer.println(Ansi.gray("# Run: eval $(floci gcp env)"));
@@ -101,14 +102,6 @@ public class GcpEnvCommand implements Callable<Integer> {
             return "http://" + hostPort;
         }
         return hostPort;
-    }
-
-    private String formatExport(String key, String value) {
-        return switch (shell.toLowerCase()) {
-            case "fish"               -> "set -x " + key + " \"" + value + "\"";
-            case "powershell", "ps1"  -> "$env:" + key + " = \"" + value + "\"";
-            default                   -> "export " + key + "=" + value;
-        };
     }
 
     private String extractHost(String endpoint) {

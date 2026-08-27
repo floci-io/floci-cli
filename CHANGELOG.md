@@ -7,6 +7,10 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- `floci az env` printed the semicolon-separated Azure connection string unquoted, so `eval $(floci az env)` set only `AZURE_STORAGE_CONNECTION_STRING=DefaultEndpointsProtocol=http` and ran the remaining segments as commands — `az` then reported `Invalid connection string`. All four trees now share one emitter (`ShellExport`) that single-quotes values with per-shell escaping for bash, fish, and PowerShell (the form `floci oci env` already used), so `;`, `$`, backticks, and quotes in a value can no longer break or inject through `eval`. `floci env` and `floci gcp env` carried the same unquoted emitter, and the `aws.cli.endpoint` / `az.cli.connection-string` doctor hints suggested export lines with the same flaw; both are fixed ([#18](https://github.com/floci-io/floci-cli/issues/18))
+
 ## [0.2.0] — 2026-07-28
 
 ### Changed

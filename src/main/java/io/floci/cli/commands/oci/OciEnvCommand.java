@@ -6,6 +6,7 @@ import io.floci.cli.docker.DockerClient;
 import io.floci.cli.output.Ansi;
 import io.floci.cli.output.OutputFormat;
 import io.floci.cli.output.Printer;
+import io.floci.cli.output.ShellExport;
 import picocli.CommandLine.*;
 
 import java.nio.file.Path;
@@ -59,27 +60,10 @@ public class OciEnvCommand implements Callable<Integer> {
         }
 
         for (Map.Entry<String, String> entry : vars.entrySet()) {
-            printer.println(formatExport(shell, entry.getKey(), entry.getValue()));
+            printer.println(ShellExport.formatExport(shell, entry.getKey(), entry.getValue()));
         }
         printer.println("");
         printer.println(Ansi.gray("# Run: eval $(floci oci env)"));
         return 0;
-    }
-
-    /**
-     * Renders one export line. The output is documented as {@code eval} input, so values
-     * are single-quoted with per-shell escaping — no interpolation of {@code $}, backticks,
-     * or quotes can occur even for hostile {@code --endpoint} / env-var values.
-     */
-    public static String formatExport(String shell, String key, String value) {
-        return switch (shell.toLowerCase()) {
-            // fish single quotes: only \' and \\ are escapes, backslash must be doubled first
-            case "fish"               -> "set -x " + key + " '"
-                    + value.replace("\\", "\\\\").replace("'", "\\'") + "'";
-            // PowerShell single quotes: literal except '' for a quote
-            case "powershell", "ps1"  -> "$env:" + key + " = '" + value.replace("'", "''") + "'";
-            // POSIX single quotes: close, escaped quote, reopen
-            default                   -> "export " + key + "='" + value.replace("'", "'\\''") + "'";
-        };
     }
 }
