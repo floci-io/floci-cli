@@ -8,6 +8,7 @@ import io.floci.cli.output.Ansi;
 import io.floci.cli.output.Printer;
 import picocli.CommandLine.*;
 
+import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Callable;
@@ -53,6 +54,41 @@ public class StartCommand implements Callable<Integer> {
     @Option(names = {"--pull"}, description = "Image pull policy: always, missing, never", defaultValue = "missing", paramLabel = "always|missing|never")
     String pull;
 
+    /**
+     * The {@code docker run} arguments this invocation would use. Extracted from {@link #call()}
+     * as a test seam so the persistence mount can be pinned without starting a container;
+     * {@code socketArgs} is a parameter because {@link DockerClient#dockerSocketRunArgs()} reads
+     * the ambient {@code DOCKER_HOST} and so differs per machine.
+     */
+    public List<String> dockerRunArgs(List<String> socketArgs) {
+        List<String> args = new ArrayList<>();
+        args.addAll(List.of("-d", "--name", global.container));
+        args.addAll(List.of("-p", port + ":" + profile.defaultPort()));
+        args.addAll(socketArgs);
+        if (persistDir != null && !persistDir.isBlank()) {
+            args.addAll(List.of("-v", persistDir + ":/app/data"));
+            // The server defaults to in-memory storage; enable persistent mode so
+            // state is actually written to the mounted directory and survives restarts.
+            args.addAll(List.of("-e", profile.envVar("STORAGE_MODE") + "=persistent"));
+        }
+        if (services != null && !services.isBlank()) {
+            args.addAll(List.of("-e", profile.envVar("SERVICES") + "=" + services));
+        }
+        args.add(image);
+        return args;
+    }
+
+    /** {@code endpoint} with its port replaced, or a localhost URL if it cannot be parsed. */
+    public static String withPort(String endpoint, int port) {
+        try {
+            URI uri = URI.create(endpoint);
+            if (uri.getHost() == null) return "http://localhost:" + port;
+            return new URI(uri.getScheme(), null, uri.getHost(), port, uri.getPath(), null, null).toString();
+        } catch (Exception e) {
+            return "http://localhost:" + port;
+        }
+    }
+
     @Override
     public Integer call() {
         Printer printer = global.printer();
@@ -91,21 +127,7 @@ public class StartCommand implements Callable<Integer> {
             return 1;
         }
 
-        // Build docker run arguments
-        List<String> args = new ArrayList<>();
-        args.addAll(List.of("-d", "--name", global.container));
-        args.addAll(List.of("-p", port + ":" + profile.defaultPort()));
-        args.addAll(DockerClient.dockerSocketRunArgs());
-        if (persistDir != null) {
-            args.addAll(List.of("-v", persistDir + ":/app/data"));
-            // The server defaults to in-memory storage; enable persistent mode so
-            // state is actually written to the mounted directory and survives restarts.
-            args.addAll(List.of("-e", profile.envVar("STORAGE_MODE") + "=persistent"));
-        }
-        if (services != null && !services.isBlank()) {
-            args.addAll(List.of("-e", profile.envVar("SERVICES") + "=" + services));
-        }
-        args.add(image);
+        List<String> args = dockerRunArgs(DockerClient.dockerSocketRunArgs());
 
         try {
             printer.println("Starting " + Ansi.gold(profile.displayName()) + " container...");
@@ -121,8 +143,9 @@ public class StartCommand implements Callable<Integer> {
             return 0;
         }
 
-        // Update endpoint to match the bound host port before polling readiness
-        global.endpoint = "http://localhost:" + port;
+        // Point the readiness poll at the port actually bound, keeping whatever host the
+        // endpoint already names — a profile or --endpoint may well point somewhere else.
+        global.endpoint = withPort(global.endpoint, port);
 
         // Wait for readiness
         printer.println(Ansi.gray("Waiting for " + profile.displayName() + " to be ready..."));

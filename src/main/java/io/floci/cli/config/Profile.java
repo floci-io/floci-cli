@@ -1,6 +1,7 @@
 package io.floci.cli.config;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import io.floci.cli.ProductProfile;
 
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class Profile {
@@ -15,9 +16,12 @@ public class Profile {
 
     public Profile() {}
 
-    public Profile(String name) {
+    /** Seeds a new profile with the defaults of the product tree it was created under. */
+    public Profile(ProductProfile product, String name) {
         this.name = name;
-        this.endpoint = "http://localhost:4566";
-        this.container = "floci";
+        this.endpoint = product.defaultEndpoint();
+        this.container = product.defaultContainer();
+        this.image = product.defaultImageRef();
+        this.port = product.defaultPort();
     }
 }
