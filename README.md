@@ -274,6 +274,8 @@ All commands support `--help`.
 --profile <name>            Load settings from ~/.floci/profiles/<name>.yaml
 ```
 
+Explicit flags override the profile; the profile overrides the environment variables.
+
 ### GCP global flags
 
 ```
@@ -285,6 +287,8 @@ All commands support `--help`.
 --no-color                  Disable ANSI colors
 --profile <name>            Load settings from ~/.floci/profiles/<name>.yaml
 ```
+
+Explicit flags override the profile; the profile overrides the environment variables.
 
 ### Azure global flags
 
@@ -298,6 +302,8 @@ All commands support `--help`.
 --profile <name>            Load settings from ~/.floci/profiles/<name>.yaml
 ```
 
+Explicit flags override the profile; the profile overrides the environment variables.
+
 ### OCI global flags
 
 ```
@@ -309,6 +315,8 @@ All commands support `--help`.
 --no-color                  Disable ANSI colors
 --profile <name>            Load settings from ~/.floci/profiles/<name>.yaml
 ```
+
+Explicit flags override the profile; the profile overrides the environment variables.
 
 > **Port auto-detection** — `status`, `version`, `wait`, and `env` automatically derive the correct
 > endpoint from the container's port mapping. You don't need to pass `--endpoint` when using
@@ -569,8 +577,56 @@ floci config profile delete <name>         # delete a profile
 floci config validate -f docker-compose.yml  # validate a Compose file
 ```
 
-Profiles are stored in `~/.floci/profiles/<name>.yaml` and can override any global option.
-Use `--profile <name>` on any command to load one.
+#### Profiles
+
+Profiles are stored in `~/.floci/profiles/<name>.yaml`. Pass `--profile <name>` to any command to
+load one; `floci config profile create <name>` writes a starter file seeded with the defaults of
+the tree you run it under.
+
+```yaml
+name: probe
+endpoint: http://localhost:4566
+container: floci-probe
+image: floci/floci:enforced
+port: 4599
+persistDir: /tmp/floci-persist
+services: s3,lambda
+output: json
+```
+
+Each field supplies the default for one flag, so a profile field only affects the commands that
+have that flag:
+
+| Profile field | Flag it supplies | Applies to |
+|---|---|---|
+| `endpoint` | `--endpoint` | every command |
+| `container` | `--container` | every command |
+| `output` | `--output` / `-o` | every command |
+| `image` | `--image` | `start`, `restart` |
+| `port` | `--port` | `start`, `restart` |
+| `persistDir` | `--persist` | `start`, `restart` |
+| `services` | `--services` | `start`, `restart` |
+
+Resolution order, highest first:
+
+```
+command-line flag  >  --profile <name>  >  FLOCI_* environment variable  >  built-in default
+```
+
+So `floci start --profile probe --container other` starts `other`, and a profile beats a
+`FLOCI_CONTAINER` exported in your shell. A field the profile leaves out changes nothing.
+
+An unknown or unreadable profile is an error (exit 2), not a silent fall back to the defaults.
+Values are interpolated by the CLI, so `persistDir: ${env:HOME}/floci-data` expands as you would
+expect.
+
+> Profiles are shared by all four product trees — there is one `~/.floci/profiles/` directory, not
+> one per product. A profile created under `floci gcp` carries GCP defaults, so passing it to the
+> AWS tree will start a GCP container; name them accordingly.
+
+> `floci restart --profile <name>` re-applies the profile's `persistDir`, so state survives the
+> restart. A plain `floci restart` has no `--persist` flag of its own and still falls back to the
+> defaults.
 
 ### `floci snapshot`
 
@@ -581,7 +637,7 @@ floci snapshot list
 floci snapshot save <name>
 floci snapshot load <name>
 floci snapshot delete <name>
-floci snapshot export <name> -o tarball.tar.gz
+floci snapshot export <name> -f tarball.tar.gz
 floci snapshot import tarball.tar.gz
 ```
 

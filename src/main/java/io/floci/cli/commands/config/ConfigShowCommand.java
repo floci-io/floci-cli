@@ -24,6 +24,8 @@ public class ConfigShowCommand implements Callable<Integer> {
 
     protected final ProductProfile profile;
 
+    private final ProfileStore store;
+
     @Mixin
     protected GlobalOptions global;
 
@@ -32,38 +34,36 @@ public class ConfigShowCommand implements Callable<Integer> {
     }
 
     protected ConfigShowCommand(ProductProfile profile) {
+        this(profile, new ProfileStore());
+    }
+
+    /** Test seam: a store pointed at a temporary profiles directory. */
+    public ConfigShowCommand(ProductProfile profile, ProfileStore store) {
         this.profile = profile;
+        this.store = store;
         this.global = new GlobalOptions(profile);
     }
 
     @Override
     public Integer call() {
         Printer printer = global.printer();
-        ProfileStore store = new ProfileStore();
 
-        Profile active = new Profile(global.profile != null ? global.profile : "default");
-        active.endpoint = global.endpoint;
-        active.container = global.container;
-        active.output = global.output != null ? global.output.name() : "text";
-
-        if (global.profile != null) {
-            try {
-                Optional<Profile> loaded = store.get(global.profile);
-                if (loaded.isPresent()) {
-                    active = loaded.get();
-                } else {
-                    printer.warn("Profile '" + global.profile + "' not found. Using defaults.");
-                }
-            } catch (IOException e) {
-                printer.warn("Could not load profile: " + e.getMessage());
-            }
-        }
-
+        // global.* already reflects the profile: ProfileDefaultValueProvider applied it during
+        // parsing, and only to options the user did not pass, so explicit flags still win here.
         Map<String, Object> data = new LinkedHashMap<>();
-        data.put("profile", active.name);
-        data.put("endpoint", active.endpoint != null ? active.endpoint : global.endpoint);
-        data.put("container", active.container != null ? active.container : global.container);
-        data.put("output", active.output);
+        data.put("profile", global.profile != null ? global.profile : "default");
+        data.put("endpoint", global.endpoint);
+        data.put("container", global.container);
+        data.put("output", global.output != null ? global.output.name() : "text");
+
+        // image/port/persistDir/services have no global option, so they are read back from the
+        // profile itself — they only take effect on 'start'.
+        startSettings().ifPresent(p -> {
+            if (p.image != null) data.put("image", p.image);
+            if (p.port != null) data.put("port", p.port);
+            if (p.persistDir != null) data.put("persistDir", p.persistDir);
+            if (p.services != null) data.put("services", p.services);
+        });
 
         if (printer.format() != OutputFormat.text) {
             printer.structured(data);
@@ -72,11 +72,22 @@ public class ConfigShowCommand implements Callable<Integer> {
 
         printer.println(Ansi.bold("Active Configuration (" + profile.displayName() + ")"));
         printer.println("");
-        printer.println("  Profile:    " + active.name);
-        printer.println("  Endpoint:   " + (active.endpoint != null ? active.endpoint : global.endpoint));
-        printer.println("  Container:  " + (active.container != null ? active.container : global.container));
-        printer.println("  Output:     " + (active.output != null ? active.output : "text"));
+        data.forEach((key, value) -> printer.println(String.format("  %-12s%s", label(key), value)));
 
         return 0;
+    }
+
+    private Optional<Profile> startSettings() {
+        if (global.profile == null) return Optional.empty();
+        try {
+            return store.get(global.profile);
+        } catch (IOException | IllegalArgumentException e) {
+            // Parsing already resolved this name; nothing useful to add here.
+            return Optional.empty();
+        }
+    }
+
+    private static String label(String key) {
+        return Character.toUpperCase(key.charAt(0)) + key.substring(1) + ":";
     }
 }

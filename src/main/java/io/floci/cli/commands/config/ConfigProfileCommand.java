@@ -22,6 +22,8 @@ public class ConfigProfileCommand implements Callable<Integer> {
 
     protected final ProductProfile profile;
 
+    private final ProfileStore store;
+
     @Mixin
     protected GlobalOptions global;
 
@@ -30,7 +32,13 @@ public class ConfigProfileCommand implements Callable<Integer> {
     }
 
     protected ConfigProfileCommand(ProductProfile profile) {
+        this(profile, new ProfileStore());
+    }
+
+    /** Test seam: a store pointed at a temporary profiles directory. */
+    public ConfigProfileCommand(ProductProfile profile, ProfileStore store) {
         this.profile = profile;
+        this.store = store;
         this.global = new GlobalOptions(profile);
     }
 
@@ -43,7 +51,6 @@ public class ConfigProfileCommand implements Callable<Integer> {
     @Override
     public Integer call() {
         Printer printer = global.printer();
-        ProfileStore store = new ProfileStore();
 
         return switch (action.toLowerCase()) {
             case "list" -> listProfiles(printer, store);
@@ -102,7 +109,7 @@ public class ConfigProfileCommand implements Callable<Integer> {
                 printer.error("Profile '" + name + "' already exists. Delete it first or edit " + store.profileFile(name));
                 return 1;
             }
-            Profile p = new Profile(name);
+            Profile p = new Profile(profile, name);
             store.save(p);
             printer.println(Ansi.green("Created") + " profile '" + name + "' at " + store.profileFile(name));
             printer.println(Ansi.gray("Edit the file to customize endpoint, container, image, etc."));

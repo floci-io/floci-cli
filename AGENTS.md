@@ -99,6 +99,23 @@ To add a check: create a class in `doctor/checks/`, then add it to `dockerChecks
 
 `ProfileStore` reads/writes YAML files under `~/.floci/profiles/<name>.yaml` via Jackson. `Profile` is a plain bean — keep it `@JsonIgnoreProperties(ignoreUnknown = true)` to stay forward-compatible. The store is shared by all four product trees (no per-product namespacing). `GlobalConfigStore` persists `~/.floci/config.yaml` (currently just `default-product`).
 
+**`--profile` is applied by exactly one class — do not add per-command profile reads.** `ProfileDefaultValueProvider` is a picocli `IDefaultValueProvider` registered once in `FlociCli.buildCommandLine(...)`; picocli propagates it to the whole subcommand tree and consults it *only* for options the user did not pass, *after* that command's arguments have been processed. That yields the documented precedence for free:
+
+```
+command-line flag  >  --profile <name>  >  FLOCI_* env var  >  product default
+```
+
+(the env var and product default are the `GlobalOptions` field initial values, which picocli keeps whenever the provider returns `null`).
+
+Rules when touching this:
+
+- The field→flag mapping lives in `ProfileDefaults.valueFor` as a pure function, matched on **exact** option names. `--service` (wait/logs/env) is not `--services`; `--profile-name` (`floci oci setup`) is not `--profile`.
+- The provider is called for positionals and for commands with no `GlobalOptions` mixin (`update`, the group commands, the root) — both guards must stay.
+- Register it **programmatically**. The annotation form `@Command(defaultValueProvider = ...)` makes picocli instantiate it reflectively and would need a `reflect-config.json` entry.
+- A bad profile throws `ProfileNotFoundException` (a `ParameterException`), which `FlociCli`'s parameter-exception handler renders without a usage dump and exits 2. The provider returns `null` when `-h`/`-V` was requested so `--help` still works.
+- Commands that build another command programmatically (`RestartCommand` → `StartCommand`) are never parsed by picocli, so they must carry the profile across by hand.
+- Use `FlociCli.buildCommandLine(ProfileStore)` in tests — `new CommandLine(new FlociCli())` has none of the wiring.
+
 ### Self-update
 
 `UpdateCommand` (`floci update`) downloads the release binary for the current platform, verifies its sha256 against the release's `sha256sums.txt`, and atomically replaces the running binary (staged in the same directory, `ATOMIC_MOVE`). It refuses to update Homebrew-managed installs. `--check` exits 0 when up to date, 1 when an update is available. `ReleaseChannel` builds the GitHub release asset URLs.

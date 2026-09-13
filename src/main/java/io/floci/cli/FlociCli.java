@@ -8,6 +8,9 @@ import io.floci.cli.commands.oci.OciCommand;
 import io.floci.cli.commands.config.ConfigCommand;
 import io.floci.cli.commands.snapshot.SnapshotCommand;
 import io.floci.cli.config.GlobalConfigStore;
+import io.floci.cli.config.ProfileDefaultValueProvider;
+import io.floci.cli.config.ProfileNotFoundException;
+import io.floci.cli.config.ProfileStore;
 import io.floci.cli.output.Ansi;
 import io.floci.cli.update.UpdateNotifier;
 import picocli.CommandLine;
@@ -102,10 +105,7 @@ public class FlociCli implements Runnable {
             UpdateNotifier.refreshInBackground();
         }
 
-        int exitCode = new CommandLine(new FlociCli())
-                .setExecutionExceptionHandler(new ExceptionHandler())
-                .setCaseInsensitiveEnumValuesAllowed(true)
-                .execute(effectiveArgs);
+        int exitCode = buildCommandLine(new ProfileStore()).execute(effectiveArgs);
 
         if (notify) {
             // Fast commands would otherwise exit before the background check persists
@@ -113,6 +113,37 @@ public class FlociCli implements Runnable {
             UpdateNotifier.awaitRefresh(java.time.Duration.ofMillis(250));
         }
         System.exit(exitCode);
+    }
+
+    /**
+     * The fully configured root command. Shared by {@link #main(String[])} and the tests so that
+     * profile resolution, the exception handlers and enum leniency cannot drift apart.
+     *
+     * The default-value provider is registered programmatically on purpose: the annotation form
+     * ({@code @Command(defaultValueProvider = ...)}) makes picocli instantiate it reflectively,
+     * which would need a native-image reflect-config entry.
+     */
+    public static CommandLine buildCommandLine(ProfileStore store) {
+        CommandLine cmd = new CommandLine(new FlociCli())
+                .setExecutionExceptionHandler(new ExceptionHandler())
+                .setCaseInsensitiveEnumValuesAllowed(true)
+                .setDefaultValueProvider(new ProfileDefaultValueProvider(store));
+        return cmd.setParameterExceptionHandler(profileAwareParameterExceptionHandler(cmd));
+    }
+
+    /**
+     * A bad {@code --profile} is a user error, not a usage error: print the message on its own
+     * and skip picocli's usage dump. Everything else keeps picocli's default handling.
+     */
+    static IParameterExceptionHandler profileAwareParameterExceptionHandler(CommandLine cmd) {
+        IParameterExceptionHandler fallback = cmd.getParameterExceptionHandler();
+        return (ex, args) -> {
+            if (ex instanceof ProfileNotFoundException) {
+                System.err.println(Ansi.red("Error: ") + ex.getMessage());
+                return ExitCode.USAGE;
+            }
+            return fallback.handleParseException(ex, args);
+        };
     }
 
     // Returns true when routing should NOT apply: explicit product subgroup,
