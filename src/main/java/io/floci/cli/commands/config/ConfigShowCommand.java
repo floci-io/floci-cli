@@ -2,6 +2,7 @@ package io.floci.cli.commands.config;
 
 import io.floci.cli.GlobalOptions;
 import io.floci.cli.ProductProfile;
+import io.floci.cli.commands.StartCommand;
 import io.floci.cli.config.Profile;
 import io.floci.cli.config.ProfileStore;
 import io.floci.cli.output.Ansi;
@@ -58,12 +59,7 @@ public class ConfigShowCommand implements Callable<Integer> {
 
         // image/port/persistDir/services have no global option, so they are read back from the
         // profile itself — they only take effect on 'start'.
-        startSettings().ifPresent(p -> {
-            if (p.image != null) data.put("image", p.image);
-            if (p.port != null) data.put("port", p.port);
-            if (p.persistDir != null) data.put("persistDir", p.persistDir);
-            if (p.services != null) data.put("services", p.services);
-        });
+        addStartSettings(data);
 
         if (printer.format() != OutputFormat.text) {
             printer.structured(data);
@@ -77,14 +73,26 @@ public class ConfigShowCommand implements Callable<Integer> {
         return 0;
     }
 
-    private Optional<Profile> startSettings() {
-        if (global.profile == null) return Optional.empty();
+    // Values come from a profile-resolved StartCommand rather than the Profile bean, so an
+    // interpolated persistDir reads here exactly as 'start' would use it. The bean is still
+    // consulted for presence, so a product default never shows up looking like a profile value.
+    private void addStartSettings(Map<String, Object> data) {
+        if (global.profile == null) return;
+        Optional<Profile> declared;
         try {
-            return store.get(global.profile);
+            declared = store.get(global.profile);
         } catch (IOException | IllegalArgumentException e) {
             // Parsing already resolved this name; nothing useful to add here.
-            return Optional.empty();
+            return;
         }
+        if (declared.isEmpty()) return;
+
+        Profile p = declared.get();
+        StartCommand resolved = StartCommand.resolvedFor(profile, store, global.profile);
+        if (p.image != null) data.put("image", resolved.image());
+        if (p.port != null) data.put("port", resolved.port());
+        if (p.persistDir != null) data.put("persistDir", resolved.persistDir());
+        if (p.services != null) data.put("services", resolved.services());
     }
 
     private static String label(String key) {

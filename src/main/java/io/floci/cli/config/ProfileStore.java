@@ -5,6 +5,7 @@ import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 
 import java.io.IOException;
 import java.nio.file.Files;
+import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -17,7 +18,13 @@ public class ProfileStore {
 
     // A profile name becomes a file name, so it must not be able to traverse out of the
     // profiles directory: 'floci config profile delete ../../foo' resolved the raw name.
-    private static final Pattern VALID_NAME = Pattern.compile("[A-Za-z0-9._-]+");
+    //
+    // This is a deny-list on purpose. An allow-list over the whole character set also rejects
+    // names earlier versions accepted (a space, '+', '@'), which left those profiles listed by
+    // 'config profile list' and unreachable by show, --profile and delete, with no way to remove
+    // them through the CLI. The guarantee is carried by resolveInProfilesDir below, not by the
+    // character rules.
+    private static final Pattern PATH_SEPARATOR = Pattern.compile("[/\\\\]");
 
     private final Path profilesDir;
 
@@ -39,9 +46,9 @@ public class ProfileStore {
                     "Profile name must not be empty.\n"
                             + "Run 'floci config profile list' to see available profiles.");
         }
-        if (".".equals(name) || "..".equals(name) || !VALID_NAME.matcher(name).matches()) {
+        if (".".equals(name) || "..".equals(name) || PATH_SEPARATOR.matcher(name).find()) {
             throw new IllegalArgumentException(
-                    "Invalid profile name '" + name + "'. Use only letters, digits, '.', '_' and '-'.\n"
+                    "Invalid profile name '" + name + "'. It must not be '.', '..', or contain a path separator.\n"
                             + "Run 'floci config profile list' to see available profiles.");
         }
         return name;
@@ -85,7 +92,28 @@ public class ProfileStore {
 
     /** Where {@link #save} writes {@code name}. Always {@code .yaml}. */
     public Path profileFile(String name) {
-        return profilesDir.resolve(validateName(name) + ".yaml");
+        return resolveInProfilesDir(validateName(name) + ".yaml");
+    }
+
+    // The traversal guarantee: whatever the name looks like, the file it resolves to must sit
+    // directly in profilesDir. Also the place a name that is illegal on this platform but legal
+    // on another (a colon on Windows) turns into a clean message instead of InvalidPathException.
+    private Path resolveInProfilesDir(String fileName) {
+        Path dir = profilesDir.toAbsolutePath().normalize();
+        Path resolved;
+        try {
+            resolved = dir.resolve(fileName).normalize();
+        } catch (InvalidPathException e) {
+            throw new IllegalArgumentException(
+                    "Invalid profile name '" + fileName + "': not a valid file name on this platform.\n"
+                            + "Run 'floci config profile list' to see available profiles.");
+        }
+        if (!dir.equals(resolved.getParent())) {
+            throw new IllegalArgumentException(
+                    "Invalid profile name '" + fileName + "': it would resolve outside " + profilesDir + ".\n"
+                            + "Run 'floci config profile list' to see available profiles.");
+        }
+        return resolved;
     }
 
     // list() has always accepted .yml, so reads must too — otherwise a .yml profile shows up in
@@ -93,7 +121,7 @@ public class ProfileStore {
     private Path existingProfileFile(String name) {
         Path yaml = profileFile(name);
         if (Files.exists(yaml)) return yaml;
-        Path yml = profilesDir.resolve(validateName(name) + ".yml");
+        Path yml = resolveInProfilesDir(validateName(name) + ".yml");
         return Files.exists(yml) ? yml : yaml;
     }
 

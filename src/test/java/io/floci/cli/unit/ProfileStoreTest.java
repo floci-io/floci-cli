@@ -93,8 +93,29 @@ class ProfileStoreTest {
         assertEquals(name, ProfileStore.validateName(name));
     }
 
+    /**
+     * 0.2.1 resolved the raw name, so every one of these was creatable. An allow-list on the
+     * character set orphaned them: listed by 'config profile list', rejected by show, --profile
+     * and delete, with no way to remove them through the CLI.
+     */
     @ParameterizedTest
-    @ValueSource(strings = {"", " ", ".", "..", "../x", "../../etc/passwd", "a/b", "a\\b", "/abs", "a:b"})
+    @ValueSource(strings = {"team alpha", "prod+eu", "dev@local", "staging(1)", "a b", "sam's"})
+    void keepsAcceptingNamesEarlierVersionsAllowed(String name) {
+        assertEquals(name, ProfileStore.validateName(name));
+    }
+
+    @Test
+    void aLegacyNameRoundTripsAndCanBeDeleted() throws Exception {
+        Files.createDirectories(tempDir);
+        Files.writeString(tempDir.resolve("team alpha.yaml"), "container: floci-team\n");
+
+        assertEquals("floci-team", store().get("team alpha").orElseThrow().container);
+        assertTrue(store().delete("team alpha"));
+        assertTrue(store().get("team alpha").isEmpty());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"", " ", ".", "..", "../x", "../../etc/passwd", "a/b", "a\\b", "/abs"})
     void rejectsNamesThatCouldEscapeTheProfilesDirectory(String name) {
         assertThrows(IllegalArgumentException.class, () -> ProfileStore.validateName(name), name);
     }
@@ -108,5 +129,14 @@ class ProfileStoreTest {
     void traversalNeverEscapesTheProfilesDirectory() {
         assertThrows(IllegalArgumentException.class, () -> store().profileFile("../../escaped"));
         assertThrows(IllegalArgumentException.class, () -> store().delete("../../escaped"));
+    }
+
+    /** The guarantee is the resolved parent, not the character rules. */
+    @Test
+    void everyResolvedFileSitsDirectlyInTheProfilesDirectory() {
+        for (String name : new String[]{"ok", "team alpha", "prod+eu", "dev@local", "..leading"}) {
+            assertEquals(tempDir.toAbsolutePath().normalize(),
+                    store().profileFile(name).getParent(), name);
+        }
     }
 }
