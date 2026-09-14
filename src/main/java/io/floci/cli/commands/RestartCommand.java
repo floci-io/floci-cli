@@ -72,6 +72,11 @@ public class RestartCommand implements Callable<Integer> {
 
         // The real invocation's globals win: they already carry the profile plus any flag the
         // user passed, resolved once by the outer parse.
+        //
+        // Known residual: those globals come from the outer parse's read of the profile while the
+        // fields above come from resolvedFor's, so a profile edited between the two would mix
+        // snapshots. Closing it means making the outer provider reachable from commands, which is
+        // a wider change than this fix; tracked as batman LAY-1.
         start.global = global;
         start.pull = "missing";
         start.detach = false;

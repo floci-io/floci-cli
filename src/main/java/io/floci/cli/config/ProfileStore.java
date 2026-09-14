@@ -24,7 +24,12 @@ public class ProfileStore {
     // 'config profile list' and unreachable by show, --profile and delete, with no way to remove
     // them through the CLI. The guarantee is carried by resolveInProfilesDir below, not by the
     // character rules.
-    private static final Pattern PATH_SEPARATOR = Pattern.compile("[/\\\\]");
+    //
+    // Backslash is deliberately NOT here. Java NIO treats it as a separator on Windows, where
+    // resolveInProfilesDir already rejects '..\\..\\escape' on the parent check, and as an
+    // ordinary file-name character on Unix, where 0.2.1 could create 'team\\alpha.yaml' and
+    // list() still returns it. Denying it would orphan that profile on Unix for no gain.
+    private static final Pattern PATH_SEPARATOR = Pattern.compile("/");
 
     private final Path profilesDir;
 
@@ -48,7 +53,7 @@ public class ProfileStore {
         }
         if (".".equals(name) || "..".equals(name) || PATH_SEPARATOR.matcher(name).find()) {
             throw new IllegalArgumentException(
-                    "Invalid profile name '" + name + "'. It must not be '.', '..', or contain a path separator.\n"
+                    "Invalid profile name '" + name + "'. It must not be '.', '..', or contain '/'.\n"
                             + "Run 'floci config profile list' to see available profiles.");
         }
         return name;

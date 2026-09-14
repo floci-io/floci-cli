@@ -65,11 +65,22 @@ public class StartCommand implements Callable<Integer> {
      * disagrees with {@code start} on any interpolated value.
      */
     public static StartCommand resolvedFor(ProductProfile product, ProfileStore store, String profileName) {
+        return resolvedFor(product, new ProfileDefaultValueProvider(store), profileName);
+    }
+
+    /**
+     * As above, but with the provider supplied so a caller can read back the one profile snapshot
+     * it resolved ({@link ProfileDefaultValueProvider#resolved()}) instead of reading the file a
+     * second time and risking a mix of two versions.
+     */
+    public static StartCommand resolvedFor(ProductProfile product,
+                                           ProfileDefaultValueProvider provider,
+                                           String profileName) {
         StartCommand start = new StartCommand(product);
         if (profileName != null) {
             new CommandLine(start)
                     .setCaseInsensitiveEnumValuesAllowed(true)
-                    .setDefaultValueProvider(new ProfileDefaultValueProvider(store))
+                    .setDefaultValueProvider(provider)
                     .parseArgs("--profile", profileName);
         }
         return start;
