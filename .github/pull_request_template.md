@@ -22,7 +22,6 @@
 
 - [ ] `mvn test` passes locally
 - [ ] New or updated tests added (or explained below why not needed)
-- [ ] `CHANGELOG.md` entry added under `[Unreleased]` (user-visible changes)
 - [ ] `README.md` updated (if a command or flag changed)
 - [ ] Native binary verified (`mvn package -Pnative`) — required if Jackson serialization or dependencies changed
-- [ ] Commit messages / PR title follow [Conventional Commits](https://www.conventionalcommits.org/)
+- [ ] Commit messages / PR title follow [Conventional Commits](https://www.conventionalcommits.org/) — your commit message is the changelog entry, so `CHANGELOG.md` needs no hand edit
