@@ -79,6 +79,16 @@ class ConfigCommandsTest {
     }
 
     @Test
+    void reportsTheInterpolatedPersistDirThatStartWouldActuallyUse() throws Exception {
+        writeProfile("interp", "persistDir: ${env:HOME}/floci-data\n");
+
+        String out = runShow(ProductProfile.AWS, "--profile", "interp", "-o", "json");
+
+        assertTrue(out.contains("\"persistDir\" : \"" + System.getenv("HOME") + "/floci-data\""), out);
+        assertFalse(out.contains("${env:"), out);
+    }
+
+    @Test
     void withoutAProfileItReportsTheProductDefaults() {
         String out = runShow(ProductProfile.GCP, "-o", "json");
         assertTrue(out.contains("\"profile\" : \"default\""), out);

@@ -1,6 +1,9 @@
 package io.floci.cli.unit;
 
 import io.floci.cli.FlociCli;
+import io.floci.cli.ProductProfile;
+import io.floci.cli.commands.StartCommand;
+import io.floci.cli.config.ProfileDefaultValueProvider;
 import io.floci.cli.config.ProfileStore;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -137,6 +140,23 @@ class ProfilePrecedenceTest {
         // than dereference a missing --profile option.
         assertEquals(Boolean.TRUE,
                 leafSpec("update", "--check").findOption("--check").getValue());
+    }
+
+    /**
+     * config show reads presence and values from one snapshot by asking the provider what it
+     * resolved, rather than reading the file a second time. If this memo stops being populated,
+     * that command silently drops every start-only row.
+     */
+    @Test
+    void theProviderRemembersTheProfileItResolved() throws Exception {
+        writeProfile("probe", FULL_PROFILE);
+        ProfileDefaultValueProvider provider = new ProfileDefaultValueProvider(new ProfileStore(tempDir));
+
+        StartCommand resolved = StartCommand.resolvedFor(ProductProfile.AWS, provider, "probe");
+
+        assertEquals("floci/floci:enforced", resolved.image());
+        assertEquals(4599, resolved.port());
+        assertEquals("floci-probe", provider.resolved().orElseThrow().container);
     }
 
     @Test

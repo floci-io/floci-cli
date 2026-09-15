@@ -2,10 +2,13 @@ package io.floci.cli.commands;
 
 import io.floci.cli.GlobalOptions;
 import io.floci.cli.ProductProfile;
+import io.floci.cli.config.ProfileDefaultValueProvider;
+import io.floci.cli.config.ProfileStore;
 import io.floci.cli.docker.DockerClient;
 import io.floci.cli.docker.DockerException;
 import io.floci.cli.output.Ansi;
 import io.floci.cli.output.Printer;
+import picocli.CommandLine;
 import picocli.CommandLine.*;
 
 import java.net.URI;
@@ -53,6 +56,44 @@ public class StartCommand implements Callable<Integer> {
 
     @Option(names = {"--pull"}, description = "Image pull policy: always, missing, never", defaultValue = "missing", paramLabel = "always|missing|never")
     String pull;
+
+    /**
+     * A {@code StartCommand} with {@code profileName} applied by exactly the machinery a real
+     * {@code start} invocation uses: same provider, same precedence, same {@code ${...}}
+     * interpolation. Anything that needs to know what a profile would start with must go through
+     * here rather than reading the {@link io.floci.cli.config.Profile} bean, or it silently
+     * disagrees with {@code start} on any interpolated value.
+     */
+    public static StartCommand resolvedFor(ProductProfile product, ProfileStore store, String profileName) {
+        return resolvedFor(product, new ProfileDefaultValueProvider(store), profileName);
+    }
+
+    /**
+     * As above, but with the provider supplied so a caller can read back the one profile snapshot
+     * it resolved ({@link ProfileDefaultValueProvider#resolved()}) instead of reading the file a
+     * second time and risking a mix of two versions.
+     */
+    public static StartCommand resolvedFor(ProductProfile product,
+                                           ProfileDefaultValueProvider provider,
+                                           String profileName) {
+        StartCommand start = new StartCommand(product);
+        if (profileName != null) {
+            new CommandLine(start)
+                    .setCaseInsensitiveEnumValuesAllowed(true)
+                    .setDefaultValueProvider(provider)
+                    .parseArgs("--profile", profileName);
+        }
+        return start;
+    }
+
+    /** What a profile-resolved instance would start with. Read by {@code config show}. */
+    public String image() { return image; }
+
+    public int port() { return port; }
+
+    public String persistDir() { return persistDir; }
+
+    public String services() { return services; }
 
     /**
      * The {@code docker run} arguments this invocation would use. Extracted from {@link #call()}

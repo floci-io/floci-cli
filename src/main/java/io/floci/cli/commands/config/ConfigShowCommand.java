@@ -2,14 +2,15 @@ package io.floci.cli.commands.config;
 
 import io.floci.cli.GlobalOptions;
 import io.floci.cli.ProductProfile;
+import io.floci.cli.commands.StartCommand;
 import io.floci.cli.config.Profile;
+import io.floci.cli.config.ProfileDefaultValueProvider;
 import io.floci.cli.config.ProfileStore;
 import io.floci.cli.output.Ansi;
 import io.floci.cli.output.OutputFormat;
 import io.floci.cli.output.Printer;
 import picocli.CommandLine.*;
 
-import java.io.IOException;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
@@ -58,12 +59,7 @@ public class ConfigShowCommand implements Callable<Integer> {
 
         // image/port/persistDir/services have no global option, so they are read back from the
         // profile itself — they only take effect on 'start'.
-        startSettings().ifPresent(p -> {
-            if (p.image != null) data.put("image", p.image);
-            if (p.port != null) data.put("port", p.port);
-            if (p.persistDir != null) data.put("persistDir", p.persistDir);
-            if (p.services != null) data.put("services", p.services);
-        });
+        addStartSettings(data);
 
         if (printer.format() != OutputFormat.text) {
             printer.structured(data);
@@ -77,14 +73,27 @@ public class ConfigShowCommand implements Callable<Integer> {
         return 0;
     }
 
-    private Optional<Profile> startSettings() {
-        if (global.profile == null) return Optional.empty();
-        try {
-            return store.get(global.profile);
-        } catch (IOException | IllegalArgumentException e) {
-            // Parsing already resolved this name; nothing useful to add here.
-            return Optional.empty();
-        }
+    // Values come from a profile-resolved StartCommand rather than the Profile bean, so an
+    // interpolated persistDir reads here exactly as 'start' would use it. The bean is consulted
+    // for presence, so a product default never shows up looking like a profile value.
+    //
+    // Both come from ONE snapshot: the provider memoizes the profile it read, so presence and
+    // values cannot disagree if another process edits the file mid-command. If the profile has
+    // gone since the outer parse resolved it, resolvedFor throws and the command fails loudly,
+    // which beats printing half of an old profile next to half of a new one.
+    private void addStartSettings(Map<String, Object> data) {
+        if (global.profile == null) return;
+
+        ProfileDefaultValueProvider provider = new ProfileDefaultValueProvider(store);
+        StartCommand resolved = StartCommand.resolvedFor(profile, provider, global.profile);
+        Optional<Profile> declared = provider.resolved();
+        if (declared.isEmpty()) return;
+
+        Profile p = declared.get();
+        if (p.image != null) data.put("image", resolved.image());
+        if (p.port != null) data.put("port", resolved.port());
+        if (p.persistDir != null) data.put("persistDir", resolved.persistDir());
+        if (p.services != null) data.put("services", resolved.services());
     }
 
     private static String label(String key) {

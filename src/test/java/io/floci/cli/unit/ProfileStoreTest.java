@@ -4,6 +4,8 @@ import io.floci.cli.ProductProfile;
 import io.floci.cli.config.Profile;
 import io.floci.cli.config.ProfileStore;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.DisabledOnOs;
+import org.junit.jupiter.api.condition.OS;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -93,10 +95,50 @@ class ProfileStoreTest {
         assertEquals(name, ProfileStore.validateName(name));
     }
 
+    /**
+     * 0.2.1 resolved the raw name, so every one of these was creatable. An allow-list on the
+     * character set orphaned them: listed by 'config profile list', rejected by show, --profile
+     * and delete, with no way to remove them through the CLI.
+     */
     @ParameterizedTest
-    @ValueSource(strings = {"", " ", ".", "..", "../x", "../../etc/passwd", "a/b", "a\\b", "/abs", "a:b"})
+    @ValueSource(strings = {"team alpha", "prod+eu", "dev@local", "staging(1)", "a b", "sam's"})
+    void keepsAcceptingNamesEarlierVersionsAllowed(String name) {
+        assertEquals(name, ProfileStore.validateName(name));
+    }
+
+    @Test
+    void aLegacyNameRoundTripsAndCanBeDeleted() throws Exception {
+        Files.createDirectories(tempDir);
+        Files.writeString(tempDir.resolve("team alpha.yaml"), "container: floci-team\n");
+
+        assertEquals("floci-team", store().get("team alpha").orElseThrow().container);
+        assertTrue(store().delete("team alpha"));
+        assertTrue(store().get("team alpha").isEmpty());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"", " ", ".", "..", "../x", "../../etc/passwd", "a/b", "/abs"})
     void rejectsNamesThatCouldEscapeTheProfilesDirectory(String name) {
         assertThrows(IllegalArgumentException.class, () -> ProfileStore.validateName(name), name);
+    }
+
+    /**
+     * Backslash is a separator on Windows and an ordinary character on Unix, so 0.2.1 could
+     * create 'team\\alpha.yaml' here and list() still returns it. Denying it outright would
+     * orphan that profile exactly the way the character allow-list did. The escape check is
+     * resolveInProfilesDir, which rejects a real Windows traversal on the parent assertion.
+     */
+    @Test
+    @DisabledOnOs(OS.WINDOWS)
+    void backslashIsAnOrdinaryCharacterOnUnix() throws Exception {
+        assertEquals("team\\alpha", ProfileStore.validateName("team\\alpha"));
+
+        Files.createDirectories(tempDir);
+        Files.writeString(tempDir.resolve("team\\alpha.yaml"), "container: floci-team\n");
+        assertEquals("floci-team", store().get("team\\alpha").orElseThrow().container);
+        assertEquals(tempDir.toAbsolutePath().normalize(),
+                store().profileFile("team\\alpha").getParent());
+        assertTrue(store().delete("team\\alpha"));
     }
 
     @Test
@@ -108,5 +150,14 @@ class ProfileStoreTest {
     void traversalNeverEscapesTheProfilesDirectory() {
         assertThrows(IllegalArgumentException.class, () -> store().profileFile("../../escaped"));
         assertThrows(IllegalArgumentException.class, () -> store().delete("../../escaped"));
+    }
+
+    /** The guarantee is the resolved parent, not the character rules. */
+    @Test
+    void everyResolvedFileSitsDirectlyInTheProfilesDirectory() {
+        for (String name : new String[]{"ok", "team alpha", "prod+eu", "dev@local", "..leading"}) {
+            assertEquals(tempDir.toAbsolutePath().normalize(),
+                    store().profileFile(name).getParent(), name);
+        }
     }
 }

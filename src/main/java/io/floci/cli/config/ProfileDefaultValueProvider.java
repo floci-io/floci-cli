@@ -41,6 +41,15 @@ public class ProfileDefaultValueProvider implements IDefaultValueProvider {
         this.store = store;
     }
 
+    /**
+     * The profile this provider resolved during the last parse, if any. Reading it costs nothing
+     * and, crucially, costs no second read of the file: a caller that needs both which keys the
+     * profile declares and what they expand to gets both from one snapshot.
+     */
+    public Optional<Profile> resolved() {
+        return Optional.ofNullable(resolved);
+    }
+
     @Override
     public String defaultValue(ArgSpec arg) {
         // Positional parameters reach the provider too; only options map to profile fields.

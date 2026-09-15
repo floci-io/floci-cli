@@ -59,6 +59,23 @@ class RestartCommandTest {
                 "floci/floci:enforced"), args);
     }
 
+    /**
+     * Values reach a real 'start' through picocli, which interpolates ${env:...}. Restart applies
+     * the profile itself, so it has to go through the same machinery or one profile means two
+     * different host directories depending on which command you ran.
+     */
+    @Test
+    void interpolatesProfileValuesExactlyAsStartDoes() throws Exception {
+        writeProfile("interp", "persistDir: ${env:HOME}/floci-data\n");
+
+        List<String> args = parse(ProductProfile.AWS, "--profile", "interp")
+                .buildStartCommand().dockerRunArgs(SOCKET);
+
+        assertTrue(args.contains(System.getenv("HOME") + "/floci-data:/app/data"),
+                "restart must expand the profile the way start does, but got: " + args);
+        assertFalse(args.stream().anyMatch(a -> a.contains("${env:")), args.toString());
+    }
+
     @Test
     void withoutAProfileItStillUsesTheProductDefaults() {
         List<String> args = parse(ProductProfile.GCP).buildStartCommand().dockerRunArgs(SOCKET);
