@@ -25,4 +25,4 @@
 - [ ] `README.md` updated (if a command or flag changed)
 - [ ] Native binary verified (`mvn package -Pnative`) — required if Jackson serialization or dependencies changed
 - [ ] Commit messages / PR title follow [Conventional Commits](https://www.conventionalcommits.org/) — a `feat`/`fix`/`perf` subject becomes the release note, so `CHANGELOG.md` needs no hand edit
-- [ ] I have no more than 2 open, non-draft pull requests in this repository (maintainers and dependency bots are exempt).
+- [ ] I have no more than 2 open, non-draft pull requests and no more than 4 open pull requests in total (drafts included) in this repository (maintainers and dependency bots are exempt).
