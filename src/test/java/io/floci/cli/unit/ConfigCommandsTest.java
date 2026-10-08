@@ -106,4 +106,97 @@ class ConfigCommandsTest {
         assertEquals("floci/floci-gcp:latest", created.image);
         assertEquals(4588, created.port);
     }
+
+    private record Run(int exit, String out, String err) {}
+
+    private Run profileCmd(ProductProfile product, String... args) {
+        CommandLine cmd = new CommandLine(new ConfigProfileCommand(product, store()))
+                .setCaseInsensitiveEnumValuesAllowed(true)
+                .setDefaultValueProvider(new ProfileDefaultValueProvider(store()));
+        PrintStream out = System.out;
+        PrintStream err = System.err;
+        ByteArrayOutputStream outBuf = new ByteArrayOutputStream();
+        ByteArrayOutputStream errBuf = new ByteArrayOutputStream();
+        System.setOut(new PrintStream(outBuf));
+        System.setErr(new PrintStream(errBuf));
+        try {
+            int exit = cmd.execute(args);
+            return new Run(exit, outBuf.toString(), errBuf.toString());
+        } finally {
+            System.setOut(out);
+            System.setErr(err);
+        }
+    }
+
+    @Test
+    void createTakesTheInstanceFlagsInEveryTree() throws Exception {
+        for (ProductProfile product : new ProductProfile[]{ProductProfile.AWS, ProductProfile.GCP,
+                ProductProfile.AZ, ProductProfile.OCI}) {
+            String name = "inst-" + product.name();
+            assertEquals(0, profileCmd(product, "create", name,
+                    "--container", "floci-" + product.name() + "-b", "--port", "14000",
+                    "--persist", "/data/" + product.name(), "--services", "x,y").exit());
+
+            Profile p = store().get(name).orElseThrow();
+            assertEquals("floci-" + product.name() + "-b", p.container);
+            assertEquals(14000, p.port);
+            assertEquals("/data/" + product.name(), p.persistDir);
+            assertEquals("x,y", p.services);
+            // Untyped flags keep the defaults of the tree create ran under.
+            assertEquals(product.defaultEndpoint(), p.endpoint);
+            assertEquals(product.defaultImageRef(), p.image);
+        }
+    }
+
+    @Test
+    void createIgnoresAnotherProfilesValuesAndTakesOnlyTypedFlags() throws Exception {
+        writeProfile("a", "container: floci-az-a\nport: 14577\npersistDir: /data/a\n");
+
+        assertEquals(0, profileCmd(ProductProfile.AZ, "create", "b", "--profile", "a", "--port", "14578").exit());
+
+        Profile b = store().get("b").orElseThrow();
+        assertEquals(14578, b.port);
+        assertEquals("floci-az", b.container);
+        assertNull(b.persistDir);
+    }
+
+    @Test
+    void createRefusesAPortOutOfRange() throws Exception {
+        Run r = profileCmd(ProductProfile.AZ, "create", "bad", "--port", "70000");
+
+        assertEquals(1, r.exit());
+        assertTrue(store().get("bad").isEmpty());
+    }
+
+    @Test
+    void createWarnsWhenAnotherProfileClaimsTheSameContainerOrPort() throws Exception {
+        writeProfile("a", "container: floci-az-a\nport: 14577\nimage: floci/floci-az:latest\n");
+
+        Run sameContainer = profileCmd(ProductProfile.AZ, "create", "b", "--container", "floci-az-a", "--port", "14999");
+        assertEquals(0, sameContainer.exit());
+        assertTrue(sameContainer.err().contains("Profile 'a' already uses container 'floci-az-a'"), sameContainer.err());
+
+        Run samePort = profileCmd(ProductProfile.AZ, "create", "c", "--container", "floci-az-c", "--port", "14577");
+        assertTrue(samePort.err().contains("Profile 'a' already uses port 14577"), samePort.err());
+
+        // Another emulator on the same port is not this instance's concern.
+        Run otherProduct = profileCmd(ProductProfile.GCP, "create", "d", "--container", "floci-gcp-d", "--port", "14577");
+        assertFalse(otherProduct.err().contains("already uses"), otherProduct.err());
+    }
+
+    @Test
+    void listShowsEachInstancesContainerPortAndDataDir() throws Exception {
+        writeProfile("b", "container: floci-az-b\nport: 14578\n");
+        writeProfile("a", "container: floci-az-a\nport: 14577\npersistDir: /data/a\n");
+
+        String text = profileCmd(ProductProfile.AZ, "list", "--no-color").out();
+        assertTrue(text.indexOf("floci-az-a") < text.indexOf("floci-az-b"), "sorted by name: " + text);
+        assertTrue(text.contains("floci-az-a") && text.contains(":14577") && text.contains("/data/a"), text);
+        assertTrue(text.contains("floci-az-b") && text.contains(":14578"), text);
+
+        String json = profileCmd(ProductProfile.AZ, "list", "-o", "json").out();
+        assertTrue(json.trim().startsWith("["), json);
+        assertTrue(json.contains("\"container\" : \"floci-az-b\""), json);
+        assertTrue(json.contains("\"port\" : 14577"), json);
+    }
 }
