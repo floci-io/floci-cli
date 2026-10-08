@@ -185,6 +185,24 @@ class ConfigCommandsTest {
     }
 
     @Test
+    void aDigestPinnedImageStillCollidesWithATagOfTheSameRepository() throws Exception {
+        writeProfile("a", "container: floci-az-a\nport: 14577\nimage: floci/floci-az:latest\n");
+
+        Run pinned = profileCmd(ProductProfile.AZ, "create", "b", "--container", "floci-az-b", "--port", "14577",
+                "--image", "floci/floci-az@sha256:0123456789abcdef");
+
+        assertTrue(pinned.err().contains("Profile 'a' already uses port 14577"), pinned.err());
+    }
+
+    @Test
+    void listAsJsonIsAnEmptyArrayWhenThereAreNoProfiles() {
+        Run r = profileCmd(ProductProfile.AWS, "list", "-o", "json");
+
+        assertEquals(0, r.exit());
+        assertEquals("[ ]", r.out().strip());
+    }
+
+    @Test
     void listShowsEachInstancesContainerPortAndDataDir() throws Exception {
         writeProfile("b", "container: floci-az-b\nport: 14578\n");
         writeProfile("a", "container: floci-az-a\nport: 14577\npersistDir: /data/a\n");

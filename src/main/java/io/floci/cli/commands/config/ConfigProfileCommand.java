@@ -92,10 +92,7 @@ public class ConfigProfileCommand implements Callable<Integer> {
             List<Profile> profiles = store.list().stream()
                     .sorted(Comparator.comparing(p -> String.valueOf(p.name)))
                     .toList();
-            if (profiles.isEmpty()) {
-                printer.println(Ansi.gray("No profiles found. Create one with: " + profile.commandPrefix() + " config profile create <name>"));
-                return 0;
-            }
+            // Structured output first: an empty store is still a valid, parseable empty list.
             if (printer.format() != OutputFormat.text) {
                 List<Map<String, Object>> out = new ArrayList<>();
                 for (Profile p : profiles) {
@@ -110,6 +107,10 @@ public class ConfigProfileCommand implements Callable<Integer> {
                     out.add(row);
                 }
                 printer.structured(out);
+                return 0;
+            }
+            if (profiles.isEmpty()) {
+                printer.println(Ansi.gray("No profiles found. Create one with: " + profile.commandPrefix() + " config profile create <name>"));
                 return 0;
             }
             // One row per instance: the container and port are what tell two instances apart.
@@ -212,6 +213,9 @@ public class ConfigProfileCommand implements Callable<Integer> {
     // floci/floci-az:latest -> floci/floci-az, so two tags of one emulator still collide on a port.
     private static String repository(String image) {
         if (image == null) return "";
+        // A digest (repo@sha256:...) carries a colon of its own; drop it before looking for a tag.
+        int digest = image.indexOf('@');
+        if (digest >= 0) image = image.substring(0, digest);
         int slash = image.lastIndexOf('/');
         int colon = image.lastIndexOf(':');
         return colon > slash ? image.substring(0, colon) : image;
