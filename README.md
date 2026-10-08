@@ -373,7 +373,8 @@ emulator already adds (`floci-gcp-b` → `b`, so children are `floci-gcp-b-…`;
 `team-b`). The default container gets none.
 
 On a `--port` other than the product default, `start` also sets the emulator's base URL
-(`FLOCI_BASE_URL`, `FLOCI_GCP_BASE_URL`, ...) to `http://localhost:<port>`, so URLs it returns
+(`FLOCI_BASE_URL`, `FLOCI_GCP_BASE_URL`, ...) to the endpoint with that port (`http://localhost:<port>`
+unless `--endpoint` names another host), so URLs it returns
 (SQS `QueueUrl`, presigned URLs, the OCI functions invoke endpoint) point at that instance.
 
 #### Docker daemon resolution (Podman, rootless, remote contexts)

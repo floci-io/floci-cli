@@ -7,7 +7,9 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import picocli.CommandLine;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.PrintStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -107,5 +109,20 @@ class RestartCommandTest {
                 "-v", "/tmp/only-persist:/app/data",
                 "-e", "FLOCI_OCI_STORAGE_MODE=persistent",
                 "floci/floci-oci:latest"), args);
+    }
+
+    /** A namespace start would reject must fail restart before it stops anything. */
+    @Test
+    void anInvalidProfileNamespaceFailsBeforeTheStop() throws Exception {
+        writeProfile("bad", "container: floci-bad\nnamespace: bad/name\n");
+        RestartCommand restart = parse(ProductProfile.AWS, "--profile", "bad");
+
+        PrintStream err = System.err;
+        System.setErr(new PrintStream(new ByteArrayOutputStream()));
+        try {
+            assertEquals(2, restart.call());
+        } finally {
+            System.setErr(err);
+        }
     }
 }

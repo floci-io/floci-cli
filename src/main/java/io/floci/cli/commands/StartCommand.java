@@ -110,9 +110,26 @@ public class StartCommand implements Callable<Integer> {
      * children. An explicit {@code --namespace} wins; otherwise it is derived from the container
      * ({@link ProductProfile#resourceNamespace(String)}).
      */
+    /**
+     * Why these settings cannot start, or {@code null}. Checked before anything touches Docker,
+     * and by {@code restart} before it stops the running container, so a bad profile value never
+     * leaves an instance stopped.
+     */
+    public String validationError() {
+        if (namespace != null && !namespace.isBlank() && !NAMESPACE.matcher(namespace).matches()) {
+            return "Invalid namespace '" + namespace + "'.\nUse letters, digits, '_', '.' and '-', starting with a letter or digit.";
+        }
+        return null;
+    }
+
     public String resourceNamespace() {
+        return resourceNamespaceFor(global.container);
+    }
+
+    /** {@link #resourceNamespace()} for an instance in {@code container}, which a flag may have overridden. */
+    public String resourceNamespaceFor(String container) {
         if (namespace != null && !namespace.isBlank()) return namespace;
-        return profile.resourceNamespace(global.container);
+        return profile.resourceNamespace(container);
     }
 
     /**
@@ -136,10 +153,11 @@ public class StartCommand implements Callable<Integer> {
             args.addAll(List.of("-e", profile.envVar("SERVICES") + "=" + services));
         }
         // URLs the emulator hands back (SQS QueueUrl, presigned URLs, the OCI invoke endpoint)
-        // are built from its base URL, which defaults to the product port. On any other host port
-        // they would point at whichever instance owns the default one.
+        // are built from its base URL, which defaults to localhost and the product port. On any
+        // other host port they would point at whichever instance owns the default one; the host
+        // comes from the endpoint, so a remote Docker host is named too.
         if (port != profile.defaultPort()) {
-            args.addAll(List.of("-e", profile.envVar("BASE_URL") + "=http://localhost:" + port));
+            args.addAll(List.of("-e", profile.envVar("BASE_URL") + "=" + withPort(global.endpoint, port)));
         }
         String ns = resourceNamespace();
         if (ns != null) {
@@ -167,8 +185,9 @@ public class StartCommand implements Callable<Integer> {
         Printer printer = global.printer();
         DockerClient docker = new DockerClient();
 
-        if (namespace != null && !namespace.isBlank() && !NAMESPACE.matcher(namespace).matches()) {
-            printer.error("Invalid namespace '" + namespace + "'.\nUse letters, digits, '_', '.' and '-', starting with a letter or digit.");
+        String invalid = validationError();
+        if (invalid != null) {
+            printer.error(invalid);
             return 2;
         }
 

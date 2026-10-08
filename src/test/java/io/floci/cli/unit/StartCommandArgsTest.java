@@ -184,6 +184,13 @@ class StartCommandArgsTest {
         }
     }
 
+    /** Returned URLs must reach the emulator, so a remote endpoint's host is kept. */
+    @Test
+    void theBaseUrlKeepsTheEndpointsHost() {
+        assertTrue(parse("start", "--endpoint", "http://floci.internal:4566", "--port", "14566")
+                .dockerRunArgs(SOCKET).contains("FLOCI_BASE_URL=http://floci.internal:14566"));
+    }
+
     @Test
     void readinessPollKeepsTheHostFromTheEndpointWhenSwappingThePort() {
         assertEquals("http://floci.internal:4599", StartCommand.withPort("http://floci.internal:4566", 4599));

@@ -94,8 +94,9 @@ public class ConfigShowCommand implements Callable<Integer> {
         if (p.port != null) data.put("port", resolved.port());
         if (p.persistDir != null) data.put("persistDir", resolved.persistDir());
         if (p.services != null) data.put("services", resolved.services());
-        // Effective, not declared: a profile with its own container gets a namespace unasked.
-        String namespace = resolved.resourceNamespace();
+        // Effective, not declared: a profile with its own container gets a namespace unasked, and
+        // the container in effect (a --container flag beats the profile) is the one it comes from.
+        String namespace = resolved.resourceNamespaceFor(global.container);
         if (namespace != null) data.put("namespace", namespace);
     }
 

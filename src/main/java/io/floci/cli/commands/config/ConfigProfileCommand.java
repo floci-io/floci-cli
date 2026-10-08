@@ -208,16 +208,18 @@ public class ConfigProfileCommand implements Callable<Integer> {
             if (created.container != null && created.container.equals(other.container)) {
                 warnings.add("Profile '" + other.name + "' already uses container '" + created.container + "'.\n"
                         + "Pick another --container, or start only one of them at a time.");
-            } else if (created.port != null && created.port.equals(other.port)
-                    && repository(created.image).equals(repository(other.image))) {
+                continue; // one instance: its port and namespace are the same by definition
+            }
+            boolean sameEmulator = repository(created.image).equals(repository(other.image));
+            if (sameEmulator && created.port != null && created.port.equals(other.port)) {
                 warnings.add("Profile '" + other.name + "' already uses port " + created.port + ".\n"
                         + "Pick another --port, or start only one of them at a time.");
-            } else if (repository(created.image).equals(repository(other.image))) {
-                String ns = namespaceOf(product, created);
-                if (ns != null && ns.equals(namespaceOf(product, other))) {
-                    warnings.add("Profile '" + other.name + "' already uses resource namespace '" + ns + "'.\n"
-                            + "Pass --namespace to give this instance its own.");
-                }
+            }
+            // Reported separately: a new port alone does not stop shared child containers.
+            String ns = sameEmulator ? namespaceOf(product, created) : null;
+            if (ns != null && ns.equals(namespaceOf(product, other))) {
+                warnings.add("Profile '" + other.name + "' already uses resource namespace '" + ns + "'.\n"
+                        + "Pass --namespace to give this instance its own.");
             }
         }
         return warnings;

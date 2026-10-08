@@ -217,6 +217,25 @@ class ConfigCommandsTest {
     }
 
     @Test
+    void showDerivesTheNamespaceFromTheContainerInEffect() throws Exception {
+        writeProfile("b", "container: floci-b\n");
+
+        String out = runShow(ProductProfile.AWS, "--profile", "b", "--container", "floci-custom", "-o", "json");
+
+        assertTrue(out.contains("\"namespace\" : \"custom\""), out);
+    }
+
+    @Test
+    void aSharedNamespaceIsReportedEvenWhenThePortAlsoCollides() throws Exception {
+        writeProfile("a", "container: floci-gcp-b\nport: 14588\nimage: floci/floci-gcp:latest\n");
+
+        Run r = profileCmd(ProductProfile.GCP, "create", "c", "--container", "b", "--port", "14588");
+
+        assertTrue(r.err().contains("already uses port 14588"), r.err());
+        assertTrue(r.err().contains("already uses resource namespace 'b'"), r.err());
+    }
+
+    @Test
     void aDigestPinnedImageStillCollidesWithATagOfTheSameRepository() throws Exception {
         writeProfile("a", "container: floci-az-a\nport: 14577\nimage: floci/floci-az:latest\n");
 
