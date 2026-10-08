@@ -166,6 +166,14 @@ class AzSetupCommandTest {
         assertFalse(out.contains("export REQUESTS_CA_BUNDLE"), out);
     }
 
+    /** A profile can default to -o json, so the pasted env command must ask for shell exports. */
+    @Test
+    void theHintForAProfileForcesTextOutput() {
+        String out = stdout(() -> assertEquals(0, run("--global", "--profile", "team-b")));
+
+        assertTrue(out.contains("eval $(floci az env --profile team-b -o text)"), out);
+    }
+
     @Test
     void switchingAnInstanceToGlobalRemovesItsEarlierIsolatedConfig() {
         assertEquals(0, run());

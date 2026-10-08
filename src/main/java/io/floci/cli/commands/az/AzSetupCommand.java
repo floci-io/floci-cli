@@ -239,7 +239,9 @@ public class AzSetupCommand implements Callable<Integer> {
         printer.println("Connect with:");
         // The same line for both modes: after --global, env exports the CA bundle and unsets an
         // AZURE_CONFIG_DIR an earlier isolated setup left in the shell (now deleted above).
-        printer.println("  " + Ansi.bold("eval $(floci az env" + global.instanceSelector() + ")"));
+        // A profile may set output: json, which env would inherit and print instead of exports.
+        String textOnly = global.profile != null ? " -o text" : "";
+        printer.println("  " + Ansi.bold("eval $(floci az env" + global.instanceSelector() + textOnly + ")"));
         printer.println("  " + Ansi.bold("az group list"));
         return 0;
     }
