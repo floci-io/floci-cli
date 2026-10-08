@@ -54,6 +54,19 @@ jobs:
       - name: Build native binary
         run: mvn clean package -Pnative -DskipTests -B
 
+      # Fails when the binary outgrows the budget, so size regressions show up in review instead
+      # of in a release. Set about 5% over the 40.8 MB this job built when the budget was
+      # introduced (GraalVM Community, -Os); raise it deliberately in the PR that needs the room.
+      - name: Binary size budget
+        env:
+          NATIVE_SIZE_BUDGET_MB: 43
+        run: |
+          bytes=$(stat -c %s target/floci)
+          mb=$(awk -v b="$bytes" 'BEGIN { printf "%.1f", b / 1048576 }')
+          echo "Native binary (linux/arm64): ${mb} MB, budget ${NATIVE_SIZE_BUDGET_MB} MB" | tee -a "$GITHUB_STEP_SUMMARY"
+          awk -v b="$bytes" -v max="$NATIVE_SIZE_BUDGET_MB" 'BEGIN { exit (b / 1048576 > max) }' \
+            || { echo "::error::Native binary is ${mb} MB, over the ${NATIVE_SIZE_BUDGET_MB} MB budget."; exit 1; }
+
       - name: Smoke test — version
         run: ./target/floci version
 
