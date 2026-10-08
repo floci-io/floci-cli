@@ -345,20 +345,36 @@ floci start --services s3,dynamodb   # enable specific services
 floci start --persist ./data         # persist state to a host directory
 floci start --pull always            # always pull the latest image
 floci start --detach                 # return immediately, don't wait
+floci start --namespace team-b       # scope the containers it launches (see below)
 
 # GCP
 floci gcp start                      # default port 4588
 floci gcp start --persist ./data     # persist state to a host directory
+floci gcp start --namespace team-b   # scope the containers it launches
 
 # Azure
 floci az start                       # default port 4577
 floci az start --port 4578           # custom host port
 floci az start --persist ./data      # persist state to a host directory
+floci az start --namespace team-b    # scope the containers it launches
 
 # OCI
 floci oci start                      # default port 4599
 floci oci start --persist ./data     # persist state to a host directory
+floci oci start --namespace team-b   # scope the containers it launches
 ```
+
+`--namespace` sets the emulator's Docker resource namespace (`FLOCI_DOCKER_RESOURCE_NAMESPACE`,
+`FLOCI_GCP_…`, `FLOCI_AZ_…`, `FLOCI_OCI_…`). The emulator puts it in the names and the
+`floci_namespace` label of the containers and volumes it launches (Lambda, ECS, RDS, Cloud Run,
+Service Bus, ...) and only cleans up leftovers in its own namespace. When `--container` is not the
+product default, the namespace is derived from it, without the default-container prefix the
+emulator already adds (`floci-gcp-b` → `b`, so children are `floci-gcp-b-…`; `team-b` stays
+`team-b`). The default container gets none.
+
+On a `--port` other than the product default, `start` also sets the emulator's base URL
+(`FLOCI_BASE_URL`, `FLOCI_GCP_BASE_URL`, ...) to `http://localhost:<port>`, so URLs it returns
+(SQS `QueueUrl`, presigned URLs, the OCI functions invoke endpoint) point at that instance.
 
 #### Docker daemon resolution (Podman, rootless, remote contexts)
 
@@ -632,7 +648,7 @@ floci config show                          # show active configuration
 floci config default-product aws|gcp|az|oci  # set the default product (persisted to ~/.floci/config.yaml)
 floci config profile list                  # list saved profiles: container, port, data dir
 floci config profile create <name>         # create a new profile with the tree's defaults
-floci config profile create <name> --container <c> --port <p> --persist <dir> --services <csv> --image <img>
+floci config profile create <name> --container <c> --port <p> --persist <dir> --services <csv> --image <img> --namespace <ns>
 floci config profile show <name>           # show a profile
 floci config profile delete <name>         # delete a profile
 floci config validate -f docker-compose.yml  # validate a Compose file
@@ -652,6 +668,7 @@ image: floci/floci:enforced
 port: 4599
 persistDir: /tmp/floci-persist
 services: s3,lambda
+namespace: team-probe
 output: json
 ```
 
@@ -667,6 +684,7 @@ have that flag:
 | `port` | `--port` | `start`, `restart` |
 | `persistDir` | `--persist` | `start`, `restart` |
 | `services` | `--services` | `start`, `restart` |
+| `namespace` | `--namespace` | `start`, `restart` |
 
 Resolution order, highest first:
 
@@ -697,9 +715,14 @@ container recreation. Every command (`status`, `logs`, `env`, `doctor`, `stop`, 
 instance through its container, so passing the same `--profile` is all it takes. Any local state
 the CLI keeps about an instance lives in `~/.floci/<product>/<container>/`.
 
+Each instance's emulator also gets its own Docker resource namespace, derived from the container
+name unless the profile sets `namespace`. That keeps the containers each instance launches (Lambda functions,
+ECS tasks, Cloud Run jobs, Service Bus sidecars, ...) apart, so starting one instance never
+cleans up another's. `floci config show --profile <name>` prints the namespace it will use.
+
 Leave `endpoint` at the product default: the CLI reads the real host port from the running
 container. `config profile create` warns when a new profile reuses another profile's container,
-or its port on the same image.
+or its port or resource namespace on the same image.
 
 ```sh
 # AWS

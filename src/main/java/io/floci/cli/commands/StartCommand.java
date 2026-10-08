@@ -16,6 +16,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.TreeMap;
 import java.util.concurrent.Callable;
+import java.util.regex.Pattern;
 
 @Command(
         name = "start",
@@ -54,6 +55,12 @@ public class StartCommand implements Callable<Integer> {
 
     @Option(names = {"--image"}, description = "Image reference to use (default: ${DEFAULT-VALUE})", paramLabel = "<ref>")
     String image;
+
+    @Option(names = {"--namespace"}, description = "Docker resource namespace for the containers this instance launches (default: derived from --container; none for the default container)", paramLabel = "<name>")
+    String namespace;
+
+    // Docker's own name rule: the emulators put the namespace inside child container names.
+    private static final Pattern NAMESPACE = Pattern.compile("[A-Za-z0-9][A-Za-z0-9_.-]*");
 
     @Option(names = {"--pull"}, description = "Image pull policy: always, missing, never", defaultValue = "missing", paramLabel = "always|missing|never")
     String pull;
@@ -97,6 +104,18 @@ public class StartCommand implements Callable<Integer> {
     public String services() { return services; }
 
     /**
+     * The resource namespace this instance passes to the emulator, which scopes the child
+     * containers and volumes it launches (Lambda, ECS, Cloud Run, Service Bus, ...) and its
+     * startup orphan sweeps. Without it two instances of one emulator remove each other's
+     * children. An explicit {@code --namespace} wins; otherwise it is derived from the container
+     * ({@link ProductProfile#resourceNamespace(String)}).
+     */
+    public String resourceNamespace() {
+        if (namespace != null && !namespace.isBlank()) return namespace;
+        return profile.resourceNamespace(global.container);
+    }
+
+    /**
      * The {@code docker run} arguments this invocation would use. Extracted from {@link #call()}
      * as a test seam so the persistence mount can be pinned without starting a container;
      * {@code socketArgs} is a parameter because {@link DockerClient#dockerSocketRunArgs()} reads
@@ -115,6 +134,16 @@ public class StartCommand implements Callable<Integer> {
         }
         if (services != null && !services.isBlank()) {
             args.addAll(List.of("-e", profile.envVar("SERVICES") + "=" + services));
+        }
+        // URLs the emulator hands back (SQS QueueUrl, presigned URLs, the OCI invoke endpoint)
+        // are built from its base URL, which defaults to the product port. On any other host port
+        // they would point at whichever instance owns the default one.
+        if (port != profile.defaultPort()) {
+            args.addAll(List.of("-e", profile.envVar("BASE_URL") + "=http://localhost:" + port));
+        }
+        String ns = resourceNamespace();
+        if (ns != null) {
+            args.addAll(List.of("-e", profile.envVar("DOCKER_RESOURCE_NAMESPACE") + "=" + ns));
         }
         new TreeMap<>(profile.startEnv()).forEach((suffix, value) ->
                 args.addAll(List.of("-e", profile.envVar(suffix) + "=" + value)));
@@ -137,6 +166,11 @@ public class StartCommand implements Callable<Integer> {
     public Integer call() {
         Printer printer = global.printer();
         DockerClient docker = new DockerClient();
+
+        if (namespace != null && !namespace.isBlank() && !NAMESPACE.matcher(namespace).matches()) {
+            printer.error("Invalid namespace '" + namespace + "'.\nUse letters, digits, '_', '.' and '-', starting with a letter or digit.");
+            return 2;
+        }
 
         // Verify docker is available
         if (!DockerClient.isInstalled()) {

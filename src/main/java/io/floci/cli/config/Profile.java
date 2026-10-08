@@ -12,6 +12,7 @@ public class Profile {
     public Integer port;
     public String persistDir;
     public String services;
+    public String namespace;
     public String output;
 
     public Profile() {}

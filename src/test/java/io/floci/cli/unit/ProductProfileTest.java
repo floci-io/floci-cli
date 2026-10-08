@@ -64,4 +64,16 @@ class ProductProfileTest {
         assertEquals("floci oci", ProductProfile.OCI.commandPrefix());
         assertEquals(Map.of(), ProductProfile.OCI.startEnv());
     }
+
+    @Test
+    void resourceNamespaceDropsTheDefaultContainerPrefix() {
+        assertNull(ProductProfile.AWS.resourceNamespace("floci"));
+        assertNull(ProductProfile.GCP.resourceNamespace("floci-gcp"));
+        assertEquals("b", ProductProfile.AWS.resourceNamespace("floci-b"));
+        assertEquals("b", ProductProfile.GCP.resourceNamespace("floci-gcp-b"));
+        assertEquals("b", ProductProfile.AZ.resourceNamespace("floci-az-b"));
+        assertEquals("b", ProductProfile.OCI.resourceNamespace("floci-oci-b"));
+        assertEquals("team-b", ProductProfile.GCP.resourceNamespace("team-b"));
+        assertEquals("floci-gcp-", ProductProfile.GCP.resourceNamespace("floci-gcp-"));
+    }
 }

@@ -124,7 +124,9 @@ An instance is a profile: its container name is its identity, its port is the on
 - Local state about one running instance (certificates, generated vendor-CLI config) lives under `InstanceState.dir(product, container)`, which is `~/.floci/<product>/<container>/`. Never a fixed per-product path: a second instance would overwrite the first. `floci az setup` is the reference (its az cloud is also named after the container).
 - Hints that tell the user to re-run a command append `global.instanceSelector()` so they select the same instance again.
 - Instance-independent state (the OCI CLI profile from `floci oci setup`) may stay shared.
-- `config profile create` takes `--container --port --persist --services --image` (and `--endpoint`); it reads only flags the user typed (`ParseResult.hasMatchedOption`), never values the profile provider or `FLOCI_*` env vars applied.
+- `StartCommand.resourceNamespace()` passes the emulator's `<PREFIX>_DOCKER_RESOURCE_NAMESPACE`: explicit `--namespace`/profile `namespace` (verbatim), else `ProductProfile.resourceNamespace(container)`: nothing for the default container, otherwise the container name minus the `<defaultContainer>-` prefix (the emulator adds `floci-<cloud>-` itself, so keeping it would stutter). It scopes the child containers each emulator launches and its orphan sweeps; never derive one for the default container (it would rename existing users' child containers).
+- On a non-default `--port`, `start` also passes `<PREFIX>_BASE_URL=http://localhost:<port>`: every emulator builds returned URLs (SQS `QueueUrl`, OCI invoke endpoint) from it, and its default names the product port.
+- `config profile create` takes `--container --port --persist --services --image --namespace` (and `--endpoint`); it reads only flags the user typed (`ParseResult.hasMatchedOption`), never values the profile provider or `FLOCI_*` env vars applied.
 
 ### Self-update
 

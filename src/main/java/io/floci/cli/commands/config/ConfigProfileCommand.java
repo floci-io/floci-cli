@@ -68,6 +68,9 @@ public class ConfigProfileCommand implements Callable<Integer> {
     @Option(names = {"--services"}, description = "create: comma-separated services to enable", paramLabel = "<csv>")
     String services;
 
+    @Option(names = {"--namespace"}, description = "create: Docker resource namespace for the containers this instance launches (default: derived from --container)", paramLabel = "<name>")
+    String namespace;
+
     @Spec
     CommandSpec spec;
 
@@ -104,6 +107,7 @@ public class ConfigProfileCommand implements Callable<Integer> {
                     row.put("image", p.image);
                     row.put("persistDir", p.persistDir);
                     row.put("services", p.services);
+                    row.put("namespace", p.namespace);
                     out.add(row);
                 }
                 printer.structured(out);
@@ -143,6 +147,7 @@ public class ConfigProfileCommand implements Callable<Integer> {
             if (p.port != null)       printer.println("  port:       " + p.port);
             if (p.persistDir != null) printer.println("  persistDir: " + p.persistDir);
             if (p.services != null)   printer.println("  services:   " + p.services);
+            if (p.namespace != null)  printer.println("  namespace:  " + p.namespace);
             return 0;
         } catch (IOException e) {
             printer.error("Could not read profile: " + e.getMessage());
@@ -171,8 +176,9 @@ public class ConfigProfileCommand implements Callable<Integer> {
             if (typed("--image")) p.image = image;
             if (typed("--persist")) p.persistDir = persistDir;
             if (typed("--services")) p.services = services;
+            if (typed("--namespace")) p.namespace = namespace;
 
-            for (String warning : collisions(store.list(), p)) {
+            for (String warning : collisions(profile, store.list(), p)) {
                 printer.warn(warning);
             }
             store.save(p);
@@ -191,10 +197,11 @@ public class ConfigProfileCommand implements Callable<Integer> {
 
     /**
      * Two profiles that share a container are the same instance, and two that share a port on the
-     * same image cannot run at once. Both are legitimate (one instance, used at different times),
+     * same image cannot run at once. Two of one emulator that share a resource namespace remove
+     * each other's child containers. All are legitimate (one instance, used at different times),
      * so they are warnings, not errors.
      */
-    static List<String> collisions(List<Profile> existing, Profile created) {
+    static List<String> collisions(ProductProfile product, List<Profile> existing, Profile created) {
         List<String> warnings = new ArrayList<>();
         for (Profile other : existing) {
             if (other.name == null || other.name.equals(created.name)) continue;
@@ -205,9 +212,19 @@ public class ConfigProfileCommand implements Callable<Integer> {
                     && repository(created.image).equals(repository(other.image))) {
                 warnings.add("Profile '" + other.name + "' already uses port " + created.port + ".\n"
                         + "Pick another --port, or start only one of them at a time.");
+            } else if (repository(created.image).equals(repository(other.image))) {
+                String ns = namespaceOf(product, created);
+                if (ns != null && ns.equals(namespaceOf(product, other))) {
+                    warnings.add("Profile '" + other.name + "' already uses resource namespace '" + ns + "'.\n"
+                            + "Pass --namespace to give this instance its own.");
+                }
             }
         }
         return warnings;
+    }
+
+    private static String namespaceOf(ProductProfile product, Profile p) {
+        return p.namespace != null && !p.namespace.isBlank() ? p.namespace : product.resourceNamespace(p.container);
     }
 
     // floci/floci-az:latest -> floci/floci-az, so two tags of one emulator still collide on a port.

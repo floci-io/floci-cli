@@ -56,6 +56,7 @@ class RestartCommandTest {
                 "-v", "/tmp/floci-persist-test:/app/data",
                 "-e", "FLOCI_STORAGE_MODE=persistent",
                 "-e", "FLOCI_SERVICES=s3,lambda",
+                "-e", "FLOCI_BASE_URL=http://localhost:4599",
                 "floci/floci:enforced"), args);
     }
 
@@ -74,6 +75,16 @@ class RestartCommandTest {
         assertTrue(args.contains(System.getenv("HOME") + "/floci-data:/app/data"),
                 "restart must expand the profile the way start does, but got: " + args);
         assertFalse(args.stream().anyMatch(a -> a.contains("${env:")), args.toString());
+    }
+
+    @Test
+    void carriesTheProfileNamespaceIntoTheStartItRuns() throws Exception {
+        writeProfile("ns", "container: floci-oci-b\nnamespace: team-b\n");
+
+        List<String> args = parse(ProductProfile.OCI, "--profile", "ns")
+                .buildStartCommand().dockerRunArgs(SOCKET);
+
+        assertTrue(args.contains("FLOCI_OCI_DOCKER_RESOURCE_NAMESPACE=team-b"), args.toString());
     }
 
     @Test

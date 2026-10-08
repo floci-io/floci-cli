@@ -158,6 +158,38 @@ class ConfigCommandsTest {
         assertEquals(14578, b.port);
         assertEquals("floci-az", b.container);
         assertNull(b.persistDir);
+        assertNull(b.namespace);
+    }
+
+    @Test
+    void createStoresATypedNamespace() throws Exception {
+        assertEquals(0, profileCmd(ProductProfile.GCP, "create", "ns",
+                "--container", "floci-gcp-b", "--namespace", "team-b").exit());
+
+        assertEquals("team-b", store().get("ns").orElseThrow().namespace);
+    }
+
+    @Test
+    void showReportsTheNamespaceAProfilesContainerImplies() throws Exception {
+        writeProfile("b", "container: floci-b\n");
+        writeProfile("plain", "port: 4599\n");
+
+        assertTrue(runShow(ProductProfile.AWS, "--profile", "b", "-o", "json")
+                .contains("\"namespace\" : \"b\""));
+        assertFalse(runShow(ProductProfile.AWS, "--profile", "plain", "-o", "json")
+                .contains("namespace"));
+    }
+
+    @Test
+    void createWarnsWhenTwoInstancesOfOneEmulatorWouldShareANamespace() throws Exception {
+        writeProfile("a", "container: floci-gcp-b\nport: 14588\nimage: floci/floci-gcp:latest\n");
+
+        Run same = profileCmd(ProductProfile.GCP, "create", "c", "--container", "b", "--port", "14589");
+        assertTrue(same.err().contains("resource namespace 'b'"), same.err());
+
+        Run own = profileCmd(ProductProfile.GCP, "create", "d", "--container", "b", "--port", "14590",
+                "--namespace", "team-d");
+        assertFalse(own.err().contains("resource namespace"), own.err());
     }
 
     @Test
