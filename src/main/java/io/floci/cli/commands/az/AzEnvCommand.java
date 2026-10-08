@@ -133,8 +133,8 @@ public class AzEnvCommand implements Callable<Integer> {
     }
 
     // Only after 'floci az setup' has run: point a plain 'az' in this shell at the isolated config
-    // and make it trust floci-az's certificate. A --global setup leaves no config dir, so only the
-    // bundle is exported.
+    // and make it trust floci-az's certificate. A --global setup leaves no config dir, so the
+    // bundle is exported and AZURE_CONFIG_DIR is cleared (a null value).
     // The state is per instance (keyed by container), so --profile and --container pick the
     // setup that belongs to the emulator this env points at.
     private Map<String, String> azCliVars(Printer printer, String endpoint) {
@@ -147,7 +147,13 @@ public class AzEnvCommand implements Callable<Integer> {
         }
         Path configDir = dir.resolve(AzSetupCommand.CONFIG_DIR_NAME);
         Path bundle = dir.resolve(AzSetupCommand.BUNDLE_NAME);
-        if (Files.isDirectory(configDir)) vars.put("AZURE_CONFIG_DIR", configDir.toAbsolutePath().toString());
+        if (Files.isDirectory(configDir)) {
+            vars.put("AZURE_CONFIG_DIR", configDir.toAbsolutePath().toString());
+        } else if (Files.isRegularFile(bundle)) {
+            // Set up with --global: clear an AZURE_CONFIG_DIR a previous 'eval $(floci az env)'
+            // left in this shell, or plain 'az' keeps using that other instance's isolated login.
+            vars.put("AZURE_CONFIG_DIR", null);
+        }
         if (Files.isRegularFile(bundle)) vars.put("REQUESTS_CA_BUNDLE", bundle.toAbsolutePath().toString());
         warnIfCertificateChanged(printer, dir.resolve(AzSetupCommand.CA_NAME), endpoint);
         return vars;
@@ -171,7 +177,9 @@ public class AzEnvCommand implements Callable<Integer> {
 
 
     private void printAzCliVars(Printer printer, Map<String, String> vars) {
-        vars.forEach((key, value) -> printer.println(ShellExport.formatExport(shell, key, value)));
+        vars.forEach((key, value) -> printer.println(value == null
+                ? ShellExport.formatUnset(shell, key)
+                : ShellExport.formatExport(shell, key, value)));
     }
 
     private List<String> resolveServices() {

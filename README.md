@@ -492,7 +492,7 @@ floci az env -o json                                # structured output
 
 | Variable | Value |
 |----------|-------|
-| `AZURE_CONFIG_DIR` | `~/.floci/az/<container>/azure-config`, the instance's isolated az config (not exported after `--global`) |
+| `AZURE_CONFIG_DIR` | `~/.floci/az/<container>/azure-config`, the instance's isolated az config; after `--global` it is unset instead, so a value left by another instance's `eval` does not linger |
 | `REQUESTS_CA_BUNDLE` | `~/.floci/az/<container>/ca-bundle.pem`, the public roots plus that instance's certificate |
 
 If the instance's certificate changed since setup (a container recreated without `--persist`),
@@ -516,7 +516,7 @@ different profiles never share a certificate, cloud or login (see
 [Running several instances side by side](#running-several-instances-side-by-side)). By default the
 az config itself is isolated there too and `~/.azure` is left untouched; `eval $(floci az env)`
 then points `az` at it in the current shell only. `--global` writes to your default az config
-instead. Re-running is safe: the cloud is updated, not registered twice.
+instead, and removes that instance's earlier isolated config. Re-running is safe: the cloud is updated, not registered twice.
 
 The az CLI only logs in over HTTPS, so `floci az start` always starts Floci Azure with
 `FLOCI_AZ_TLS_ENABLED=true` (HTTP keeps working on the same port). A container started by an

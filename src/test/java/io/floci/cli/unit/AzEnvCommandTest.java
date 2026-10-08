@@ -93,8 +93,18 @@ class AzEnvCommandTest {
 
         String out = run(A);
 
-        assertFalse(out.contains("AZURE_CONFIG_DIR"), out);
+        // No isolated config to point at, and a stale one from another instance is cleared.
+        assertFalse(out.contains("export AZURE_CONFIG_DIR"), out);
+        assertTrue(out.contains("unset AZURE_CONFIG_DIR"), out);
         assertTrue(out.contains("REQUESTS_CA_BUNDLE"), out);
+        assertTrue(run(A, "--shell", "fish").contains("set -e AZURE_CONFIG_DIR"));
+        assertTrue(run(A, "--shell", "powershell").contains("Remove-Item Env:AZURE_CONFIG_DIR"));
+    }
+
+    @Test
+    void beforeAnySetupAnInheritedConfigDirIsLeftAlone() {
+        // Nothing was set up for this instance, so a user's own AZURE_CONFIG_DIR is not ours to clear.
+        assertFalse(run(A).contains("AZURE_CONFIG_DIR"));
     }
 
     @Test

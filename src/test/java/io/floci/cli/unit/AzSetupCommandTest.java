@@ -158,6 +158,17 @@ class AzSetupCommandTest {
     }
 
     @Test
+    void switchingAnInstanceToGlobalRemovesItsEarlierIsolatedConfig() {
+        assertEquals(0, run());
+        assertTrue(Files.isDirectory(dir("floci-az").resolve("azure-config")));
+
+        assertEquals(0, run("--global"));
+
+        // Otherwise 'floci az env' would keep selecting the old isolated login.
+        assertFalse(Files.exists(dir("floci-az").resolve("azure-config")));
+    }
+
+    @Test
     void loginRetriesWithoutRequiringASubscription() {
         // Fails the first login only: FakeAz.failing matches by prefix, which would also catch the retry.
         AzCli failFirstLogin = new AzCli() {

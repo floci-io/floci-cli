@@ -194,6 +194,19 @@ public class AzSetupCommand implements Callable<Integer> {
         }
         boolean subscriptionSet = az.run(List.of("account", "set", "--subscription", subscription), env).ok();
 
+        // This instance now uses the default az config. An isolated config left by an earlier
+        // setup would otherwise keep 'floci az env' selecting its old login.
+        boolean isolatedRemoved = false;
+        if (globalConfig && Files.isDirectory(configDir)) {
+            try {
+                deleteRecursively(configDir);
+                isolatedRemoved = true;
+            } catch (IOException e) {
+                printer.warn("Could not remove the old isolated az config " + configDir.toAbsolutePath() + ": "
+                        + e.getMessage() + "\nDelete it by hand, or 'floci az env' keeps selecting it.");
+            }
+        }
+
         if (printer.format() != OutputFormat.text) {
             Map<String, Object> out = new LinkedHashMap<>();
             out.put("container", global.container);
@@ -206,6 +219,7 @@ public class AzSetupCommand implements Callable<Integer> {
             out.put("tenant", tenant);
             out.put("subscription", subscription);
             out.put("subscriptionSet", subscriptionSet);
+            if (globalConfig) out.put("isolatedConfigRemoved", isolatedRemoved);
             printer.structured(out);
             return 0;
         }
@@ -215,6 +229,9 @@ public class AzSetupCommand implements Callable<Integer> {
                 + Ansi.bold(cloud) + " at " + httpsEndpoint);
         printer.println(Ansi.green("Logged in ") + "as " + clientId + " in tenant " + tenant
                 + Ansi.gray(globalConfig ? " (default az config)" : " (" + configDir.toAbsolutePath() + ")"));
+        if (isolatedRemoved) {
+            printer.println(Ansi.gray("Removed the earlier isolated az config " + configDir.toAbsolutePath()));
+        }
         if (!subscriptionSet) {
             printer.warn("Could not select subscription " + subscription
                     + ". Run 'az account list' to see the available ones.");
