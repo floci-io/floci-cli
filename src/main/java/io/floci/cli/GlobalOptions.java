@@ -77,6 +77,16 @@ public class GlobalOptions {
         return value != null ? value : fallback;
     }
 
+    /**
+     * The flag that selects this instance again in a hint string: {@code " --profile x"} when a
+     * profile was used, {@code " --container y"} for a non-default container, else empty.
+     */
+    public String instanceSelector() {
+        if (profile != null) return " --profile " + profile;
+        if (!product.defaultContainer().equals(container)) return " --container " + container;
+        return "";
+    }
+
     public Printer printer() {
         if (noColor || !isStdoutTty()) {
             Ansi.disable();

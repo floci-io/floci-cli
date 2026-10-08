@@ -76,4 +76,16 @@ class GlobalOptionsTest {
         assertEquals("http://localhost:4588",
                 gcp.endpointFromPorts("9999->1111/tcp", "http://localhost:4588"));
     }
+
+    @Test
+    void instanceSelectorNamesTheProfileOrANonDefaultContainer() {
+        GlobalOptions az = new GlobalOptions(ProductProfile.AZ, env(Map.of()));
+        assertEquals("", az.instanceSelector());
+
+        az.container = "floci-az-b";
+        assertEquals(" --container floci-az-b", az.instanceSelector());
+
+        az.profile = "team-b";
+        assertEquals(" --profile team-b", az.instanceSelector());
+    }
 }

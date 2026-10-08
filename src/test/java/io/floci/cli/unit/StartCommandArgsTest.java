@@ -94,6 +94,19 @@ class StartCommandArgsTest {
                 .dockerRunArgs(SOCKET).contains("/from-flag:/app/data"));
     }
 
+    /** 'floci az setup' needs HTTPS (MSAL refuses an HTTP authority), so az always starts with TLS. */
+    @Test
+    void onlyAzStartsWithTlsEnabled() {
+        assertEquals(List.of("-d", "--name", "floci-az", "-p", "4577:4577",
+                        "-v", "/sock:/sock",
+                        "-e", "FLOCI_AZ_TLS_ENABLED=true",
+                        "floci/floci-az:latest"),
+                parse("az", "start").dockerRunArgs(SOCKET));
+        for (String tree : new String[]{"aws", "gcp", "oci"}) {
+            assertFalse(parse(tree, "start").dockerRunArgs(SOCKET).stream().anyMatch(a -> a.contains("TLS")), tree);
+        }
+    }
+
     @Test
     void readinessPollKeepsTheHostFromTheEndpointWhenSwappingThePort() {
         assertEquals("http://floci.internal:4599", StartCommand.withPort("http://floci.internal:4566", 4599));

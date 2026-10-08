@@ -3,6 +3,8 @@ package io.floci.cli.unit;
 import io.floci.cli.ProductProfile;
 import org.junit.jupiter.api.Test;
 
+import java.util.Map;
+
 import static org.junit.jupiter.api.Assertions.*;
 
 /** Pins every field of the four product constants — the drift firewall for the unified tree. */
@@ -20,6 +22,7 @@ class ProductProfileTest {
         assertEquals("FLOCI_ENDPOINT", ProductProfile.AWS.envVar("ENDPOINT"));
         assertEquals("/_floci", ProductProfile.AWS.controlPrefix());
         assertEquals("floci", ProductProfile.AWS.commandPrefix());
+        assertEquals(Map.of(), ProductProfile.AWS.startEnv());
     }
 
     @Test
@@ -32,6 +35,7 @@ class ProductProfileTest {
         assertEquals("FLOCI_GCP_CONTAINER", ProductProfile.GCP.envVar("CONTAINER"));
         assertEquals("/_floci-gcp", ProductProfile.GCP.controlPrefix());
         assertEquals("floci gcp", ProductProfile.GCP.commandPrefix());
+        assertEquals(Map.of(), ProductProfile.GCP.startEnv());
     }
 
     @Test
@@ -45,6 +49,7 @@ class ProductProfileTest {
         // The floci-az server exposes /_floci/* (same as AWS), NOT /_floci-az.
         assertEquals("/_floci", ProductProfile.AZ.controlPrefix());
         assertEquals("floci az", ProductProfile.AZ.commandPrefix());
+        assertEquals(Map.of("TLS_ENABLED", "true"), ProductProfile.AZ.startEnv());
     }
 
     @Test
@@ -57,5 +62,6 @@ class ProductProfileTest {
         assertEquals("FLOCI_OCI_ENDPOINT", ProductProfile.OCI.envVar("ENDPOINT"));
         assertEquals("/_floci-oci", ProductProfile.OCI.controlPrefix());
         assertEquals("floci oci", ProductProfile.OCI.commandPrefix());
+        assertEquals(Map.of(), ProductProfile.OCI.startEnv());
     }
 }

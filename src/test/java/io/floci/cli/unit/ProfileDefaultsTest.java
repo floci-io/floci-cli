@@ -43,6 +43,12 @@ class ProfileDefaultsTest {
     @ValueSource(strings = {
             "--service",       // wait/logs/env filter — NOT the profile's 'services'
             "--profile-name",  // the OCI CLI profile written by 'floci oci setup'
+            "--global",        // 'floci az setup' target, not a profile field
+            "--reset",
+            "--tenant",
+            "--subscription",
+            "--client-id",
+            "--client-secret",
             "--profile",
             "--pull",
             "--timeout",

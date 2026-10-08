@@ -63,7 +63,7 @@ Rules for the unified tree:
 - **Per-product option defaults are constructor-set field values**, not annotation `defaultValue`s (annotation strings are compile-time constants). Use `(default: ${DEFAULT-VALUE})` in the option description to render them in help.
 - **Never subclass a group command** (`GcpCommand`, `*ConfigCommand`, `*SnapshotCommand` groups): picocli registers the `subcommands` arrays of both super and subclass — instant duplicate-name crash. Groups stay standalone registration-only classes.
 - Product-varying strings come from the profile: `displayName()` for banners, `commandPrefix()` for hint strings, `envVar("SERVICES")` for container env vars, `controlPrefix()` for `FlociHttpClient`, `serverRepo()` for issue-tracker links.
-- Only `EnvCommand`/`GcpEnvCommand`/`AzEnvCommand`/`OciEnvCommand` are genuinely product-specific (not shims), plus the OCI-only `OciSetupCommand` (the OCI CLI/SDKs require a config file + signing key, so `floci oci setup` scaffolds them; no other tree needs an equivalent).
+- Only `EnvCommand`/`GcpEnvCommand`/`AzEnvCommand`/`OciEnvCommand` are genuinely product-specific (not shims), plus two product-only `setup` commands: `OciSetupCommand` (the OCI CLI/SDKs require a config file + signing key, so `floci oci setup` scaffolds them) and `AzSetupCommand` (the `az` CLI needs a registered cloud, the emulator's CA trusted and a login, so `floci az setup` does that through `io.floci.cli.azcli`). AWS and GCP need no equivalent. `add-command/checklist.sh setup` reports the shared-tree rows as MISSING for these by design.
 
 Commands call `global.printer()` at the start of `call()` — never store a `Printer` as a field.
 
@@ -71,7 +71,7 @@ Commands call `global.printer()` at the start of `call()` — never store a `Pri
 
 **Docker:** `DockerClient` wraps `docker` CLI subprocesses — no docker-java library. This is a deliberate native-image trade-off. `DockerClient` returns plain records (`ContainerInfo`, `ImageInfo`) and throws `DockerException` on non-zero exit codes.
 
-**Floci server:** `FlociHttpClient` wraps `java.net.http.HttpClient` against the Floci REST API. All methods throw `FlociException`. The control-plane prefix is constructor-configurable: AWS and Azure use `/_floci`, GCP uses `/_floci-gcp`. Known live endpoints: `/_floci/health`, `/_floci/info`, `/_floci/init`. Snapshot endpoints (`/_floci/snapshots/*`) do not exist on the server yet.
+**Floci server:** `FlociHttpClient` wraps `java.net.http.HttpClient` against the Floci REST API. All methods throw `FlociException`. The control-plane prefix is constructor-configurable: AWS and Azure use `/_floci`, GCP uses `/_floci-gcp`. Known live endpoints: `/_floci/health`, `/_floci/info`, `/_floci/init`, and on floci-az only `/_floci/tls-cert` (`tlsCert()`, the PEM CA; 404 when TLS is off). Snapshot endpoints (`/_floci/snapshots/*`) do not exist on the server yet.
 
 ### Output pipeline
 

@@ -81,8 +81,9 @@ class ProductTreesParsingTest {
             assertTrue(names.containsAll(LIFECYCLE_COMMANDS),
                     tree + " is missing " + LIFECYCLE_COMMANDS.stream().filter(c -> !names.contains(c)).toList());
         }
-        // oci additionally has setup; bare root additionally has update + the product groups
+        // oci and az additionally have setup; bare root additionally has update + the product groups
         assertTrue(root.getSubcommands().get("oci").getSubcommands().containsKey("setup"));
+        assertTrue(root.getSubcommands().get("az").getSubcommands().containsKey("setup"));
         assertTrue(root.getSubcommands().keySet().containsAll(Set.of("update", "aws", "gcp", "az", "oci")));
     }
 

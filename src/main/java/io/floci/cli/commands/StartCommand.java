@@ -14,6 +14,7 @@ import picocli.CommandLine.*;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.TreeMap;
 import java.util.concurrent.Callable;
 
 @Command(
@@ -115,6 +116,8 @@ public class StartCommand implements Callable<Integer> {
         if (services != null && !services.isBlank()) {
             args.addAll(List.of("-e", profile.envVar("SERVICES") + "=" + services));
         }
+        new TreeMap<>(profile.startEnv()).forEach((suffix, value) ->
+                args.addAll(List.of("-e", profile.envVar(suffix) + "=" + value)));
         args.add(image);
         return args;
     }

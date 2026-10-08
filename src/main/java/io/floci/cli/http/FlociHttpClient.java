@@ -3,6 +3,7 @@ package io.floci.cli.http;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import java.net.ConnectException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -103,6 +104,43 @@ public class FlociHttpClient {
         }
     }
 
+    /**
+     * The PEM CA certificate the server's HTTPS listener chains to. Only floci-az serves it, and
+     * only with TLS enabled; a 404 becomes {@link TlsUnavailableException}.
+     */
+    public String tlsCert() throws FlociException {
+        String path = controlPrefix + "/tls-cert";
+        try {
+            HttpRequest req = HttpRequest.newBuilder()
+                    .uri(URI.create(endpoint + path))
+                    .timeout(Duration.ofSeconds(10))
+                    .GET()
+                    .build();
+            HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
+            if (resp.statusCode() == 404) {
+                String message = "";
+                try {
+                    message = MAPPER.readTree(resp.body()).path("message").asText("");
+                } catch (Exception ignored) {
+                    // Not JSON: an older server without the endpoint at all.
+                }
+                throw new TlsUnavailableException(
+                        message.isEmpty() ? "TLS certificate not available at " + path : message,
+                        message.contains("not available yet"));
+            }
+            if (resp.statusCode() >= 400) {
+                throw new FlociException("Server returned HTTP " + resp.statusCode() + " for " + path);
+            }
+            return resp.body();
+        } catch (FlociException e) {
+            throw e;
+        } catch (ConnectException e) {
+            throw new FlociException("Connection refused at " + endpoint + ". Is Floci running? Try 'floci status' or 'floci start'.");
+        } catch (Exception e) {
+            throw new FlociException("Request failed: " + e.getMessage());
+        }
+    }
+
     public Map<String, Object> postSnapshot(String name) throws FlociException {
         return postJson(controlPrefix + "/snapshots/" + name, "{}");
     }
@@ -134,7 +172,7 @@ public class FlociHttpClient {
             return MAPPER.readTree(resp.body());
         } catch (FlociException e) {
             throw e;
-        } catch (java.net.ConnectException e) {
+        } catch (ConnectException e) {
             throw new FlociException("Connection refused at " + endpoint + ". Is Floci running? Try 'floci status' or 'floci start'.");
         } catch (Exception e) {
             throw new FlociException("Request failed: " + e.getMessage());
@@ -158,7 +196,7 @@ public class FlociHttpClient {
             return MAPPER.readValue(resp.body(), Map.class);
         } catch (FlociException e) {
             throw e;
-        } catch (java.net.ConnectException e) {
+        } catch (ConnectException e) {
             throw new FlociException("Connection refused at " + endpoint + ". Is Floci running? Try 'floci start'.");
         } catch (Exception e) {
             throw new FlociException("Request failed: " + e.getMessage());

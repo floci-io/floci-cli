@@ -13,7 +13,8 @@ import picocli.CommandLine.*;
                 "  floci az stop    — stop the container%n" +
                 "  floci az status  — show health and version%n" +
                 "  floci az doctor  — diagnose environment issues%n" +
-                "  floci az env     — print Azure environment variables%n",
+                "  floci az env     — print Azure environment variables%n" +
+                "  floci az setup   — point the az CLI at the emulator (cert, cloud, login)%n",
         mixinStandardHelpOptions = true,
         subcommands = {
                 AzStartCommand.class,
@@ -26,6 +27,7 @@ import picocli.CommandLine.*;
                 AzServicesCommand.class,
                 AzDoctorCommand.class,
                 AzEnvCommand.class,
+                AzSetupCommand.class,
                 AzConfigCommand.class,
                 AzSnapshotCommand.class,
                 CompletionCommand.class,
