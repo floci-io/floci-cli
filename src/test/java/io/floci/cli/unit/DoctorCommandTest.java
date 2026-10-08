@@ -16,6 +16,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -121,6 +124,9 @@ class DoctorCommandTest {
 
         Run r = doctor(List.of(slow, fast));
 
+        // Both checks must have succeeded: a timed-out latch would surface as "check failed".
+        assertEquals(0, r.exit(), r.out() + r.err());
+        assertFalse(r.out().contains("check failed"), r.out());
         assertTrue(r.out().indexOf("first.check") < r.out().indexOf("second.check"), r.out());
     }
 
@@ -146,18 +152,18 @@ class DoctorCommandTest {
         };
         CachingDockerClient cache = new CachingDockerClient(counting);
 
-        List<Thread> threads = new ArrayList<>();
-        for (int i = 0; i < 8; i++) {
-            threads.add(Thread.ofVirtual().start(() -> {
-                try {
+        // Futures, not bare threads: an assertion failing on a worker must fail this test.
+        try (ExecutorService pool = Executors.newVirtualThreadPerTaskExecutor()) {
+            List<Future<?>> workers = new ArrayList<>();
+            for (int i = 0; i < 8; i++) {
+                workers.add(pool.submit(() -> {
                     assertEquals("27.0.0", cache.dockerVersion());
                     assertTrue(cache.inspectContainer("floci").isEmpty());
-                } catch (DockerException e) {
-                    throw new RuntimeException(e);
-                }
-            }));
+                    return null;
+                }));
+            }
+            for (Future<?> worker : workers) worker.get();
         }
-        for (Thread t : threads) t.join();
 
         assertEquals(1, versionCalls.get());
         assertEquals(1, inspectCalls.get());

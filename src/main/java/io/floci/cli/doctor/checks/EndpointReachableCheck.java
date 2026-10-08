@@ -31,7 +31,11 @@ public class EndpointReachableCheck implements Check {
             return CheckResult.ok("endpoint.reachable",
                     endpoint + " is reachable (server v" + health.version() + ")");
         } catch (Exception e) {
-            // One request instead of a reachability probe followed by the same GET.
+            // The health body could not be read as JSON, or the request failed. Only then ask the
+            // cheaper status-only question, so a reachable server with an odd body still passes.
+            if (client.isReachable()) {
+                return CheckResult.ok("endpoint.reachable", endpoint + " is reachable");
+            }
         }
         return CheckResult.fail("endpoint.reachable",
                 "GET " + controlPrefix + "/health at " + endpoint + " did not return 200",
