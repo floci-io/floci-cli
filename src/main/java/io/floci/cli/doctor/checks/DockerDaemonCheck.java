@@ -6,9 +6,24 @@ import io.floci.cli.doctor.CheckResult;
 
 public class DockerDaemonCheck implements Check {
 
+    private final DockerClient docker;
+
+    public DockerDaemonCheck() {
+        this(new DockerClient());
+    }
+
+    /** {@code docker} is shared across one doctor run so each docker fact is fetched once. */
+    public DockerDaemonCheck(DockerClient docker) {
+        this.docker = docker;
+    }
+
+    @Override
+    public String name() {
+        return "docker.daemon";
+    }
+
     @Override
     public CheckResult run(String endpoint, String container) {
-        DockerClient docker = new DockerClient();
         if (docker.isDaemonReachable()) {
             return CheckResult.ok("docker.daemon", "Daemon reachable");
         }

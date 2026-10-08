@@ -6,6 +6,11 @@ import io.floci.cli.doctor.CheckResult;
 public class AzCliInstalledCheck implements Check {
 
     @Override
+    public String name() {
+        return "az.cli.installed";
+    }
+
+    @Override
     public CheckResult run(String endpoint, String container) {
         try {
             Process p = new ProcessBuilder("az", "--version").start();

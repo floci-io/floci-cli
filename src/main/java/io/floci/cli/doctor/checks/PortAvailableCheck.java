@@ -11,11 +11,26 @@ import java.net.URI;
 
 public class PortAvailableCheck implements Check {
 
+    private final DockerClient docker;
+
+    public PortAvailableCheck() {
+        this(new DockerClient());
+    }
+
+    /** {@code docker} is shared across one doctor run so each docker fact is fetched once. */
+    public PortAvailableCheck(DockerClient docker) {
+        this.docker = docker;
+    }
+
+    @Override
+    public String name() {
+        return "port.available";
+    }
+
     @Override
     public CheckResult run(String endpoint, String container) {
         int port = extractPort(endpoint);
         // If a Floci container is already listening on the port, that's fine
-        DockerClient docker = new DockerClient();
         try {
             var info = docker.inspectContainer(container);
             if (info.isPresent() && "running".equals(info.get().state())) {

@@ -7,10 +7,26 @@ import io.floci.cli.doctor.CheckResult;
 
 public class ContainerRunningCheck implements Check {
 
+    private final DockerClient docker;
+
+    public ContainerRunningCheck() {
+        this(new DockerClient());
+    }
+
+    /** {@code docker} is shared across one doctor run so each docker fact is fetched once. */
+    public ContainerRunningCheck(DockerClient docker) {
+        this.docker = docker;
+    }
+
+    @Override
+    public String name() {
+        return "container.running";
+    }
+
     @Override
     public CheckResult run(String endpoint, String container) {
         try {
-            var info = new DockerClient().inspectContainer(container);
+            var info = docker.inspectContainer(container);
             if (info.isEmpty()) {
                 return CheckResult.warn("container.running",
                         "Container '" + container + "' not found",

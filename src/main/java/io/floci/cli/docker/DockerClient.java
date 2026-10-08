@@ -85,6 +85,18 @@ public class DockerClient {
         }
     }
 
+    /** The value of label {@code key} on a local image, empty when the label or image is missing. */
+    public Optional<String> imageLabel(String image, String key) throws DockerException {
+        try {
+            String out = run("docker", "inspect", "--format",
+                    "{{index .Config.Labels \"" + key + "\"}}", image);
+            String value = out.trim();
+            return value.isEmpty() || "<no value>".equals(value) ? Optional.empty() : Optional.of(value);
+        } catch (DockerException e) {
+            return Optional.empty();
+        }
+    }
+
     public void pull(String image, String policy) throws DockerException {
         if ("never".equalsIgnoreCase(policy)) return;
         if ("missing".equalsIgnoreCase(policy) && isImagePresent(image)) return;

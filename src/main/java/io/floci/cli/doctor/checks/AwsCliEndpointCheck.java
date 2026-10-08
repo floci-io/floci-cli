@@ -10,6 +10,11 @@ import java.net.URISyntaxException;
 public class AwsCliEndpointCheck implements Check {
 
     @Override
+    public String name() {
+        return "aws.cli.endpoint";
+    }
+
+    @Override
     public CheckResult run(String endpoint, String container) {
         if (!isAwsCliInstalled()) {
             return CheckResult.ok("aws.cli.endpoint", "aws CLI not installed — skipped");

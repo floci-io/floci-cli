@@ -10,6 +10,11 @@ import java.nio.file.Path;
 public class AwsCliS3PathStyleCheck implements Check {
 
     @Override
+    public String name() {
+        return "aws.cli.s3.pathstyle";
+    }
+
+    @Override
     public CheckResult run(String endpoint, String container) {
         Path awsConfig = Path.of(System.getProperty("user.home"), ".aws", "config");
         if (!Files.exists(awsConfig)) {

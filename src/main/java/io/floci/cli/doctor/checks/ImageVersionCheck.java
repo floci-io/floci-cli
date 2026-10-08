@@ -7,7 +7,13 @@ import io.floci.cli.doctor.CheckResult;
 
 public class ImageVersionCheck implements Check {
 
+    @Override
+    public String name() {
+        return "image.version";
+    }
+
     private final String image;
+    private final DockerClient docker;
     private static final String MIN_VERSION = "1.5.0";
 
     public ImageVersionCheck() {
@@ -15,13 +21,18 @@ public class ImageVersionCheck implements Check {
     }
 
     public ImageVersionCheck(String image) {
+        this(image, new DockerClient());
+    }
+
+    /** {@code docker} is shared across one doctor run so each docker fact is fetched once. */
+    public ImageVersionCheck(String image, DockerClient docker) {
         this.image = image;
+        this.docker = docker;
     }
 
     @Override
     public CheckResult run(String endpoint, String container) {
         try {
-            DockerClient docker = new DockerClient();
             if (!docker.isImagePresent(image)) {
                 return CheckResult.warn("image.version", image + " not present — version cannot be checked",
                         "floci start --pull always");
@@ -42,21 +53,8 @@ public class ImageVersionCheck implements Check {
         }
     }
 
-    private String readImageLabel(DockerClient docker, String image) {
-        try {
-            String raw = runDockerInspect(image);
-            return raw.isBlank() ? null : raw.trim();
-        } catch (Exception e) {
-            return null;
-        }
-    }
-
-    private String runDockerInspect(String image) throws Exception {
-        Process p = new ProcessBuilder("docker", "inspect", "--format",
-                "{{index .Config.Labels \"org.opencontainers.image.version\"}}", image).start();
-        String out = new String(p.getInputStream().readAllBytes()).trim();
-        p.waitFor();
-        return out;
+    private String readImageLabel(DockerClient docker, String image) throws DockerException {
+        return docker.imageLabel(image, "org.opencontainers.image.version").orElse(null);
     }
 
     public static boolean meetsMinimum(String version, String minimum) {
