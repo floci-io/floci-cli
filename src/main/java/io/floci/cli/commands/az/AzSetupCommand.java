@@ -14,7 +14,6 @@ import io.floci.cli.http.TlsUnavailableException;
 import io.floci.cli.output.Ansi;
 import io.floci.cli.output.OutputFormat;
 import io.floci.cli.output.Printer;
-import io.floci.cli.output.ShellExport;
 import picocli.CommandLine.*;
 
 import java.io.IOException;
@@ -238,12 +237,9 @@ public class AzSetupCommand implements Callable<Integer> {
         }
         printer.println("");
         printer.println("Connect with:");
-        if (globalConfig) {
-            printer.println("  " + Ansi.bold(ShellExport.formatExport("bash", "REQUESTS_CA_BUNDLE",
-                    bundleFile.toAbsolutePath().toString())));
-        } else {
-            printer.println("  " + Ansi.bold("eval $(floci az env" + global.instanceSelector() + ")"));
-        }
+        // The same line for both modes: after --global, env exports the CA bundle and unsets an
+        // AZURE_CONFIG_DIR an earlier isolated setup left in the shell (now deleted above).
+        printer.println("  " + Ansi.bold("eval $(floci az env" + global.instanceSelector() + ")"));
         printer.println("  " + Ansi.bold("az group list"));
         return 0;
     }

@@ -531,7 +531,7 @@ floci az setup --profile team-b         # a second instance: ~/.floci/az/<its co
 eval $(floci az env --profile team-b)
 
 floci az setup --global                 # use your default az config (~/.azure)
-export REQUESTS_CA_BUNDLE=~/.floci/az/floci-az/ca-bundle.pem
+eval $(floci az env)                    # REQUESTS_CA_BUNDLE, and clears a stale AZURE_CONFIG_DIR
 
 floci az setup --reset                  # delete the isolated config
 floci az setup --reset --global         # switch the default az config back to AzureCloud

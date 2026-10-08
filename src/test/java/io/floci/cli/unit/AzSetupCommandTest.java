@@ -157,6 +157,15 @@ class AzSetupCommandTest {
         }
     }
 
+    /** The printed next step must also clear a stale AZURE_CONFIG_DIR, which only az env does. */
+    @Test
+    void globalSetupTellsTheUserToEvalAzEnv() {
+        String out = stdout(() -> assertEquals(0, run("--global")));
+
+        assertTrue(out.contains("eval $(floci az env)"), out);
+        assertFalse(out.contains("export REQUESTS_CA_BUNDLE"), out);
+    }
+
     @Test
     void switchingAnInstanceToGlobalRemovesItsEarlierIsolatedConfig() {
         assertEquals(0, run());
