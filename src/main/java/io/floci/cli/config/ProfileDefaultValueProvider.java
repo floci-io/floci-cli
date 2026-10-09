@@ -128,7 +128,7 @@ public class ProfileDefaultValueProvider implements IDefaultValueProvider {
         Profile profile = loaded.get();
         validate(commandLine, name, profile);
 
-        warnAboutUnknownKeys(name, profile);
+        warnAboutUnknownKeys(store, name, profile);
 
         resolvedName = name;
         resolved = profile;
@@ -160,7 +160,11 @@ public class ProfileDefaultValueProvider implements IDefaultValueProvider {
     // back after the parse), so the warning is printed once per profile file per run.
     private static final Set<String> WARNED = ConcurrentHashMap.newKeySet();
 
-    private void warnAboutUnknownKeys(String name, Profile profile) {
+    /**
+     * Prints one stderr warning for keys {@code profile} sets that floci does not read. Shared by
+     * every path that loads a profile ({@code --profile}, {@code config profile show}).
+     */
+    public static void warnAboutUnknownKeys(ProfileStore store, String name, Profile profile) {
         if (profile.unknownKeys().isEmpty()) return;
         if (!WARNED.add(store.profilesDir().toAbsolutePath() + "/" + name)) return;
         System.err.println(Ansi.yellow("Warning: ") + "Profile '" + name + "' sets "

@@ -3,6 +3,7 @@ package io.floci.cli.commands.config;
 import io.floci.cli.GlobalOptions;
 import io.floci.cli.ProductProfile;
 import io.floci.cli.config.Profile;
+import io.floci.cli.config.ProfileDefaultValueProvider;
 import io.floci.cli.config.ProfileStore;
 import io.floci.cli.output.Ansi;
 import io.floci.cli.output.OutputFormat;
@@ -148,6 +149,7 @@ public class ConfigProfileCommand implements Callable<Integer> {
             var profile = store.get(name);
             if (profile.isEmpty()) { printer.error("Profile '" + name + "' not found."); return 1; }
             Profile p = profile.get();
+            ProfileDefaultValueProvider.warnAboutUnknownKeys(store, name, p);
             printer.println(Ansi.bold("Profile: ") + p.name);
             if (p.endpoint != null)   printer.println("  endpoint:   " + p.endpoint);
             if (p.container != null)  printer.println("  container:  " + p.container);
