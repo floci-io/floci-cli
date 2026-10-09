@@ -189,13 +189,9 @@ Commands are organized into four product groups — `floci aws` (or bare `floci`
 
 | Command | Description |
 |---------|-------------|
-| `floci config show` | Show active configuration |
-| `floci config validate` | Validate a docker-compose.yml |
-| `floci config profile` | Manage named profiles |
 | `floci config default-product` | Set the default product (aws, gcp, az, or oci) |
 | `floci update` | Self-update the CLI to the latest release |
 | `floci completion bash\|zsh` | Generate shell completion scripts |
-| `floci update` | Update the CLI to the latest release |
 
 ### AWS commands (`floci` / `floci aws`)
 
@@ -212,6 +208,10 @@ Commands are organized into four product groups — `floci aws` (or bare `floci`
 | `floci doctor` | Run environment diagnostics |
 | `floci env` | Print AWS environment variables |
 | `floci snapshot save/load/list/delete` | Manage state snapshots |
+| `floci config show\|validate\|profile` | Show the active configuration, validate a docker-compose.yml, manage profiles (AWS defaults) |
+
+Bare `floci config ...` always means the AWS tree, whatever the default product; use
+`floci gcp config ...` and so on for the others.
 
 ### GCP commands (`floci gcp`)
 
@@ -228,6 +228,7 @@ Commands are organized into four product groups — `floci aws` (or bare `floci`
 | `floci gcp doctor` | Run GCP environment diagnostics |
 | `floci gcp env` | Print GCP SDK emulator host variables |
 | `floci gcp snapshot` | Snapshot commands (coming soon) |
+| `floci gcp config show\|validate\|profile` | Show the active configuration, validate a docker-compose.yml, manage profiles (GCP defaults) |
 
 ### Azure commands (`floci az`)
 
@@ -245,6 +246,7 @@ Commands are organized into four product groups — `floci aws` (or bare `floci`
 | `floci az env` | Print Azure connection string / SDK env vars |
 | `floci az setup` | Point the `az` CLI at the emulator: trust its certificate, register the cloud, log in |
 | `floci az snapshot` | Snapshot commands (coming soon) |
+| `floci az config show\|validate\|profile` | Show the active configuration, validate a docker-compose.yml, manage profiles (Azure defaults) |
 
 ### OCI commands (`floci oci`)
 
@@ -262,6 +264,7 @@ Commands are organized into four product groups — `floci aws` (or bare `floci`
 | `floci oci env` | Print OCI endpoint variables |
 | `floci oci setup` | Create a local OCI CLI profile (API key + `~/.oci/config`) |
 | `floci oci snapshot` | Snapshot commands (coming soon) |
+| `floci oci config show\|validate\|profile` | Show the active configuration, validate a docker-compose.yml, manage profiles (OCI defaults) |
 
 All commands support `--help`.
 
@@ -655,6 +658,9 @@ floci config profile delete <name>         # delete a profile
 floci config validate -f docker-compose.yml  # validate a Compose file
 ```
 
+Each product tree has its own `config show|validate|profile` (`floci gcp config show`, ...), which
+uses that product's defaults; `config default-product` exists only at the top level.
+
 #### Profiles
 
 Profiles are stored in `~/.floci/profiles/<name>.yaml`. Pass `--profile <name>` to any command to
@@ -676,16 +682,16 @@ output: json
 Each field supplies the default for one flag, so a profile field only affects the commands that
 have that flag:
 
-| Profile field | Flag it supplies | Applies to |
+| Profile field | Flag it supplies | Used by |
 |---|---|---|
-| `endpoint` | `--endpoint` | every command |
-| `container` | `--container` | every command |
-| `output` | `--output` / `-o` | every command |
-| `image` | `--image` | `start`, `restart` |
-| `port` | `--port` | `start`, `restart` |
-| `persistDir` | `--persist` | `start`, `restart` |
-| `services` | `--services` | `start`, `restart` |
-| `namespace` | `--namespace` | `start`, `restart` |
+| `endpoint` | `--endpoint` | every command except `update` and the group commands (`floci gcp`, `floci config`, ...) |
+| `container` | `--container` | every command except `update` and the group commands (`floci gcp`, `floci config`, ...) |
+| `output` | `--output` / `-o` | every command except `update` and the group commands (`floci gcp`, `floci config`, ...) |
+| `image` | `--image` | `start`; `restart` re-applies it through the start it runs |
+| `port` | `--port` | `start`; `restart` re-applies it through the start it runs |
+| `persistDir` | `--persist` | `start`; `restart` re-applies it through the start it runs |
+| `services` | `--services` | `start`; `restart` re-applies it through the start it runs |
+| `namespace` | `--namespace` | `start`; `restart` re-applies it through the start it runs |
 
 Resolution order, highest first:
 
@@ -697,6 +703,8 @@ So `floci start --profile probe --container other` starts `other`, and a profile
 `FLOCI_CONTAINER` exported in your shell. A field the profile leaves out changes nothing.
 
 An unknown or unreadable profile is an error (exit 2), not a silent fall back to the defaults.
+That includes `floci config show --profile <name>`, which before 0.2.2 warned and showed the
+defaults instead.
 A key floci does not read (a typo such as `persist_dir:`) is ignored with a warning that lists
 the keys a profile can set.
 Values are interpolated by the CLI, so `persistDir: ${env:HOME}/floci-data` expands as you would
@@ -772,22 +780,6 @@ floci snapshot import tarball.tar.gz
 
 > GCP, Azure, and OCI snapshots (`floci gcp snapshot` / `floci az snapshot` / `floci oci snapshot`) require server-side endpoints not yet implemented in Floci GCP / Floci Azure / Floci OCI — until then those commands report the missing API and exit 1. `floci snapshot export|import` (AWS) are also pending server support and exit 1.
 
-### `floci update`
-
-Self-updates a native-binary install to a newer release (checksum-verified, atomic replace).
-
-```sh
-floci update                      # update to the latest release
-floci update --check              # only report; exit 0 = up to date, 1 = update available
-floci update --version 0.1.8      # pin a specific version
-```
-
-```sh
-floci update --check || floci update   # script-friendly: update only when stale
-```
-
-Homebrew-managed installs are refused — use `brew upgrade floci` instead.
-
 ### `floci completion`
 
 ```sh
@@ -804,6 +796,7 @@ sha256 against the release's `sha256sums.txt`, and atomically replaces the runni
 floci update                      # update to the latest release
 floci update --check              # exit 0: up to date, exit 1: update available
 floci update --version 0.1.7      # install a specific version
+floci update --check || floci update   # script-friendly: update only when stale
 ```
 
 Homebrew installs are managed by brew and are detected and refused — use `brew upgrade floci` there instead.
