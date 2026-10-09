@@ -15,6 +15,10 @@ import picocli.CommandLine.*;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.concurrent.Callable;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 @Command(
         name = "wait",
@@ -33,9 +37,17 @@ public class WaitCommand implements Callable<Integer> {
     }
 
     protected WaitCommand(ProductProfile profile) {
+        this(profile, new DockerClient());
+    }
+
+    /** Test seam: {@code docker} answers the container lookup that finds the endpoint. */
+    public WaitCommand(ProductProfile profile, DockerClient docker) {
         this.profile = profile;
         this.global = new GlobalOptions(profile);
+        this.docker = docker;
     }
+
+    private final DockerClient docker;
 
     @Option(names = {"--timeout"}, description = "Maximum time to wait (e.g. 30s, 2m)", defaultValue = "30s", paramLabel = "<duration>")
     String timeout;
@@ -57,11 +69,10 @@ public class WaitCommand implements Callable<Integer> {
     public Integer call() {
         Printer printer = global.printer();
         long timeoutMillis = Durations.parseDuration(timeout);
-        String effectiveEndpoint = knownEndpoint != null
-                ? knownEndpoint
-                : global.resolvedEndpoint(new DockerClient());
-        FlociHttpClient client = new FlociHttpClient(effectiveEndpoint, profile.controlPrefix());
+        // The deadline starts now, so the container lookup below counts against --timeout too.
         Instant deadline = Instant.now().plusMillis(timeoutMillis);
+        String effectiveEndpoint = knownEndpoint != null ? knownEndpoint : endpointWithin(deadline);
+        FlociHttpClient client = new FlociHttpClient(effectiveEndpoint, profile.controlPrefix());
 
         // Poll soon after a start, then back off; never let a request or a pause run past the
         // deadline, so --timeout is a real upper bound.
@@ -90,7 +101,32 @@ public class WaitCommand implements Callable<Integer> {
         return 1;
     }
 
-    /** 25 ms, 50, 100, 200, 400, then 500 ms between polls: an emulator is often up within
+    // A stalled daemon or an unreachable remote DOCKER_HOST can hold `docker inspect` far longer
+    // than --timeout, so the lookup gets the time left and the configured endpoint is the fallback.
+    private String endpointWithin(Instant deadline) {
+        long remaining = Duration.between(Instant.now(), deadline).toMillis();
+        if (remaining <= 0) return global.endpoint;
+        // A detached virtual thread: a hung lookup is abandoned, not joined, and cannot keep the
+        // JVM alive once wait returns.
+        CompletableFuture<String> resolved = new CompletableFuture<>();
+        Thread.ofVirtual().name("floci-wait-endpoint").start(() -> {
+            try {
+                resolved.complete(global.resolvedEndpoint(docker));
+            } catch (RuntimeException e) {
+                resolved.complete(global.endpoint);
+            }
+        });
+        try {
+            return resolved.get(remaining, TimeUnit.MILLISECONDS);
+        } catch (TimeoutException | ExecutionException e) {
+            return global.endpoint;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return global.endpoint;
+        }
+    }
+
+    /** 25 ms, 50, 200, 400, then 500 ms between polls: an emulator is often up within
      * a few dozen milliseconds of `docker run`, and a refused local poll costs nothing. */
     public static long nextDelay(long previous) {
         return Math.min(previous * 2, MAX_DELAY_MS);

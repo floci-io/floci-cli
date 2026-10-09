@@ -2,16 +2,20 @@ package io.floci.cli.unit;
 
 import com.sun.net.httpserver.HttpServer;
 import io.floci.cli.FlociCli;
+import io.floci.cli.ProductProfile;
 import io.floci.cli.commands.WaitCommand;
 import io.floci.cli.config.ProfileStore;
+import io.floci.cli.docker.DockerClient;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import picocli.CommandLine;
 
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
 import java.net.InetSocketAddress;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -69,6 +73,39 @@ class WaitCommandTimingTest {
             System.setErr(err);
             System.setOut(out);
             server.stop(0);
+        }
+    }
+
+    /** A stalled Docker daemon must not hold wait past --timeout either. */
+    @Test
+    void aHungContainerLookupStillTimesOutOnTime() {
+        DockerClient hung = new DockerClient() {
+            @Override
+            public Optional<ContainerInfo> inspectContainer(String name) {
+                try {
+                    Thread.sleep(5_000);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+                return Optional.empty();
+            }
+        };
+        PrintStream err = System.err;
+        PrintStream out = System.out;
+        System.setErr(new PrintStream(new ByteArrayOutputStream()));
+        System.setOut(new PrintStream(new ByteArrayOutputStream()));
+        try {
+            long start = System.nanoTime();
+            // Port 9 (discard) refuses connections quickly, so only the lookup could stall.
+            int exit = new CommandLine(new WaitCommand(ProductProfile.AWS, hung))
+                    .execute("--timeout", "1s", "--endpoint", "http://127.0.0.1:9");
+            long elapsedMs = (System.nanoTime() - start) / 1_000_000;
+
+            assertEquals(1, exit);
+            assertTrue(elapsedMs < 1_800, "took " + elapsedMs + " ms");
+        } finally {
+            System.setErr(err);
+            System.setOut(out);
         }
     }
 }
