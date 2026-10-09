@@ -6,6 +6,7 @@ import io.floci.cli.commands.RestartCommand;
 import io.floci.cli.config.ProfileStore;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import picocli.CommandLine;
 import picocli.CommandLine.ParseResult;
 
 import java.io.ByteArrayOutputStream;
