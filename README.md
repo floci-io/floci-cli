@@ -241,6 +241,7 @@ Commands are organized into four product groups: `floci aws` (or bare `floci`), 
 | `floci wait` | Poll until Floci is ready (CI-friendly) |
 | `floci version` | Show CLI and server versions |
 | `floci services` | List enabled AWS services |
+| `floci reset` | Delete every resource in the running emulator, keeping it running |
 | `floci doctor` | Run environment diagnostics |
 | `floci env` | Print AWS environment variables |
 | `floci snapshot save/load/list/delete` | Manage state snapshots |
@@ -261,6 +262,7 @@ Bare `floci config ...` always means the AWS tree, whatever the default product;
 | `floci gcp wait` | Poll until Floci GCP is ready (CI-friendly) |
 | `floci gcp version` | Show CLI and server versions |
 | `floci gcp services` | List enabled GCP services |
+| `floci gcp reset` | Delete every resource in the running emulator, keeping it running |
 | `floci gcp doctor` | Run GCP environment diagnostics |
 | `floci gcp env` | Print GCP SDK emulator host variables |
 | `floci gcp snapshot` | Snapshot commands (coming soon) |
@@ -278,6 +280,7 @@ Bare `floci config ...` always means the AWS tree, whatever the default product;
 | `floci az wait` | Poll until Floci Azure is ready (CI-friendly) |
 | `floci az version` | Show CLI and server versions |
 | `floci az services` | List enabled Azure services |
+| `floci az reset` | Delete every resource in the running emulator, keeping it running |
 | `floci az doctor` | Run Azure environment diagnostics |
 | `floci az env` | Print Azure connection string / SDK env vars |
 | `floci az setup` | Point the `az` CLI at the emulator: trust its certificate, register the cloud, log in |
@@ -296,6 +299,7 @@ Bare `floci config ...` always means the AWS tree, whatever the default product;
 | `floci oci wait` | Poll until Floci OCI is ready (CI-friendly) |
 | `floci oci version` | Show CLI and server versions |
 | `floci oci services` | List enabled OCI services |
+| `floci oci reset` | Delete every resource in the running emulator, keeping it running |
 | `floci oci doctor` | Run OCI environment diagnostics |
 | `floci oci env` | Print OCI endpoint variables |
 | `floci oci setup` | Create a local OCI CLI profile (API key + `~/.oci/config`) |
@@ -681,6 +685,18 @@ floci version -o json
 floci services                    # list all enabled services
 floci services -o json
 ```
+
+### `floci reset` / `floci gcp reset` / `floci az reset` / `floci oci reset`
+
+```sh
+floci reset                       # asks first, then deletes every resource; the emulator keeps running
+floci reset --yes                 # no prompt (required when not on a terminal, e.g. in CI)
+floci gcp reset -y -o json
+```
+
+It calls the emulator's `POST <prefix>/state/reset`. The AWS, GCP and OCI emulators serve it; on a
+server without it (currently floci-az) the command says reset is not available and exits 1. Without
+`--yes` and with no terminal to ask on, it exits 2.
 
 ### `floci config`
 

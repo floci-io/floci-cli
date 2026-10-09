@@ -171,6 +171,11 @@ public class FlociHttpClient {
         }
     }
 
+    /** Deletes every resource the emulator holds ({@code POST <prefix>/state/reset}). */
+    public Map<String, Object> resetState() throws FlociException {
+        return postJson(controlPrefix + "/state/reset", "{}");
+    }
+
     public Map<String, Object> postSnapshot(String name) throws FlociException {
         return postJson(controlPrefix + "/snapshots/" + name, "{}");
     }

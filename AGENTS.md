@@ -72,7 +72,7 @@ Commands call `global.printer()` at the start of `call()`; never store a `Printe
 
 **Docker:** `DockerClient` wraps `docker` CLI subprocesses, with no docker-java library. This is a deliberate native-image trade-off. `DockerClient` returns plain records (`ContainerInfo`, `ImageInfo`) and throws `DockerException` on non-zero exit codes.
 
-**Floci server:** `FlociHttpClient` wraps `java.net.http.HttpClient` against the Floci REST API. All methods throw `FlociException`. The control-plane prefix is constructor-configurable: AWS and Azure use `/_floci`, GCP uses `/_floci-gcp`. Known live endpoints: `/_floci/health`, `/_floci/info`, `/_floci/init`, and on floci-az only `/_floci/tls-cert` (`tlsCert()`, the PEM CA; 404 when TLS is off). Snapshot endpoints (`/_floci/snapshots/*`) do not exist on the server yet.
+**Floci server:** `FlociHttpClient` wraps `java.net.http.HttpClient` against the Floci REST API. All methods throw `FlociException`. The control-plane prefix is constructor-configurable: AWS and Azure use `/_floci`, GCP uses `/_floci-gcp`. Known live endpoints: `/_floci/health`, `/_floci/info`, `/_floci/init`, `POST <prefix>/state/reset` (AWS, GCP and OCI; `floci reset`), and on floci-az only `/_floci/tls-cert` (`tlsCert()`, the PEM CA; 404 when TLS is off). Snapshot endpoints (`/_floci/snapshots/*`) do not exist on the server yet.
 
 ### Output pipeline
 
