@@ -90,13 +90,6 @@ curl -fsSL https://floci.io/install.sh | sh
 iwr https://floci.io/install.ps1 | iex
 ```
 
-### Scoop (Windows)
-
-```powershell
-scoop bucket add floci https://github.com/floci-io/scoop-floci
-scoop install floci
-```
-
 ### JVM fallback
 
 Download `floci.jar` from the [latest release](https://github.com/floci-io/floci-cli/releases/latest) and run it (requires **Java 25+**):
@@ -114,7 +107,7 @@ floci update --check   # exit 0: up to date, exit 1: update available
 floci update           # download, verify checksum, replace the binary
 ```
 
-Homebrew and Scoop installs are updated through their package manager (`brew upgrade floci`); `floci update` detects Homebrew-managed binaries and refuses to touch them.
+Homebrew installs are updated through Homebrew (`brew upgrade floci`); `floci update` detects Homebrew-managed binaries and refuses to touch them.
 
 ---
 
