@@ -8,11 +8,11 @@ This file defines repository-specific operating rules for autonomous or semi-aut
 
 ## Project Overview
 
-`floci-cli` is the official command-line interface for [Floci](https://floci.io) — the free, open-source local cloud emulator for AWS, GCP, and Azure. It manages emulator lifecycle (start/stop/status/logs), configuration profiles, diagnostics (`doctor`), and state snapshots.
+`floci-cli` is the official command-line interface for [Floci](https://floci.io), the free, open-source local cloud emulator for AWS, GCP, and Azure. It manages emulator lifecycle (start/stop/status/logs), configuration profiles, diagnostics (`doctor`), and state snapshots.
 
 - Stack: Java 25, Picocli 4.7.x, Jackson (JSON + YAML), JUnit 5
 - Distribution: GraalVM native binaries (linux/amd64, linux/arm64, darwin/amd64, darwin/arm64, windows/amd64) + fat-JAR fallback
-- No frameworks beyond Picocli — plain `java.net.http.HttpClient` and `docker` CLI subprocesses
+- No frameworks beyond Picocli: plain `java.net.http.HttpClient` and `docker` CLI subprocesses
 
 ---
 
@@ -44,15 +44,15 @@ java -jar target/floci.jar <command>
 
 Bare commands (`floci start`) route to the configured default product (`aws` unless changed via `floci config default-product aws|gcp|az|oci`). Explicit product groups are `floci aws` (same classes as the root tree), `floci gcp`, `floci az`, and `floci oci`.
 
-### The unified product tree — CRITICAL
+### The unified product tree (CRITICAL)
 
-There is ONE implementation of every shared command, in `commands/`, parameterized by `ProductProfile` (`io.floci.cli.ProductProfile`) — the single source of per-product config:
+There is ONE implementation of every shared command, in `commands/`, parameterized by `ProductProfile` (`io.floci.cli.ProductProfile`), the single source of per-product config:
 
 | Profile | Default endpoint | Container | Env prefix | Control prefix |
 |---------|------------------|-----------|------------|----------------|
 | `AWS` (root tree) | `http://localhost:4566` | `floci` | `FLOCI_*` | `/_floci` |
 | `GCP` | `http://localhost:4588` | `floci-gcp` | `FLOCI_GCP_*` | `/_floci-gcp` |
-| `AZ` | `http://localhost:4577` | `floci-az` | `FLOCI_AZ_*` | `/_floci` (same as AWS — intentional) |
+| `AZ` | `http://localhost:4577` | `floci-az` | `FLOCI_AZ_*` | `/_floci` (same as AWS, intentional) |
 | `OCI` | `http://localhost:4599` | `floci-oci` | `FLOCI_OCI_*` | `/_floci-oci` |
 
 The `commands/gcp/`, `commands/az/`, and `commands/oci/` leaf classes are **~8-line shims**: `GcpStartCommand extends StartCommand { super(ProductProfile.GCP); }` with their own `@Command` annotation carrying the per-product description. `ProductProfileTest` pins every profile field; `ProductTreesParsingTest` pins each tree's defaults.
@@ -61,15 +61,15 @@ Rules for the unified tree:
 
 - **Every parameterized command pre-initializes its mixin in the constructor**: `this.global = new GlobalOptions(profile)`. Picocli uses a non-null `@Mixin` field instance as-is; a command that forgets gets AWS defaults in every tree (the per-tree parse tests catch this).
 - **Per-product option defaults are constructor-set field values**, not annotation `defaultValue`s (annotation strings are compile-time constants). Use `(default: ${DEFAULT-VALUE})` in the option description to render them in help.
-- **Never subclass a group command** (`GcpCommand`, `*ConfigCommand`, `*SnapshotCommand` groups): picocli registers the `subcommands` arrays of both super and subclass — instant duplicate-name crash. Groups stay standalone registration-only classes.
+- **Never subclass a group command** (`GcpCommand`, `*ConfigCommand`, `*SnapshotCommand` groups): picocli registers the `subcommands` arrays of both super and subclass, an instant duplicate-name crash. Groups stay standalone registration-only classes.
 - Product-varying strings come from the profile: `displayName()` for banners, `commandPrefix()` for hint strings, `envVar("SERVICES")` for container env vars, `controlPrefix()` for `FlociHttpClient`, `serverRepo()` for issue-tracker links.
 - Only `EnvCommand`/`GcpEnvCommand`/`AzEnvCommand`/`OciEnvCommand` are genuinely product-specific (not shims), plus two product-only `setup` commands: `OciSetupCommand` (the OCI CLI/SDKs require a config file + signing key, so `floci oci setup` scaffolds them) and `AzSetupCommand` (the `az` CLI needs a registered cloud, the emulator's CA trusted and a login, so `floci az setup` does that through `io.floci.cli.azcli`). AWS and GCP need no equivalent. `add-command/checklist.sh setup` reports the shared-tree rows as MISSING for these by design.
 
-Commands call `global.printer()` at the start of `call()` — never store a `Printer` as a field.
+Commands call `global.printer()` at the start of `call()`; never store a `Printer` as a field.
 
 ### Two I/O boundaries
 
-**Docker:** `DockerClient` wraps `docker` CLI subprocesses — no docker-java library. This is a deliberate native-image trade-off. `DockerClient` returns plain records (`ContainerInfo`, `ImageInfo`) and throws `DockerException` on non-zero exit codes.
+**Docker:** `DockerClient` wraps `docker` CLI subprocesses, with no docker-java library. This is a deliberate native-image trade-off. `DockerClient` returns plain records (`ContainerInfo`, `ImageInfo`) and throws `DockerException` on non-zero exit codes.
 
 **Floci server:** `FlociHttpClient` wraps `java.net.http.HttpClient` against the Floci REST API. All methods throw `FlociException`. The control-plane prefix is constructor-configurable: AWS and Azure use `/_floci`, GCP uses `/_floci-gcp`. Known live endpoints: `/_floci/health`, `/_floci/info`, `/_floci/init`, and on floci-az only `/_floci/tls-cert` (`tlsCert()`, the PEM CA; 404 when TLS is off). Snapshot endpoints (`/_floci/snapshots/*`) do not exist on the server yet.
 
@@ -91,15 +91,15 @@ if (printer.format() != OutputFormat.text) {
 
 `Check` is a `@FunctionalInterface` taking `(endpoint, container)` and returning `CheckResult`. Order matters: Docker checks run before server checks because later checks depend on Docker being up.
 
-One `DoctorCommand` serves every tree: `dockerChecks(profile)` builds the 9 Docker/server checks (image and control prefix from the profile), and the constructor appends the product's companion list — `AWS_COMPANION_CHECKS` (AWS CLI checks), `AZ_COMPANION_CHECKS` (az CLI checks), empty for GCP/OCI. `DoctorCheckListTest` pins each product's composition and order.
+One `DoctorCommand` serves every tree: `dockerChecks(profile)` builds the 9 Docker/server checks (image and control prefix from the profile), and the constructor appends the product's companion list: `AWS_COMPANION_CHECKS` (AWS CLI checks), `AZ_COMPANION_CHECKS` (az CLI checks), empty for GCP/OCI. `DoctorCheckListTest` pins each product's composition and order.
 
 To add a check: create a class in `doctor/checks/`, then add it to `dockerChecks()` (all products) or the relevant companion list.
 
 ### Config profiles
 
-`ProfileStore` reads/writes YAML files under `~/.floci/profiles/<name>.yaml` via Jackson. `Profile` is a plain bean — keep it `@JsonIgnoreProperties(ignoreUnknown = true)` to stay forward-compatible. The store is shared by all four product trees (no per-product namespacing). `GlobalConfigStore` persists `~/.floci/config.yaml` (currently just `default-product`).
+`ProfileStore` reads/writes YAML files under `~/.floci/profiles/<name>.yaml` via Jackson. `Profile` is a plain bean; keep it `@JsonIgnoreProperties(ignoreUnknown = true)` to stay forward-compatible. The store is shared by all four product trees (no per-product namespacing). `GlobalConfigStore` persists `~/.floci/config.yaml` (currently just `default-product`).
 
-**`--profile` is applied by exactly one class — do not add per-command profile reads.** `ProfileDefaultValueProvider` is a picocli `IDefaultValueProvider` registered once in `FlociCli.buildCommandLine(...)`; picocli propagates it to the whole subcommand tree and consults it *only* for options the user did not pass, *after* that command's arguments have been processed. That yields the documented precedence for free:
+**`--profile` is applied by exactly one class; do not add per-command profile reads.** `ProfileDefaultValueProvider` is a picocli `IDefaultValueProvider` registered once in `FlociCli.buildCommandLine(...)`; picocli propagates it to the whole subcommand tree and consults it *only* for options the user did not pass, *after* that command's arguments have been processed. That yields the documented precedence for free:
 
 ```
 command-line flag  >  --profile <name>  >  FLOCI_* env var  >  product default
@@ -110,11 +110,11 @@ command-line flag  >  --profile <name>  >  FLOCI_* env var  >  product default
 Rules when touching this:
 
 - The field→flag mapping lives in `ProfileDefaults.valueFor` as a pure function, matched on **exact** option names. `--service` (wait/logs/env) is not `--services`; `--profile-name` (`floci oci setup`) is not `--profile`.
-- The provider is called for positionals and for commands with no `GlobalOptions` mixin (`update`, the group commands, the root) — both guards must stay.
+- The provider is called for positionals and for commands with no `GlobalOptions` mixin (`update`, the group commands, the root); both guards must stay.
 - Register it **programmatically**. The annotation form `@Command(defaultValueProvider = ...)` makes picocli instantiate it reflectively and would need a `reflect-config.json` entry.
 - A bad profile throws `ProfileNotFoundException` (a `ParameterException`), which `FlociCli`'s parameter-exception handler renders without a usage dump and exits 2. The provider returns `null` when `-h`/`-V` was requested so `--help` still works.
 - A command that reads the profile back after parsing (`RestartCommand` building its `StartCommand`, `ConfigShowCommand`) gets the parse's provider with `ProfileDefaultValueProvider.of(spec)` (an `@Spec CommandSpec spec` field) and passes it to `StartCommand.resolvedFor`. The provider memoizes the profile it resolved, so this reuses the parse's snapshot; never construct a `ProfileStore` or a second provider in a command.
-- Use `FlociCli.buildCommandLine(ProfileStore)` in tests — `new CommandLine(new FlociCli())` has none of the wiring.
+- Use `FlociCli.buildCommandLine(ProfileStore)` in tests; `new CommandLine(new FlociCli())` has none of the wiring.
 
 ### Multiple instances
 
@@ -136,8 +136,8 @@ An instance is a profile: its container name is its identity, its port is the on
 
 ## Code Style and Good Practices
 
-- **Prefer `record` for data carriers.** Any DTO, value object, or result type that just holds data should be a `record` (like `ContainerInfo`, `ImageInfo`, `CheckResult`, `HealthInfo`) — not a mutable bean with getters/setters. Exception: Jackson-mapped config beans that must stay forward-compatible and field-name-bound for the native image (`Profile`, `GlobalConfig`) may stay as plain beans; if you do make a Jackson-(de)serialized type a record, it still needs a `reflect-config.json` entry.
-- **Prefer constructor injection over field mutation.** Collaborators (`DockerClient`, `FlociHttpClient`, `ProfileStore`, check lists) should be passed through the constructor and stored in `final` fields — see `DoctorCommand(List<Check> companionChecks)` for the pattern. Provide a no-arg constructor with defaults for Picocli, and a parameterized one as the test seam. Exception: Picocli requires non-final fields for `@Option`, `@Parameters`, and `@Mixin` — that is framework-mandated and fine.
+- **Prefer `record` for data carriers.** Any DTO, value object, or result type that just holds data should be a `record` (like `ContainerInfo`, `ImageInfo`, `CheckResult`, `HealthInfo`), not a mutable bean with getters/setters. Exception: Jackson-mapped config beans that must stay forward-compatible and field-name-bound for the native image (`Profile`, `GlobalConfig`) may stay as plain beans; if you do make a Jackson-(de)serialized type a record, it still needs a `reflect-config.json` entry.
+- **Prefer constructor injection over field mutation.** Collaborators (`DockerClient`, `FlociHttpClient`, `ProfileStore`, check lists) should be passed through the constructor and stored in `final` fields; see `DoctorCommand(List<Check> companionChecks)` for the pattern. Provide a no-arg constructor with defaults for Picocli, and a parameterized one as the test seam. Exception: Picocli requires non-final fields for `@Option`, `@Parameters`, and `@Mixin`; that is framework-mandated and fine.
 - **Import classes; don't fully-qualify inline.** Add an `import` and use the simple name instead of writing `io.floci.cli.output.Printer` (or `java.util.List`, etc.) inline in signatures and bodies. Avoid wildcard imports except the existing `picocli.CommandLine.*` convention.
 - Keep fields `final` wherever possible; prefer immutable collections (`List.of`, `List.copyOf`) over mutable ones exposed outside a method.
 
@@ -146,8 +146,8 @@ An instance is a profile: its container name is its identity, its port is the on
 ## Native Image Constraints
 
 - **No new reflection-heavy dependencies.** If adding a library, verify it works under `--no-fallback`.
-- **New Jackson DTOs** (anything `ObjectMapper` serializes/deserializes by field name) must be added to `src/main/resources/META-INF/native-image/io.floci/floci-cli/reflect-config.json`. Prefer passing `Map`/`JsonNode` to `printer.structured(...)` — those need no registration.
-- **`@Command` classes** do not need manual reflect-config entries — `picocli-codegen` (the annotation processor in `pom.xml`) generates them automatically at compile time.
+- **New Jackson DTOs** (anything `ObjectMapper` serializes/deserializes by field name) must be added to `src/main/resources/META-INF/native-image/io.floci/floci-cli/reflect-config.json`. Prefer passing `Map`/`JsonNode` to `printer.structured(...)`; those need no registration.
+- **`@Command` classes** do not need manual reflect-config entries: `picocli-codegen` (the annotation processor in `pom.xml`) generates them automatically at compile time.
 - **Do not remove** `--enable-url-protocols=http,https` from `native-image.properties`; `java.net.http.HttpClient` requires it.
 - The native profile builds with `-Os` (about 17% smaller with GraalVM Community, about 35% with Oracle GraalVM, for about 10 ms more startup). `ci.yml` fails the native job when the linux/arm64 binary exceeds `NATIVE_SIZE_BUDGET_MB`; raise the budget deliberately in the PR that needs the room, and say why.
 
@@ -157,8 +157,8 @@ An instance is a profile: its container name is its identity, its port is the on
 
 - **No cloud resource commands.** This CLI manages Floci itself (lifecycle, config, diagnostics, state). Resource operations belong to the vendor CLIs pointed at the emulator: `aws` + `AWS_ENDPOINT_URL`, `gcloud`/SDK emulator-host vars, `az` + connection string.
 - **No telemetry, no TUI, no Floci Cloud commands.**
-- **Self-update is in scope** (`floci update`) — but it must never auto-run; updates happen only on explicit user invocation.
-- **Snapshot commands:** the AWS `save/load/list/delete` call `/_floci/snapshots/*` and degrade gracefully (404/501 → "not available"); `export/import` and the entire GCP/Azure/OCI snapshot subtrees are stubs pending server-side endpoints in `floci-io/floci`, `floci-io/floci-gcp`, `floci-io/floci-az`, and `floci-io/floci-oci`. Do not invent client-side snapshot behavior — the server API contract comes first.
+- **Self-update is in scope** (`floci update`), but it must never auto-run; updates happen only on explicit user invocation.
+- **Snapshot commands:** the AWS `save/load/list/delete` call `/_floci/snapshots/*` and degrade gracefully (404/501 → "not available"); `export/import` and the entire GCP/Azure/OCI snapshot subtrees are stubs pending server-side endpoints in `floci-io/floci`, `floci-io/floci-gcp`, `floci-io/floci-az`, and `floci-io/floci-oci`. Do not invent client-side snapshot behavior: the server API contract comes first.
 
 ---
 
@@ -175,5 +175,7 @@ printer.error("Container 'floci' not found.\nRun 'floci start' to launch one.");
 ## Documentation Rules
 
 - `README.md` documents all four product trees (AWS, GCP, Azure, OCI). If you add/change a command or flag, update the README in the same change.
-- `CHANGELOG.md` is generated by semantic-release from Conventional Commit messages — **never edit it by hand**. A `feat`, `fix` or `perf` subject (or a breaking change) becomes a release note verbatim, so write those from the user's point of view: what was broken or what is new, not how it was implemented. The other accepted types (`docs`, `chore`, `refactor`, `test`, `build`, `ci`) pass CI but produce no release and no entry. `changelog-guard.yml` fails any PR that touches the file; genuine corrections to history need the `changelog-edit` label.
+- The README header (logo, tagline, badges, nav row), the `The Floci emulators` table and the closing Testcontainers / Community / License / trademark footer follow the Floci family pattern, with `floci-io/testcontainers-floci`'s README as the reference. Keep them in step with it rather than restyling them here.
+- `CHANGELOG.md` is generated by semantic-release from Conventional Commit messages; **never edit it by hand**. A `feat`, `fix` or `perf` subject (or a breaking change) becomes a release note verbatim, so write those from the user's point of view: what was broken or what is new, not how it was implemented. The other accepted types (`docs`, `chore`, `refactor`, `test`, `build`, `ci`) pass CI but produce no release and no entry. `changelog-guard.yml` fails any PR that touches the file; genuine corrections to history need the `changelog-edit` label.
+- **No em or en dashes** (U+2014, U+2013) in tracked Markdown or in issue and PR text: use a colon, semicolon, comma, parentheses or a new sentence instead. `CHANGELOG.md` is exempt (generated from commit subjects).
 - `CLAUDE.md` is gitignored (maintainer-local); this file (`AGENTS.md`) is the tracked source of truth for agent guidance. Update it here.
