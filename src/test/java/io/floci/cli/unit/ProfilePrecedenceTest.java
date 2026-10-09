@@ -1,6 +1,7 @@
 package io.floci.cli.unit;
 
 import io.floci.cli.FlociCli;
+import io.floci.cli.GlobalOptions;
 import io.floci.cli.ProductProfile;
 import io.floci.cli.commands.StartCommand;
 import io.floci.cli.config.ProfileDefaultValueProvider;
@@ -8,12 +9,15 @@ import io.floci.cli.config.ProfileStore;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import picocli.CommandLine;
+import picocli.CommandLine.Command;
+import picocli.CommandLine.Mixin;
 import picocli.CommandLine.Model.CommandSpec;
 import picocli.CommandLine.ParseResult;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -165,5 +169,41 @@ class ProfilePrecedenceTest {
         writeProfile("interp", "persistDir: ${env:HOME}/floci-data\n");
         assertEquals(System.getenv("HOME") + "/floci-data",
                 leafSpec("start", "--profile", "interp").findOption("--persist").getValue());
+    }
+
+    /** A command with the real GlobalOptions mixin, but environment variables from a map. */
+    @Command(name = "probe")
+    static class EnvProbe implements Runnable {
+        @Mixin
+        GlobalOptions global;
+
+        EnvProbe(Map<String, String> env) {
+            this.global = new GlobalOptions(ProductProfile.AWS, env::get);
+        }
+
+        @Override
+        public void run() {}
+    }
+
+    private String containerWith(Map<String, String> env, String... args) {
+        EnvProbe probe = new EnvProbe(env);
+        new CommandLine(probe)
+                .setDefaultValueProvider(new ProfileDefaultValueProvider(new ProfileStore(tempDir)))
+                .parseArgs(args);
+        return probe.global.container;
+    }
+
+    /** BL-012: flag > --profile > FLOCI_* env var > product default, every rung pinned. */
+    @Test
+    void theProfileBeatsTheEnvironmentAndTheFlagBeatsBoth() throws Exception {
+        writeProfile("named", "container: from-profile\n");
+        writeProfile("silent", "port: 4599\n");
+        Map<String, String> env = Map.of("FLOCI_CONTAINER", "from-env");
+
+        assertEquals("floci", containerWith(Map.of()));
+        assertEquals("from-env", containerWith(env));
+        assertEquals("from-profile", containerWith(env, "--profile", "named"));
+        assertEquals("from-env", containerWith(env, "--profile", "silent"));
+        assertEquals("from-flag", containerWith(env, "--profile", "named", "--container", "from-flag"));
     }
 }

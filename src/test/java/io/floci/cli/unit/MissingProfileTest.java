@@ -106,6 +106,25 @@ class MissingProfileTest {
         assertEquals(1, err.split("Warning").length - 1, err);
     }
 
+    /** BL-017: -V takes the same bail-out as --help, so a bad profile cannot break it. */
+    @Test
+    void versionStillWorksWithABadProfile() {
+        int[] exit = new int[1];
+        captureStderr(() -> cli().execute("start", "--profile", "typo", "-V"), exit);
+
+        assertEquals(0, exit[0]);
+    }
+
+    /** BL-017: config show used to warn and exit 0 for a missing profile; it exits 2 like every command. */
+    @Test
+    void configShowWithAMissingProfileExitsTwo() {
+        int[] exit = new int[1];
+        String err = captureStderr(() -> cli().execute("config", "show", "--profile", "missing"), exit);
+
+        assertEquals(2, exit[0]);
+        assertTrue(err.contains("Profile 'missing' not found"), err);
+    }
+
     @Test
     void helpStillWorksWithABadProfile() {
         int[] exit = new int[1];

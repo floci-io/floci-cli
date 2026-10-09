@@ -1,5 +1,6 @@
 package io.floci.cli.unit;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.floci.cli.FlociCli;
 import io.floci.cli.ProductProfile;
 import io.floci.cli.commands.config.ConfigProfileCommand;
@@ -351,5 +352,45 @@ class ConfigCommandsTest {
         }
 
         assertEquals(1, errBuf.toString().split("'persist_dir'", -1).length - 1, errBuf.toString());
+    }
+
+    private static String plain(String s) {
+        return s.replaceAll("\u001B\\[[;\\d]*m", "").replace("\r\n", "\n");
+    }
+
+    private static List<String> jsonKeys(String json) throws IOException {
+        List<String> keys = new ArrayList<>();
+        new ObjectMapper().readTree(json).fieldNames().forEachRemaining(keys::add);
+        return keys;
+    }
+
+    /** BL-016: the text output is a user-facing surface, so its lines are pinned. */
+    @Test
+    void textOutputWithoutAProfile() {
+        assertEquals("""
+                Active Configuration (Floci GCP)
+
+                  Profile:    default
+                  Endpoint:   http://localhost:4588
+                  Container:  floci-gcp
+                  Output:     text
+                """, plain(runShow(ProductProfile.GCP)));
+    }
+
+    /** BL-016: the -o json key set is a contract; start settings appear only when the profile sets them. */
+    @Test
+    void jsonKeySetGrowsOnlyWithTheStartSettingsTheProfileDeclares() throws Exception {
+        List<String> base = List.of("profile", "endpoint", "container", "output");
+        assertEquals(base, jsonKeys(runShow(ProductProfile.AWS, "-o", "json")));
+
+        writeProfile("full", "image: floci/floci:x\nport: 4599\npersistDir: /d\nservices: s3\n");
+        List<String> full = new ArrayList<>(base);
+        full.addAll(List.of("image", "port", "persistDir", "services"));
+        assertEquals(full, jsonKeys(runShow(ProductProfile.AWS, "--profile", "full", "-o", "json")));
+
+        writeProfile("partial", "port: 4599\n");
+        List<String> partial = new ArrayList<>(base);
+        partial.add("port");
+        assertEquals(partial, jsonKeys(runShow(ProductProfile.AWS, "--profile", "partial", "-o", "json")));
     }
 }
