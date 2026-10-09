@@ -25,4 +25,13 @@ public final class ShellExport {
             default                   -> "export " + key + "='" + value.replace("'", "'\\''") + "'";
         };
     }
+
+    /** Renders the line that removes {@code key} from the environment in the given shell. */
+    public static String formatUnset(String shell, String key) {
+        return switch (shell.toLowerCase()) {
+            case "fish"               -> "set -e " + key;
+            case "powershell", "ps1"  -> "Remove-Item Env:" + key + " -ErrorAction SilentlyContinue";
+            default                   -> "unset " + key;
+        };
+    }
 }

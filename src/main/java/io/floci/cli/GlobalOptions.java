@@ -4,10 +4,13 @@ import io.floci.cli.docker.DockerClient;
 import io.floci.cli.output.Ansi;
 import io.floci.cli.output.OutputFormat;
 import io.floci.cli.output.Printer;
+import picocli.CommandLine.Model.CommandSpec;
 import picocli.CommandLine.Option;
+import picocli.CommandLine.Spec;
 
 import java.net.URI;
 import java.util.function.UnaryOperator;
+import java.util.regex.Pattern;
 
 /**
  * Shared global options for every product tree, parameterized by {@link ProductProfile}.
@@ -23,6 +26,13 @@ import java.util.function.UnaryOperator;
  * gets AWS defaults — covered by the per-tree parse tests.
  */
 public class GlobalOptions {
+
+    // The command this mixin belongs to, so hints can tell which flags were actually typed.
+    // Null for commands built by hand (restart's start), which were never parsed.
+    @Spec(Spec.Target.MIXEE)
+    CommandSpec mixee;
+
+    private static final Pattern PLAIN_WORD = Pattern.compile("[A-Za-z0-9._@%+=:,/-]+");
 
     public final ProductProfile product;
 
@@ -75,6 +85,37 @@ public class GlobalOptions {
     private static String envOr(UnaryOperator<String> env, String var, String fallback) {
         String value = env.apply(var);
         return value != null ? value : fallback;
+    }
+
+    /**
+     * The flags that select this instance again in a hint string: {@code " --profile x"} when a
+     * profile was used (plus {@code " --container y"} when that was typed too, since it overrides
+     * the profile's container), {@code " --container y"} for a non-default container, else
+     * empty. Values are shell-quoted, because hints are meant to be pasted.
+     */
+    public String instanceSelector() {
+        if (profile != null) {
+            String selector = " --profile " + shellWord(profile);
+            return typed("--container") ? selector + " --container " + shellWord(container) : selector;
+        }
+        if (!product.defaultContainer().equals(container)) return " --container " + shellWord(container);
+        return "";
+    }
+
+    private boolean typed(String option) {
+        try {
+            return mixee != null && mixee.commandLine() != null
+                    && mixee.commandLine().getParseResult() != null
+                    && mixee.commandLine().getParseResult().hasMatchedOption(option);
+        } catch (RuntimeException e) {
+            return false;
+        }
+    }
+
+    // POSIX single quotes: the hints are shell command lines like the CLI's other 'Run ...' hints.
+    private static String shellWord(String value) {
+        if (PLAIN_WORD.matcher(value).matches()) return value;
+        return "'" + value.replace("'", "'\\''") + "'";
     }
 
     public Printer printer() {

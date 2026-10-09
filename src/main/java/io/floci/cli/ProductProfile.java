@@ -1,5 +1,7 @@
 package io.floci.cli;
 
+import java.util.Map;
+
 /**
  * The single source of per-product configuration for the unified command tree.
  * Every value that differs between the AWS, GCP, Azure, and OCI emulators lives here;
@@ -12,7 +14,8 @@ public record ProductProfile(
         String defaultContainer,
         int defaultPort,
         String envPrefix,        // FLOCI | FLOCI_GCP | FLOCI_AZ | FLOCI_OCI
-        String controlPrefix     // control-plane path prefix on the server
+        String controlPrefix,    // control-plane path prefix on the server
+        Map<String, String> startEnv  // extra container env on 'start', keyed by envVar suffix
 ) {
 
     public String defaultEndpoint() {
@@ -39,16 +42,19 @@ public record ProductProfile(
     }
 
     public static final ProductProfile AWS = new ProductProfile(
-            "aws", "Floci AWS", "floci/floci", "floci", 4566, "FLOCI", "/_floci");
+            "aws", "Floci AWS", "floci/floci", "floci", 4566, "FLOCI", "/_floci", Map.of());
 
     public static final ProductProfile GCP = new ProductProfile(
-            "gcp", "Floci GCP", "floci/floci-gcp", "floci-gcp", 4588, "FLOCI_GCP", "/_floci-gcp");
+            "gcp", "Floci GCP", "floci/floci-gcp", "floci-gcp", 4588, "FLOCI_GCP", "/_floci-gcp", Map.of());
 
     // AZ intentionally shares the AWS control prefix /_floci — the floci-az server
     // exposes /_floci/*, NOT /_floci-az. Do not "fix" this to match the name.
+    // TLS is always on: the az CLI's MSAL refuses an HTTP authority, so 'floci az setup' needs
+    // HTTPS. floci-az serves HTTP and HTTPS on the same port, so HTTP clients are unaffected.
     public static final ProductProfile AZ = new ProductProfile(
-            "az", "Floci Azure", "floci/floci-az", "floci-az", 4577, "FLOCI_AZ", "/_floci");
+            "az", "Floci Azure", "floci/floci-az", "floci-az", 4577, "FLOCI_AZ", "/_floci",
+            Map.of("TLS_ENABLED", "true"));
 
     public static final ProductProfile OCI = new ProductProfile(
-            "oci", "Floci OCI", "floci/floci-oci", "floci-oci", 4599, "FLOCI_OCI", "/_floci-oci");
+            "oci", "Floci OCI", "floci/floci-oci", "floci-oci", 4599, "FLOCI_OCI", "/_floci-oci", Map.of());
 }

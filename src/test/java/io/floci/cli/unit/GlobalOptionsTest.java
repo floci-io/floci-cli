@@ -1,9 +1,14 @@
 package io.floci.cli.unit;
 
+import io.floci.cli.FlociCli;
 import io.floci.cli.GlobalOptions;
 import io.floci.cli.ProductProfile;
+import io.floci.cli.config.ProfileStore;
 import org.junit.jupiter.api.Test;
+import picocli.CommandLine.ParseResult;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Map;
 import java.util.function.UnaryOperator;
 
@@ -75,5 +80,40 @@ class GlobalOptionsTest {
                 gcp.endpointFromPorts("9999->4588/tcp", "http://localhost:4588"));
         assertEquals("http://localhost:4588",
                 gcp.endpointFromPorts("9999->1111/tcp", "http://localhost:4588"));
+    }
+
+    @Test
+    void instanceSelectorNamesTheProfileOrANonDefaultContainer() {
+        GlobalOptions az = new GlobalOptions(ProductProfile.AZ, env(Map.of()));
+        assertEquals("", az.instanceSelector());
+
+        az.container = "floci-az-b";
+        assertEquals(" --container floci-az-b", az.instanceSelector());
+
+        az.profile = "team-b";
+        assertEquals(" --profile team-b", az.instanceSelector());
+    }
+
+    /** Hints are pasted into a shell: a profile name with a space must survive as one word. */
+    @Test
+    void instanceSelectorQuotesNamesThatAreNotPlainWords() throws Exception {
+        Path store = Files.createTempDirectory("floci-profiles");
+        Files.writeString(store.resolve("team alpha.yaml"), "container: floci-az-a\n");
+
+        GlobalOptions quoted = azOptions(store, "--profile", "team alpha");
+        assertEquals(" --profile 'team alpha'", quoted.instanceSelector());
+
+        GlobalOptions withContainer = azOptions(store, "--profile", "team alpha", "--container", "floci-az-b");
+        assertEquals(" --profile 'team alpha' --container floci-az-b", withContainer.instanceSelector());
+    }
+
+    private static GlobalOptions azOptions(Path store, String... flags) {
+        String[] args = new String[flags.length + 2];
+        args[0] = "az";
+        args[1] = "env";
+        System.arraycopy(flags, 0, args, 2, flags.length);
+        ParseResult r = FlociCli.buildCommandLine(new ProfileStore(store)).parseArgs(args);
+        while (r.hasSubcommand()) r = r.subcommand();
+        return (GlobalOptions) r.commandSpec().mixins().get("global").userObject();
     }
 }

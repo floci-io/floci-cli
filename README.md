@@ -15,8 +15,10 @@ gcloud storage buckets create gs://my-bucket
 
 # Azure
 floci az start
+floci az setup
 eval $(floci az env)
 az storage container create --name mycontainer
+az group create -n my-rg -l westeurope
 
 # OCI
 floci oci start
@@ -127,12 +129,16 @@ floci az start
 # Check environment
 floci az doctor
 
-# Export Azure connection string
+# Point the az CLI at the emulator (certificate, cloud, login)
+floci az setup
+
+# Export the connection string and the az CLI config
 eval $(floci az env)
 
 # Use Azure services
 az storage container create --name mycontainer
 az storage blob upload --container-name mycontainer --name hello.txt --data "hello"
+az group create -n my-rg -l westeurope
 
 # Stop Floci Azure
 floci az stop
@@ -237,6 +243,7 @@ Commands are organized into four product groups — `floci aws` (or bare `floci`
 | `floci az services` | List enabled Azure services |
 | `floci az doctor` | Run Azure environment diagnostics |
 | `floci az env` | Print Azure connection string / SDK env vars |
+| `floci az setup` | Point the `az` CLI at the emulator: trust its certificate, register the cloud, log in |
 | `floci az snapshot` | Snapshot commands (coming soon) |
 
 ### OCI commands (`floci oci`)
@@ -480,6 +487,59 @@ floci az env -o json                                # structured output
 | `AZURE_FUNCTIONS_ENDPOINT` | `http://localhost.floci.io:<port>/devstoreaccount1-functions` |
 | `AZURE_APP_CONFIGURATION_ENDPOINT` | `http://localhost.floci.io:<port>/devstoreaccount1-appconfig` |
 | `AZURE_KEY_VAULT_ENDPOINT` | `http://localhost.floci.io:<port>/devstoreaccount1-keyvault` |
+
+**After `floci az setup`**, both modes also export:
+
+| Variable | Value |
+|----------|-------|
+| `AZURE_CONFIG_DIR` | `~/.floci/az/<container>/azure-config`, the instance's isolated az config; after `--global` it is unset instead, so a value left by another instance's `eval` does not linger |
+| `REQUESTS_CA_BUNDLE` | `~/.floci/az/<container>/ca-bundle.pem`, the public roots plus that instance's certificate |
+
+If the instance's certificate changed since setup (a container recreated without `--persist`),
+`floci az env` warns on stderr and tells you to re-run `floci az setup`.
+
+### `floci az setup`
+
+`az group create`, `az login` and every other control-plane command go to public Azure
+unless the `az` CLI is told otherwise. `floci az setup` does it in one step:
+
+1. fetches the emulator's CA certificate from `/_floci/tls-cert` and writes a CA bundle
+   (the JDK's public roots plus that certificate);
+2. registers (or updates) an az cloud named after the container (`floci-az` by default) whose ARM and Entra endpoints point at
+   `https://localhost:<port>`, and makes it the active cloud;
+3. turns off `core.instance_discovery`, which otherwise fails the login with `invalid_instance`;
+4. logs in as a service principal with the dev identity (tenant
+   `00000000-0000-0000-0000-000000000002`, subscription `00000000-0000-0000-0000-000000000001`).
+
+Everything is kept per instance, in `~/.floci/az/<container>/`, so instances started from
+different profiles never share a certificate, cloud or login (see
+[Running several instances side by side](#running-several-instances-side-by-side)). By default the
+az config itself is isolated there too and `~/.azure` is left untouched; `eval $(floci az env)`
+then points `az` at it in the current shell only. `--global` writes to your default az config
+instead, and removes that instance's earlier isolated config. Re-running is safe: the cloud is updated, not registered twice.
+
+The az CLI only logs in over HTTPS, so `floci az start` always starts Floci Azure with
+`FLOCI_AZ_TLS_ENABLED=true` (HTTP keeps working on the same port). A container started by an
+older floci has TLS off; run `floci az restart` once.
+
+```sh
+floci az setup                          # isolated config under ~/.floci/az/floci-az
+eval $(floci az env)                    # AZURE_CONFIG_DIR + REQUESTS_CA_BUNDLE + connection string
+az group create -n my-rg -l westeurope
+
+floci az setup --profile team-b         # a second instance: ~/.floci/az/<its container>
+eval $(floci az env --profile team-b)
+
+floci az setup --global                 # use your default az config (~/.azure)
+eval $(floci az env)                    # REQUESTS_CA_BUNDLE, and clears a stale AZURE_CONFIG_DIR
+
+floci az setup --reset                  # delete the isolated config
+floci az setup --reset --global         # switch the default az config back to AzureCloud
+floci az setup -o json                  # structured output
+```
+
+Requires the `az` CLI on your `PATH`. `--tenant`, `--subscription`, `--client-id` and
+`--client-secret` override the dev identity; Floci Azure never checks the secret.
 
 ### `floci oci env`
 
