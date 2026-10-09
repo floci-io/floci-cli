@@ -39,5 +39,7 @@ class FlociCliParsingTest {
         assertFalse(FlociCli.colorDisabled(new String[]{"start", "--profile", "typo"}, false, true));
         assertTrue(FlociCli.colorDisabled(new String[]{"start"}, true, true));
         assertTrue(FlociCli.colorDisabled(new String[]{"start"}, false, false));
+        assertTrue(FlociCli.colorDisabled(new String[]{"start", "--no-color=true"}, false, true));
+        assertFalse(FlociCli.colorDisabled(new String[]{"start", "--no-color=false"}, false, true));
     }
 }

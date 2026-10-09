@@ -199,5 +199,9 @@ class StartCommandArgsTest {
         // BL-015: only the port changes.
         assertEquals("http://user:pw@floci.internal:4599/base?x=1#f",
                 StartCommand.withPort("http://user:pw@floci.internal:4566/base?x=1#f", 4599));
+        // Escaped characters stay escaped: %26 must not turn into a second query parameter.
+        assertEquals("http://floci.internal:4599/b?token=a%26b",
+                StartCommand.withPort("http://floci.internal:4566/b?token=a%26b", 4599));
+        assertEquals("http://[::1]:4599", StartCommand.withPort("http://[::1]:4566", 4599));
     }
 }

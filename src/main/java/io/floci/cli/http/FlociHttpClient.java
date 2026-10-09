@@ -22,6 +22,7 @@ public class FlociHttpClient {
     public static final String DEFAULT_CONTROL_PREFIX = "/_floci";
 
     private final String endpoint;
+    private final String query;
     private final String controlPrefix;
     private final HttpClient http;
 
@@ -34,7 +35,14 @@ public class FlociHttpClient {
      *                      (e.g. {@code /_floci} for AWS/Azure, {@code /_floci-gcp} for GCP).
      */
     public FlociHttpClient(String endpoint, String controlPrefix) {
-        this.endpoint = endpoint.endsWith("/") ? endpoint.substring(0, endpoint.length() - 1) : endpoint;
+        // Request paths go before an endpoint's query: http://h:1/?x=1 + /health is http://h:1/health?x=1.
+        // A fragment is never sent, so it is dropped.
+        int fragment = endpoint.indexOf('#');
+        String base = fragment >= 0 ? endpoint.substring(0, fragment) : endpoint;
+        int query = base.indexOf('?');
+        this.query = query >= 0 ? base.substring(query) : "";
+        base = query >= 0 ? base.substring(0, query) : base;
+        this.endpoint = base.endsWith("/") ? base.substring(0, base.length() - 1) : base;
         this.controlPrefix = controlPrefix.endsWith("/")
                 ? controlPrefix.substring(0, controlPrefix.length() - 1)
                 : controlPrefix;
@@ -98,7 +106,7 @@ public class FlociHttpClient {
     public boolean isReachable() {
         try {
             HttpRequest req = HttpRequest.newBuilder()
-                    .uri(URI.create(endpoint + controlPrefix + "/health"))
+                    .uri(url(controlPrefix + "/health"))
                     .timeout(Duration.ofSeconds(3))
                     .GET()
                     .build();
@@ -117,7 +125,7 @@ public class FlociHttpClient {
         String path = controlPrefix + "/tls-cert";
         try {
             HttpRequest req = HttpRequest.newBuilder()
-                    .uri(URI.create(endpoint + path))
+                    .uri(url(path))
                     .timeout(Duration.ofSeconds(10))
                     .GET()
                     .build();
@@ -169,7 +177,7 @@ public class FlociHttpClient {
     private JsonNode getJson(String path, Duration timeout) throws FlociException {
         try {
             HttpRequest req = HttpRequest.newBuilder()
-                    .uri(URI.create(endpoint + path))
+                    .uri(url(path))
                     .timeout(timeout)
                     .header("Accept", "application/json")
                     .GET()
@@ -192,7 +200,7 @@ public class FlociHttpClient {
     private Map<String, Object> postJson(String path, String body) throws FlociException {
         try {
             HttpRequest req = HttpRequest.newBuilder()
-                    .uri(URI.create(endpoint + path))
+                    .uri(url(path))
                     .timeout(Duration.ofSeconds(30))
                     .header("Content-Type", "application/json")
                     .POST(HttpRequest.BodyPublishers.ofString(body))
@@ -215,7 +223,7 @@ public class FlociHttpClient {
     private void deleteRequest(String path) throws FlociException {
         try {
             HttpRequest req = HttpRequest.newBuilder()
-                    .uri(URI.create(endpoint + path))
+                    .uri(url(path))
                     .timeout(Duration.ofSeconds(10))
                     .DELETE()
                     .build();
@@ -233,4 +241,8 @@ public class FlociHttpClient {
     public record HealthInfo(String version, String edition, String[] services) {}
     public record ServerInfo(String version, String edition) {}
     public record InitState(boolean boot, boolean start, boolean ready, boolean shutdown) {}
+
+    private URI url(String path) {
+        return URI.create(endpoint + path + query);
+    }
 }

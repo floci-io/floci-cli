@@ -154,7 +154,8 @@ public class FlociCli implements Runnable {
      * exception handlers before any command, and so any printer, exists.
      */
     public static boolean colorDisabled(String[] args, boolean noColorEnv, boolean interactive) {
-        return noColorEnv || !interactive || Arrays.asList(args).contains("--no-color");
+        return noColorEnv || !interactive || Arrays.stream(args)
+                .anyMatch(a -> a.equals("--no-color") || a.equalsIgnoreCase("--no-color=true"));
     }
 
     // Returns true when routing should NOT apply: explicit product subgroup,
