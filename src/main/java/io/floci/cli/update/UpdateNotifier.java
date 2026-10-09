@@ -85,7 +85,15 @@ public final class UpdateNotifier {
                 JSON.writeValue(path.toFile(),
                         new UpdateCache(Instant.now().getEpochSecond(), latest));
             } catch (Exception _) {
-                // Network/parse failure — never surfaced; the stale/absent cache stays as-is.
+                // Network/parse failure, never surfaced. Record the attempt anyway (keeping the
+                // last known version), or every interactive run would retry and wait at exit.
+                try {
+                    Path path = cachePath();
+                    Files.createDirectories(path.getParent());
+                    JSON.writeValue(path.toFile(), new UpdateCache(Instant.now().getEpochSecond(),
+                            cache.map(UpdateCache::latestVersion).orElse(null)));
+                } catch (Exception ignored) {
+                }
             }
         }));
     }
