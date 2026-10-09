@@ -1,0 +1,38 @@
+name: Integration
+
+# Drives the CLI against the real emulator images (start, wait, status, env, stop for each product,
+# and two instances side by side). It pulls four images, so it runs on main and on demand rather
+# than on every pull request.
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  integration:
+    name: CLI against the emulator images
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '25'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Pull emulator images
+        run: |
+          for image in floci/floci floci/floci-gcp floci/floci-az floci/floci-oci; do
+            docker pull "$image:latest"
+          done
+
+      - name: Run integration tests
+        run: mvn test -Pintegration -B

@@ -23,6 +23,7 @@ mvn compile                          # compile only
 mvn test                             # run all unit tests
 mvn test -Dtest=WaitCommandParseTest # run a single test class
 mvn test -Dtest=DockerVersionCheckTest#testVersionParsing  # run a single test method
+mvn test -Pintegration               # integration suite: the CLI against real emulator images (needs Docker)
 mvn package                          # compile + test + produce target/floci.jar (fat JAR)
 mvn package -DskipTests              # skip tests
 mvn package -Pnative -DskipTests     # build native binary → target/floci  (requires GraalVM)
