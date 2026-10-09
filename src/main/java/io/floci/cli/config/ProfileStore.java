@@ -64,15 +64,11 @@ public class ProfileStore {
         List<Profile> profiles = new ArrayList<>();
         try (var stream = Files.list(profilesDir)) {
             stream.filter(p -> p.toString().endsWith(".yaml") || p.toString().endsWith(".yml"))
+                    // A file no command can address (".yaml" has an empty name) is not a profile.
+                    .filter(p -> isUsableName(nameOf(p)))
                     .forEach(p -> {
                         try {
-                            Profile profile = YAML.readValue(p.toFile(), Profile.class);
-                            // Hand-written files often omit 'name:'; the file name is the name.
-                            if (profile.name == null || profile.name.isBlank()) {
-                                String file = p.getFileName().toString();
-                                profile.name = file.substring(0, file.lastIndexOf('.'));
-                            }
-                            profiles.add(profile);
+                            profiles.add(read(p));
                         } catch (IOException ignored) {}
                     });
         }
@@ -80,9 +76,33 @@ public class ProfileStore {
     }
 
     public Optional<Profile> get(String name) throws IOException {
-        Path file = existingProfileFile(name);
+        Path file = existingFile(name);
         if (!Files.exists(file)) return Optional.empty();
-        return Optional.of(YAML.readValue(file.toFile(), Profile.class));
+        return Optional.of(read(file));
+    }
+
+    // The one read path, so list and show agree on a profile's name.
+    private static Profile read(Path file) throws IOException {
+        Profile profile = YAML.readValue(file.toFile(), Profile.class);
+        // Hand-written files often omit 'name:'; the file name is the name.
+        if (profile.name == null || profile.name.isBlank()) {
+            profile.name = nameOf(file);
+        }
+        return profile;
+    }
+
+    private static boolean isUsableName(String name) {
+        try {
+            validateName(name);
+            return true;
+        } catch (IllegalArgumentException e) {
+            return false;
+        }
+    }
+
+    private static String nameOf(Path file) {
+        String fileName = file.getFileName().toString();
+        return fileName.substring(0, fileName.lastIndexOf('.'));
     }
 
     public void save(Profile profile) throws IOException {
@@ -90,43 +110,59 @@ public class ProfileStore {
         YAML.writeValue(profileFile(profile.name).toFile(), profile);
     }
 
-    public boolean delete(String name) throws IOException {
-        Path file = existingProfileFile(name);
-        return Files.deleteIfExists(file);
+    /**
+     * Deletes every spelling of {@code name}. Removing only the one reads prefer would leave the
+     * other answering {@code --profile} after a delete that reported success.
+     *
+     * @return the files removed: 0 when the profile did not exist
+     */
+    public List<Path> delete(String name) throws IOException {
+        List<Path> removed = new ArrayList<>();
+        for (Path file : List.of(profileFile(name), resolveInProfilesDir(validateName(name), ".yml"))) {
+            if (Files.deleteIfExists(file)) removed.add(file);
+        }
+        return removed;
     }
 
     /** Where {@link #save} writes {@code name}. Always {@code .yaml}. */
     public Path profileFile(String name) {
-        return resolveInProfilesDir(validateName(name) + ".yaml");
+        return resolveInProfilesDir(validateName(name), ".yaml");
     }
 
     // The traversal guarantee: whatever the name looks like, the file it resolves to must sit
     // directly in profilesDir. Also the place a name that is illegal on this platform but legal
     // on another (a colon on Windows) turns into a clean message instead of InvalidPathException.
-    private Path resolveInProfilesDir(String fileName) {
+    // Messages quote the name as the user typed it, not the file name with its suffix.
+    private Path resolveInProfilesDir(String name, String suffix) {
         Path dir = profilesDir.toAbsolutePath().normalize();
         Path resolved;
         try {
-            resolved = dir.resolve(fileName).normalize();
+            resolved = dir.resolve(name + suffix).normalize();
         } catch (InvalidPathException e) {
             throw new IllegalArgumentException(
-                    "Invalid profile name '" + fileName + "': not a valid file name on this platform.\n"
+                    "Invalid profile name '" + name + "': not a valid file name on this platform.\n"
                             + "Run 'floci config profile list' to see available profiles.");
         }
         if (!dir.equals(resolved.getParent())) {
             throw new IllegalArgumentException(
-                    "Invalid profile name '" + fileName + "': it would resolve outside " + profilesDir + ".\n"
+                    "Invalid profile name '" + name + "': it would resolve outside " + profilesDir + ".\n"
                             + "Run 'floci config profile list' to see available profiles.");
         }
         return resolved;
     }
 
-    // list() has always accepted .yml, so reads must too — otherwise a .yml profile shows up in
-    // 'config profile list' and then reports "not found" when passed to --profile.
-    private Path existingProfileFile(String name) {
+    /**
+     * The file {@code name} is read from: its {@code .yaml}, else its {@code .yml}, else the
+     * {@code .yaml} path {@link #save} would create. Messages that tell the user which file to
+     * edit name this one, not {@link #profileFile}.
+     *
+     * <p>list() has always accepted .yml, so reads must too — otherwise a .yml profile shows up in
+     * 'config profile list' and then reports "not found" when passed to --profile.
+     */
+    public Path existingFile(String name) {
         Path yaml = profileFile(name);
         if (Files.exists(yaml)) return yaml;
-        Path yml = resolveInProfilesDir(validateName(name) + ".yml");
+        Path yml = resolveInProfilesDir(validateName(name), ".yml");
         return Files.exists(yml) ? yml : yaml;
     }
 

@@ -5,6 +5,7 @@ import io.floci.cli.ProductProfile;
 import io.floci.cli.commands.StartCommand;
 import io.floci.cli.config.Profile;
 import io.floci.cli.config.ProfileDefaultValueProvider;
+import io.floci.cli.config.ProfileNotFoundException;
 import io.floci.cli.config.ProfileStore;
 import io.floci.cli.output.Ansi;
 import io.floci.cli.output.OutputFormat;
@@ -59,7 +60,14 @@ public class ConfigShowCommand implements Callable<Integer> {
 
         // image/port/persistDir/services have no global option, so they are read back from the
         // profile itself — they only take effect on 'start'.
-        addStartSettings(data);
+        try {
+            addStartSettings(data);
+        } catch (ProfileNotFoundException e) {
+            // The profile went away (or broke) after the parse resolved it. Same cause, same exit
+            // code as a bad --profile at parse time.
+            printer.error(e.getMessage());
+            return ExitCode.USAGE;
+        }
 
         if (printer.format() != OutputFormat.text) {
             printer.structured(data);

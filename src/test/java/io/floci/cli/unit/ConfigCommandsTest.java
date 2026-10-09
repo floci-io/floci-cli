@@ -268,4 +268,48 @@ class ConfigCommandsTest {
         assertTrue(json.contains("\"container\" : \"floci-az-b\""), json);
         assertTrue(json.contains("\"port\" : 14577"), json);
     }
+
+    /** BL-009: list names a file without 'name:' after the file, so show must too. */
+    @Test
+    void showNamesAHandWrittenProfileAfterItsFile() throws Exception {
+        writeProfile("handwritten", "container: floci-hand\n");
+
+        Run r = profileCmd(ProductProfile.AWS, "show", "handwritten");
+
+        assertEquals(0, r.exit());
+        assertTrue(r.out().contains("handwritten"), r.out());
+        assertFalse(r.out().contains("null"), r.out());
+    }
+
+    @Test
+    void deleteReportsBothFilesWhenTwoSpellingsExist() throws Exception {
+        writeProfile("dev", "port: 4599\n");
+        Files.writeString(tempDir.resolve("dev.yml"), "port: 4600\n");
+
+        Run r = profileCmd(ProductProfile.AWS, "delete", "dev");
+
+        assertEquals(0, r.exit());
+        assertTrue(r.out().contains("dev.yaml and dev.yml"), r.out());
+        assertTrue(store().get("dev").isEmpty());
+    }
+
+    /** BL-003: same cause as a bad --profile at parse time, so the same exit code. */
+    @Test
+    void showExitsTwoWhenTheProfileIsGoneAfterTheParse() throws Exception {
+        writeProfile("gone", "container: floci-az-gone\n");
+        ConfigShowCommand show = new ConfigShowCommand(ProductProfile.AZ, store());
+        // A real parse: the provider reads the profile while it still exists.
+        new CommandLine(show)
+                .setDefaultValueProvider(new ProfileDefaultValueProvider(store()))
+                .parseArgs("--profile", "gone");
+        Files.delete(tempDir.resolve("gone.yaml"));
+
+        PrintStream err = System.err;
+        System.setErr(new PrintStream(new ByteArrayOutputStream()));
+        try {
+            assertEquals(CommandLine.ExitCode.USAGE, show.call());
+        } finally {
+            System.setErr(err);
+        }
+    }
 }

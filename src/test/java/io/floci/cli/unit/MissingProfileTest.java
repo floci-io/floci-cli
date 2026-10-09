@@ -103,6 +103,34 @@ class MissingProfileTest {
         assertTrue(portErr.contains("port must be between 1 and 65535"), portErr);
     }
 
+    /** BL-018: one cause, one exit code, whichever command validates the name. */
+    @Test
+    void anInvalidProfileNameExitsTwoFromConfigProfileAsFromProfile() {
+        int[] exit = new int[1];
+        String fromProfile = captureStderr(() -> cli().execute("start", "--profile", "../x"), exit);
+        assertEquals(2, exit[0], fromProfile);
+
+        for (String action : new String[]{"create", "show", "delete"}) {
+            String err = captureStderr(() -> cli().execute("config", "profile", action, "../x"), exit);
+            assertEquals(2, exit[0], action + ": " + err);
+            assertTrue(err.contains("Invalid profile name '../x'"), err);
+        }
+    }
+
+    /** BL-010: the message must name the file to open, which for a .yml profile is the .yml. */
+    @Test
+    void anInvalidYmlProfileNamesTheYmlFile() throws Exception {
+        Files.createDirectories(tempDir);
+        Files.writeString(tempDir.resolve("bad-port.yml"), "port: 99999\n");
+
+        int[] exit = new int[1];
+        String err = captureStderr(() -> cli().execute("start", "--profile", "bad-port"), exit);
+
+        assertEquals(2, exit[0]);
+        assertTrue(err.contains("bad-port.yml"), err);
+        assertFalse(err.contains("bad-port.yaml"), err);
+    }
+
     @Test
     void parsingRaisesTheDedicatedException() {
         assertThrows(ProfileNotFoundException.class,
