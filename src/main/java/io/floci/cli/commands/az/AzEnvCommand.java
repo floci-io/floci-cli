@@ -63,9 +63,9 @@ public class AzEnvCommand implements Callable<Integer> {
     String host;
 
     @Option(names = {"--shell"},
-            description = "Shell format: bash, fish, powershell (default: bash)",
+            description = "Shell format: bash, zsh, sh, fish, powershell (default: bash)",
             defaultValue = "bash",
-            paramLabel = "bash|fish|powershell")
+            paramLabel = "<shell>")
     String shell;
 
     private final Path stateRoot;
@@ -88,6 +88,10 @@ public class AzEnvCommand implements Callable<Integer> {
     @Override
     public Integer call() {
         Printer printer = global.printer();
+        if (!ShellExport.isSupported(shell)) {
+            printer.error(ShellExport.unsupported(shell));
+            return 2;
+        }
         String effectiveEndpoint = global.resolvedEndpoint(new DockerClient());
         int port = extractPort(effectiveEndpoint);
 
@@ -117,7 +121,7 @@ public class AzEnvCommand implements Callable<Integer> {
             printer.println(ShellExport.formatExport(shell, "AZURE_STORAGE_CONNECTION_STRING", connStr));
             printAzCliVars(printer, azCliVars);
             printer.println("");
-            printer.println(Ansi.gray("# Run: eval $(floci az env)"));
+            printer.println(Ansi.gray("# Run: " + ShellExport.loadHint(shell, "floci az env")));
         } else {
             printer.println(ShellExport.formatExport(shell, "AZURE_STORAGE_ACCOUNT", account));
             printer.println(ShellExport.formatExport(shell, "AZURE_STORAGE_KEY", DEV_KEY));
@@ -126,7 +130,7 @@ public class AzEnvCommand implements Callable<Integer> {
             }
             printAzCliVars(printer, azCliVars);
             printer.println("");
-            printer.println(Ansi.gray("# Run: eval $(floci az env --format sdk-vars)"));
+            printer.println(Ansi.gray("# Run: " + ShellExport.loadHint(shell, "floci az env --format sdk-vars")));
         }
 
         return 0;
