@@ -38,7 +38,7 @@ public class SnapshotExportCommand implements Callable<Integer> {
     public Integer call() {
         Printer printer = global.printer();
         // TODO: implement GET /_floci/snapshots/<name>/export streaming to file
-        printer.error("snapshot export requires floci-server >= 1.6.0\n" +
+        printer.error("snapshot export is not available yet: the emulator has no snapshot export API.\n" +
                 "Track progress: " + profile.serverRepo() + "/issues");
         return 1;
     }

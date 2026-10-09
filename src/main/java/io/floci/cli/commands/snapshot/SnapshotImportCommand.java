@@ -38,7 +38,7 @@ public class SnapshotImportCommand implements Callable<Integer> {
     public Integer call() {
         Printer printer = global.printer();
         // TODO: implement POST /_floci/snapshots/import with multipart upload
-        printer.error("snapshot import requires floci-server >= 1.6.0\n" +
+        printer.error("snapshot import is not available yet: the emulator has no snapshot import API.\n" +
                 "Track progress: " + profile.serverRepo() + "/issues");
         return 1;
     }
