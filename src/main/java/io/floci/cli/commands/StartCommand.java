@@ -169,7 +169,14 @@ public class StartCommand implements Callable<Integer> {
         try {
             URI uri = URI.create(endpoint);
             if (uri.getHost() == null) return "http://localhost:" + port;
-            return new URI(uri.getScheme(), null, uri.getHost(), port, uri.getPath(), null, null).toString();
+            // Raw components: the decoding getters would turn ?token=a%26b into ?token=a&b.
+            StringBuilder url = new StringBuilder(uri.getScheme()).append("://");
+            if (uri.getRawUserInfo() != null) url.append(uri.getRawUserInfo()).append('@');
+            url.append(uri.getHost()).append(':').append(port); // getHost keeps IPv6 brackets
+            if (uri.getRawPath() != null) url.append(uri.getRawPath());
+            if (uri.getRawQuery() != null) url.append('?').append(uri.getRawQuery());
+            if (uri.getRawFragment() != null) url.append('#').append(uri.getRawFragment());
+            return url.toString();
         } catch (Exception e) {
             return "http://localhost:" + port;
         }

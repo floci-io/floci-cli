@@ -77,11 +77,16 @@ public class ProfileDefaultValueProvider implements IDefaultValueProvider {
         String name = profileOption.getValue();
         if (name == null) return null;
 
-        // Defaults are applied even when -h/-V was requested, so a bad profile must not stop
-        // `floci start --profile typo --help` from printing its usage.
-        if (helpRequested(command)) return null;
-
-        Profile profile = resolve(name, command.commandLine());
+        // Help renders ${DEFAULT-VALUE} through this provider, so a good profile's values show up
+        // in `--help`. A bad one must not stop `floci start --profile typo --help` from printing
+        // its usage, so only then is the failure swallowed.
+        Profile profile;
+        try {
+            profile = resolve(name, command.commandLine());
+        } catch (ProfileNotFoundException e) {
+            if (helpRequested(command)) return null;
+            throw e;
+        }
         for (String optionName : option.names()) {
             String value = ProfileDefaults.valueFor(profile, optionName);
             if (value != null) return value;

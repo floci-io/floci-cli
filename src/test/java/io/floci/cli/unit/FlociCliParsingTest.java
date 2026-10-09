@@ -31,4 +31,15 @@ class FlociCliParsingTest {
         int code = new CommandLine(new FlociCli()).execute("doctor", "--help");
         assertEquals(0, code);
     }
+
+    /** BL-024: a parse error is printed before any printer exists, so --no-color is read raw. */
+    @Test
+    void noColorFlagDisablesColourBeforeParsing() {
+        assertTrue(FlociCli.colorDisabled(new String[]{"start", "--profile", "typo", "--no-color"}, false, true));
+        assertFalse(FlociCli.colorDisabled(new String[]{"start", "--profile", "typo"}, false, true));
+        assertTrue(FlociCli.colorDisabled(new String[]{"start"}, true, true));
+        assertTrue(FlociCli.colorDisabled(new String[]{"start"}, false, false));
+        assertTrue(FlociCli.colorDisabled(new String[]{"start", "--no-color=true"}, false, true));
+        assertFalse(FlociCli.colorDisabled(new String[]{"start", "--no-color=false"}, false, true));
+    }
 }
