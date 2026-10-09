@@ -2,6 +2,7 @@ package io.floci.cli.unit;
 
 import io.floci.cli.ProductProfile;
 import io.floci.cli.commands.RestartCommand;
+import io.floci.cli.config.ProfileDefaultValueProvider;
 import io.floci.cli.config.ProfileStore;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -131,9 +132,33 @@ class RestartCommandTest {
      * as a bad --profile at parse time: exit 2, and nothing stopped.
      */
     @Test
-    void aProfileGoneAfterTheParseExitsTwoBeforeStoppingAnything() {
-        RestartCommand restart = parse(ProductProfile.AZ, "--profile", "gone", "--container", "floci-az-never-started");
+    void aProfileGoneAfterTheParseExitsTwoBeforeStoppingAnything() throws Exception {
+        writeProfile("gone", "container: floci-az-never-started\n");
+        ProfileStore store = new ProfileStore(tempDir);
+        RestartCommand restart = new RestartCommand(ProductProfile.AZ, store);
+        // A real parse: the provider reads the profile while it still exists.
+        new CommandLine(restart)
+                .setDefaultValueProvider(new ProfileDefaultValueProvider(store))
+                .parseArgs("--profile", "gone");
+        Files.delete(tempDir.resolve("gone.yaml"));
 
-        assertEquals(CommandLine.ExitCode.USAGE, restart.call());
+        PrintStream out = System.out;
+        PrintStream err = System.err;
+        ByteArrayOutputStream outBuf = new ByteArrayOutputStream();
+        ByteArrayOutputStream errBuf = new ByteArrayOutputStream();
+        System.setOut(new PrintStream(outBuf));
+        System.setErr(new PrintStream(errBuf));
+        int exit;
+        try {
+            exit = restart.call();
+        } finally {
+            System.setOut(out);
+            System.setErr(err);
+        }
+
+        assertEquals(CommandLine.ExitCode.USAGE, exit);
+        assertTrue(errBuf.toString().contains("Profile 'gone' not found"), errBuf.toString());
+        // Stop prints this before calling docker; its absence means nothing was stopped.
+        assertFalse(outBuf.toString().contains("Stopping"), outBuf.toString());
     }
 }

@@ -295,11 +295,21 @@ class ConfigCommandsTest {
 
     /** BL-003: same cause as a bad --profile at parse time, so the same exit code. */
     @Test
-    void showExitsTwoWhenTheProfileIsGoneAfterTheParse() {
+    void showExitsTwoWhenTheProfileIsGoneAfterTheParse() throws Exception {
+        writeProfile("gone", "container: floci-az-gone\n");
         ConfigShowCommand show = new ConfigShowCommand(ProductProfile.AZ, store());
-        // Parsed without the provider, so the profile is never read here, as if it existed then.
-        new CommandLine(show).parseArgs("--profile", "gone");
+        // A real parse: the provider reads the profile while it still exists.
+        new CommandLine(show)
+                .setDefaultValueProvider(new ProfileDefaultValueProvider(store()))
+                .parseArgs("--profile", "gone");
+        Files.delete(tempDir.resolve("gone.yaml"));
 
-        assertEquals(CommandLine.ExitCode.USAGE, show.call());
+        PrintStream err = System.err;
+        System.setErr(new PrintStream(new ByteArrayOutputStream()));
+        try {
+            assertEquals(CommandLine.ExitCode.USAGE, show.call());
+        } finally {
+            System.setErr(err);
+        }
     }
 }
