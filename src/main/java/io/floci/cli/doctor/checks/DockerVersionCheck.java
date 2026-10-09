@@ -7,13 +7,29 @@ import io.floci.cli.doctor.CheckResult;
 
 public class DockerVersionCheck implements Check {
 
+    private final DockerClient docker;
+
+    public DockerVersionCheck() {
+        this(new DockerClient());
+    }
+
+    /** {@code docker} is shared across one doctor run so each docker fact is fetched once. */
+    public DockerVersionCheck(DockerClient docker) {
+        this.docker = docker;
+    }
+
+    @Override
+    public String name() {
+        return "docker.version";
+    }
+
     private static final int MIN_MAJOR = 20;
     private static final int MIN_MINOR = 10;
 
     @Override
     public CheckResult run(String endpoint, String container) {
         try {
-            String raw = new DockerClient().dockerVersion();
+            String raw = docker.dockerVersion();
             if (meetsMinimum(raw)) {
                 return CheckResult.ok("docker.version", "Docker " + raw + " (>= 20.10)");
             }

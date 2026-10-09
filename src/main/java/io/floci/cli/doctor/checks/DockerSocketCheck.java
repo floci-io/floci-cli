@@ -10,6 +10,11 @@ import java.nio.file.Path;
 public class DockerSocketCheck implements Check {
 
     @Override
+    public String name() {
+        return "docker.socket";
+    }
+
+    @Override
     public CheckResult run(String endpoint, String container) {
         DockerClient.DockerHost host = DockerClient.dockerHost();
         switch (host.kind()) {

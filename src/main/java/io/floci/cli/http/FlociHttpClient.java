@@ -43,7 +43,12 @@ public class FlociHttpClient {
     }
 
     public HealthInfo health() throws FlociException {
-        JsonNode node = getJson(controlPrefix + "/health");
+        return health(Duration.ofSeconds(10));
+    }
+
+    /** {@link #health()} with its own request timeout, for probes that must answer quickly. */
+    public HealthInfo health(Duration timeout) throws FlociException {
+        JsonNode node = getJson(controlPrefix + "/health", timeout);
         return new HealthInfo(
                 node.path("version").asText("unknown"),
                 node.path("original_edition").asText(node.path("edition").asText("community")),
@@ -120,10 +125,14 @@ public class FlociHttpClient {
     }
 
     private JsonNode getJson(String path) throws FlociException {
+        return getJson(path, Duration.ofSeconds(10));
+    }
+
+    private JsonNode getJson(String path, Duration timeout) throws FlociException {
         try {
             HttpRequest req = HttpRequest.newBuilder()
                     .uri(URI.create(endpoint + path))
-                    .timeout(Duration.ofSeconds(10))
+                    .timeout(timeout)
                     .header("Accept", "application/json")
                     .GET()
                     .build();

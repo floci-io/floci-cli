@@ -5,6 +5,7 @@ import io.floci.cli.ProductProfile;
 import io.floci.cli.doctor.Check;
 import io.floci.cli.doctor.CheckResult;
 import io.floci.cli.doctor.CheckStatus;
+import io.floci.cli.docker.CachingDockerClient;
 import io.floci.cli.docker.DockerClient;
 import io.floci.cli.doctor.checks.AwsCliEndpointCheck;
 import io.floci.cli.doctor.checks.AwsCliS3PathStyleCheck;
@@ -29,6 +30,10 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 @Command(
         name = "doctor",
@@ -50,15 +55,23 @@ public class DoctorCommand implements Callable<Integer> {
 
     /** The base environment checks every product runs, in order: Docker first, then server. */
     public static List<Check> dockerChecks(ProductProfile profile) {
+        return dockerChecks(profile, new CachingDockerClient());
+    }
+
+    /**
+     * As above, all asking one {@code docker}: with a {@link CachingDockerClient} the version,
+     * container and image lookups several checks share run once per doctor run, not once per check.
+     */
+    public static List<Check> dockerChecks(ProductProfile profile, DockerClient docker) {
         return List.of(
-                new DockerInstalledCheck(),
-                new DockerDaemonCheck(),
+                new DockerInstalledCheck(docker),
+                new DockerDaemonCheck(docker),
                 new DockerSocketCheck(),
-                new DockerVersionCheck(),
-                new PortAvailableCheck(),
-                new ImagePresentCheck(profile.image()),
-                new ImageVersionCheck(profile.image()),
-                new ContainerRunningCheck(),
+                new DockerVersionCheck(docker),
+                new PortAvailableCheck(docker),
+                new ImagePresentCheck(profile.image(), docker),
+                new ImageVersionCheck(profile.image(), docker),
+                new ContainerRunningCheck(docker),
                 new EndpointReachableCheck(profile.controlPrefix())
         );
     }
@@ -73,19 +86,35 @@ public class DoctorCommand implements Callable<Integer> {
             new AzCliConnectionStringCheck()
     );
 
+    private final DockerClient docker;
+
     private final List<Check> allChecks;
 
     public DoctorCommand() {
         this(ProductProfile.AWS, AWS_COMPANION_CHECKS);
     }
 
-    /** Test seam and shim constructor: base docker checks for the profile + product companions. */
+    /** Shim constructor: base docker checks for the profile + product companions. */
     public DoctorCommand(ProductProfile profile, List<Check> companionChecks) {
+        this(profile, companionChecks, new CachingDockerClient());
+    }
+
+    private DoctorCommand(ProductProfile profile, List<Check> companionChecks, DockerClient docker) {
+        this(profile, docker, concat(dockerChecks(profile, docker), companionChecks));
+    }
+
+    /** Test seam: exactly these checks, and {@code docker} for the endpoint lookup. */
+    public DoctorCommand(ProductProfile profile, DockerClient docker, List<Check> checks) {
         this.profile = profile;
         this.global = new GlobalOptions(profile);
-        List<Check> checks = new ArrayList<>(dockerChecks(profile));
-        checks.addAll(companionChecks);
+        this.docker = docker;
         this.allChecks = List.copyOf(checks);
+    }
+
+    private static List<Check> concat(List<Check> first, List<Check> second) {
+        List<Check> checks = new ArrayList<>(first);
+        checks.addAll(second);
+        return checks;
     }
 
     public List<Check> allChecks() {
@@ -95,8 +124,15 @@ public class DoctorCommand implements Callable<Integer> {
     @Override
     public Integer call() {
         Printer printer = global.printer();
+        List<Check> selected = selected();
+        if (selected.isEmpty()) {
+            printer.error("Unknown check '" + checkName + "'.\nRun '" + profile.commandPrefix()
+                    + " doctor' to see every check, or pass one of: " + String.join(", ", knownNames()) + ".");
+            return ExitCode.USAGE;
+        }
+
         List<CheckResult> results = new ArrayList<>();
-        String effectiveEndpoint = global.resolvedEndpoint(new DockerClient());
+        String effectiveEndpoint = global.resolvedEndpoint(docker);
 
         boolean textMode = printer.format() == OutputFormat.text;
 
@@ -105,11 +141,19 @@ public class DoctorCommand implements Callable<Integer> {
             printer.println("");
         }
 
-        for (Check check : allChecks) {
-            CheckResult result = check.run(effectiveEndpoint, global.container);
-            if (checkName != null && !result.name().equals(checkName)) continue;
-            results.add(result);
-            if (textMode) printResult(printer, result);
+        // The checks are independent and mostly wait on docker or the network, so they run
+        // concurrently; results are still printed in list order as each one becomes available.
+        try (ExecutorService pool = Executors.newVirtualThreadPerTaskExecutor()) {
+            List<Future<CheckResult>> pending = selected.stream()
+                    .map(check -> pool.submit(() -> runSafely(check, effectiveEndpoint, global.container)))
+                    .toList();
+            for (int i = 0; i < selected.size(); i++) {
+                CheckResult result = await(selected.get(i), pending.get(i));
+                // A check without a declared name is only known to match once it has run.
+                if (checkName != null && !result.name().equals(checkName)) continue;
+                results.add(result);
+                if (textMode) printResult(printer, result);
+            }
         }
 
         if (!textMode) {
@@ -138,6 +182,45 @@ public class DoctorCommand implements Callable<Integer> {
         }
 
         return fails > 0 ? 1 : 0;
+    }
+
+    // --check selects by declared name before anything runs; undeclared names are run and
+    // filtered by their result, as before.
+    private List<Check> selected() {
+        if (checkName == null) return allChecks;
+        return allChecks.stream()
+                .filter(c -> c.name() == null || c.name().equals(checkName))
+                .toList();
+    }
+
+    private List<String> knownNames() {
+        return allChecks.stream().map(Check::name).filter(n -> n != null).toList();
+    }
+
+    // One failing check must not abort the run: report it and keep going.
+    private static CheckResult runSafely(Check check, String endpoint, String container) {
+        try {
+            return check.run(endpoint, container);
+        } catch (RuntimeException e) {
+            return failed(check, e);
+        }
+    }
+
+    private static CheckResult await(Check check, Future<CheckResult> result) {
+        try {
+            return result.get();
+        } catch (ExecutionException e) {
+            return failed(check, e.getCause());
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return failed(check, e);
+        }
+    }
+
+    private static CheckResult failed(Check check, Throwable cause) {
+        String name = check.name() != null ? check.name() : check.getClass().getSimpleName();
+        return CheckResult.fail(name, "check failed: " + cause.getMessage(),
+                "Report it at https://github.com/floci-io/floci-cli/issues if it persists.");
     }
 
     public static void printResult(Printer printer, CheckResult r) {

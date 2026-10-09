@@ -10,6 +10,11 @@ import java.util.regex.Pattern;
 
 public class AzCliConnectionStringCheck implements Check {
 
+    @Override
+    public String name() {
+        return "az.cli.connection-string";
+    }
+
     private static final Pattern ENDPOINT_PORT_PATTERN =
             Pattern.compile("BlobEndpoint=https?://[^:]+:(\\d+)/", Pattern.CASE_INSENSITIVE);
 
