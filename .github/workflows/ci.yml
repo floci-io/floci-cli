@@ -67,8 +67,30 @@ jobs:
           awk -v b="$bytes" -v max="$NATIVE_SIZE_BUDGET_MB" 'BEGIN { exit (b / 1048576 > max) }' \
             || { echo "::error::Native binary is ${mb} MB, over the ${NATIVE_SIZE_BUDGET_MB} MB budget."; exit 1; }
 
-      - name: Smoke test — version
-        run: ./target/floci version
+      - name: Smoke test
+        run: .github/scripts/smoke.sh ./target/floci
 
       - name: Smoke test — doctor
         run: ./target/floci doctor || true
+
+  # The release builds linux/amd64 too; building it here catches an amd64-only native failure in
+  # review instead of at release time.
+  native-linux-amd64:
+    name: Native image (linux/amd64)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: graalvm/setup-graalvm@v1
+        with:
+          java-version: '25'
+          distribution: 'graalvm-community'
+          cache: maven
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build native binary
+        run: mvn clean package -Pnative -DskipTests -B
+
+      - name: Smoke test
+        run: .github/scripts/smoke.sh ./target/floci
