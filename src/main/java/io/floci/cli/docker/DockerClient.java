@@ -2,17 +2,30 @@ package io.floci.cli.docker;
 
 import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 
 /**
  * Thin subprocess wrapper around the docker CLI.
  * Subprocess invocation avoids reflection config needed by docker-java on native image.
  */
 public class DockerClient {
+
+    private final String binary;
+
+    public DockerClient() {
+        this("docker");
+    }
+
+    /** Test seam: run {@code binary} in place of {@code docker}. */
+    public DockerClient(String binary) {
+        this.binary = binary;
+    }
 
     public record ContainerInfo(
             String id,
@@ -129,16 +142,23 @@ public class DockerClient {
     }
 
     private String run(String... cmd) throws DockerException {
+        Process proc = null;
         try {
-            Process proc = runProcess(cmd);
-            String stdout = new String(proc.getInputStream().readAllBytes());
-            String stderr = new String(proc.getErrorStream().readAllBytes());
+            proc = runProcess(cmd);
+            // Both streams drain at once, so a full stderr pipe cannot stall the process, and the
+            // wait below is interruptible: an abandoned lookup kills its process instead of
+            // leaving it running after the CLI exits.
+            CompletableFuture<String> stdout = drain(proc.getInputStream());
+            CompletableFuture<String> stderr = drain(proc.getErrorStream());
             int code = proc.waitFor();
+            String out = stdout.join();
+            String err = stderr.join();
             if (code != 0) {
-                throw new DockerException(stderr.isBlank() ? stdout : stderr);
+                throw new DockerException(err.isBlank() ? out : err);
             }
-            return stdout;
+            return out;
         } catch (InterruptedException e) {
+            if (proc != null) proc.destroyForcibly();
             Thread.currentThread().interrupt();
             throw new DockerException("Interrupted");
         } catch (IOException e) {
@@ -178,7 +198,23 @@ public class DockerClient {
         }
     }
 
+    private static CompletableFuture<String> drain(InputStream stream) {
+        CompletableFuture<String> text = new CompletableFuture<>();
+        Thread.ofVirtual().start(() -> {
+            try (stream) {
+                text.complete(new String(stream.readAllBytes()));
+            } catch (IOException e) {
+                text.complete("");
+            }
+        });
+        return text;
+    }
+
     private Process runProcess(String... cmd) throws IOException {
+        if (cmd.length > 0 && "docker".equals(cmd[0])) {
+            cmd = cmd.clone();
+            cmd[0] = binary;
+        }
         return new ProcessBuilder(cmd)
                 .redirectErrorStream(false)
                 .start();

@@ -109,7 +109,7 @@ public class WaitCommand implements Callable<Integer> {
         // A detached virtual thread: a hung lookup is abandoned, not joined, and cannot keep the
         // JVM alive once wait returns.
         CompletableFuture<String> resolved = new CompletableFuture<>();
-        Thread.ofVirtual().name("floci-wait-endpoint").start(() -> {
+        Thread lookup = Thread.ofVirtual().name("floci-wait-endpoint").start(() -> {
             try {
                 resolved.complete(global.resolvedEndpoint(docker));
             } catch (RuntimeException e) {
@@ -119,8 +119,10 @@ public class WaitCommand implements Callable<Integer> {
         try {
             return resolved.get(remaining, TimeUnit.MILLISECONDS);
         } catch (TimeoutException | ExecutionException e) {
+            lookup.interrupt(); // DockerClient kills the docker process it was waiting on
             return global.endpoint;
         } catch (InterruptedException e) {
+            lookup.interrupt();
             Thread.currentThread().interrupt();
             return global.endpoint;
         }
