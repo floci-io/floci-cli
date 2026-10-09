@@ -16,6 +16,8 @@ import io.floci.cli.update.UpdateNotifier;
 import picocli.CommandLine;
 import picocli.CommandLine.*;
 
+import java.util.Arrays;
+
 @Command(
         name = "floci",
         description = "Manage your local Floci emulators%n%n" +
@@ -74,7 +76,7 @@ public class FlociCli implements Runnable {
     }
 
     public static void main(String[] args) {
-        if (System.getenv("NO_COLOR") != null || System.console() == null) {
+        if (colorDisabled(args, System.getenv("NO_COLOR") != null, System.console() != null)) {
             Ansi.disable();
         }
 
@@ -144,6 +146,15 @@ public class FlociCli implements Runnable {
             }
             return fallback.handleParseException(ex, args);
         };
+    }
+
+    /**
+     * Whether this invocation prints without ANSI colour. {@code --no-color} is read from the raw
+     * arguments here as well as by {@code GlobalOptions.printer()}: a parse error is printed by the
+     * exception handlers before any command, and so any printer, exists.
+     */
+    public static boolean colorDisabled(String[] args, boolean noColorEnv, boolean interactive) {
+        return noColorEnv || !interactive || Arrays.asList(args).contains("--no-color");
     }
 
     // Returns true when routing should NOT apply: explicit product subgroup,

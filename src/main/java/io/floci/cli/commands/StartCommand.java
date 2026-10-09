@@ -169,7 +169,7 @@ public class StartCommand implements Callable<Integer> {
         try {
             URI uri = URI.create(endpoint);
             if (uri.getHost() == null) return "http://localhost:" + port;
-            return new URI(uri.getScheme(), null, uri.getHost(), port, uri.getPath(), null, null).toString();
+            return new URI(uri.getScheme(), uri.getUserInfo(), uri.getHost(), port, uri.getPath(), uri.getQuery(), uri.getFragment()).toString();
         } catch (Exception e) {
             return "http://localhost:" + port;
         }

@@ -69,6 +69,26 @@ class MissingProfileTest {
         assertEquals(2, exit[0]);
     }
 
+    /** BL-014: help renders defaults through the provider, so a good profile's values show. */
+    @Test
+    void helpShowsTheProfilesDefaults() throws Exception {
+        writeProfile("probe", "port: 4599\nimage: floci/floci:enforced\n");
+
+        PrintStream original = System.out;
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        System.setOut(new PrintStream(out));
+        int exit;
+        try {
+            exit = cli().execute("start", "--profile", "probe", "--help");
+        } finally {
+            System.setOut(original);
+        }
+
+        assertEquals(0, exit);
+        assertTrue(out.toString().contains("(default: 4599)"), out.toString());
+        assertTrue(out.toString().contains("enforced"), out.toString()); // help wraps the image value
+    }
+
     @Test
     void helpStillWorksWithABadProfile() {
         int[] exit = new int[1];
