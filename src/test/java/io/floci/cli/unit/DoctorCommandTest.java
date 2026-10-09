@@ -192,4 +192,27 @@ class DoctorCommandTest {
             Thread.currentThread().interrupt();
         }
     }
+
+    /** BL-036: -o json reports a failed check through the exit code, as text output does. */
+    @Test
+    void jsonOutputExitsOneWhenACheckFails() {
+        Named failing = new Named("bad.check", (e, c) -> CheckResult.fail("bad.check", "broken", "fix it"));
+
+        Run r = doctor(List.of(ok("a.check"), failing), "-o", "json");
+
+        assertEquals(1, r.exit(), r.out());
+        assertTrue(r.out().contains("\"bad.check\""), r.out());
+    }
+
+    /** BL-038: warnings alone are not reported as "0 issue(s) found". */
+    @Test
+    void warningsOnlyDoNotReadAsZeroIssues() {
+        Named warning = new Named("warn.check", (e, c) -> CheckResult.warn("warn.check", "hmm", null));
+
+        Run r = doctor(List.of(ok("a.check"), warning));
+
+        assertEquals(0, r.exit());
+        assertFalse(r.out().contains("0 issue(s)"), r.out());
+        assertTrue(r.out().contains("1 warning(s) to review"), r.out());
+    }
 }

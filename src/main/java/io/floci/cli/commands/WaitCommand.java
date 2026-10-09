@@ -72,7 +72,7 @@ public class WaitCommand implements Callable<Integer> {
         // The deadline starts now, so the container lookup below counts against --timeout too.
         Instant deadline = Instant.now().plusMillis(timeoutMillis);
         String effectiveEndpoint = knownEndpoint != null ? knownEndpoint : endpointWithin(deadline);
-        FlociHttpClient client = new FlociHttpClient(effectiveEndpoint, profile.controlPrefix());
+        FlociHttpClient client = new FlociHttpClient(effectiveEndpoint, profile);
 
         // Poll soon after a start, then back off; never let a request or a pause run past the
         // deadline, so --timeout is a real upper bound.

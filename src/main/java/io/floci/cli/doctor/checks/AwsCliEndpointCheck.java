@@ -37,10 +37,13 @@ public class AwsCliEndpointCheck implements Check {
                 ShellExport.formatExport("bash", "AWS_ENDPOINT_URL", suggested));
     }
 
-    private int extractPort(String url) {
+    /** The URL's port, or the scheme default (443 for https, 80 otherwise); -1 if unparseable. */
+    public static int extractPort(String url) {
         try {
-            int port = URI.create(url).getPort();
-            return port == -1 ? 80 : port;
+            URI uri = URI.create(url);
+            int port = uri.getPort();
+            if (port != -1) return port;
+            return "https".equalsIgnoreCase(uri.getScheme()) ? 443 : 80;
         } catch (Exception e) {
             return -1;
         }

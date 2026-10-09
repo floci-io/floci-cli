@@ -1,5 +1,6 @@
 package io.floci.cli.doctor.checks;
 
+import io.floci.cli.ProductProfile;
 import io.floci.cli.doctor.Check;
 import io.floci.cli.doctor.CheckResult;
 import io.floci.cli.http.FlociHttpClient;
@@ -14,13 +15,24 @@ public class EndpointReachableCheck implements Check {
     }
 
     private final String controlPrefix;
+    private final String commandPrefix;
 
     public EndpointReachableCheck() {
         this(FlociHttpClient.DEFAULT_CONTROL_PREFIX);
     }
 
     public EndpointReachableCheck(String controlPrefix) {
+        this(controlPrefix, "floci");
+    }
+
+    /** {@code product}'s health endpoint, with a hint that names its tree. */
+    public EndpointReachableCheck(ProductProfile product) {
+        this(product.controlPrefix(), product.commandPrefix());
+    }
+
+    private EndpointReachableCheck(String controlPrefix, String commandPrefix) {
         this.controlPrefix = controlPrefix;
+        this.commandPrefix = commandPrefix;
     }
 
     @Override
@@ -39,6 +51,6 @@ public class EndpointReachableCheck implements Check {
         }
         return CheckResult.fail("endpoint.reachable",
                 "GET " + controlPrefix + "/health at " + endpoint + " did not return 200",
-                "Is Floci running? Try 'floci start'.");
+                "Is Floci running? Try '" + commandPrefix + " start'.");
     }
 }
