@@ -7,11 +7,13 @@ on:
       - 'src/**'
       - 'pom.xml'
       - '.github/workflows/ci.yml'
+      - '.github/scripts/**'
   pull_request:
     paths:
       - 'src/**'
       - 'pom.xml'
       - '.github/workflows/ci.yml'
+      - '.github/scripts/**'
 
 permissions:
   contents: read

@@ -23,7 +23,18 @@ for tree in aws gcp az oci; do
   "$bin" "$tree" --help > /dev/null
 done
 
-"$bin" config profile list -o json > /dev/null
+# A profile round trip: Jackson writes it and reads it back. Listing alone proves little on a
+# fresh runner, where there is nothing to read. The name is unique and the profile is deleted.
+profile="floci-smoke-$$"
+trap '"$bin" config profile delete "$profile" > /dev/null 2>&1 || true' EXIT
+"$bin" config profile create "$profile" --container floci-smoke --port 14566 > /dev/null
+shown=$("$bin" config show --profile "$profile" -o json | tr -d ' \r\n')
+case "$shown" in
+  *'"container":"floci-smoke"'*'"port":14566'*) ;;
+  *) echo "::error::profile $profile did not round-trip: $shown"; exit 1 ;;
+esac
+"$bin" config profile list -o json | grep -q "$profile" \
+  || { echo "::error::profile $profile is missing from 'config profile list'"; exit 1; }
 
 # An unknown profile is a usage error: exit 2, not a crash.
 set +e
