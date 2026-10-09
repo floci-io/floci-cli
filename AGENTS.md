@@ -116,6 +116,16 @@ Rules when touching this:
 - Commands that build another command programmatically (`RestartCommand` → `StartCommand`) are never parsed by picocli, so they must carry the profile across by hand.
 - Use `FlociCli.buildCommandLine(ProfileStore)` in tests — `new CommandLine(new FlociCli())` has none of the wiring.
 
+### Multiple instances
+
+An instance is a profile: its container name is its identity, its port is the only thing that must differ, and its persist dir keeps its state. Rules:
+
+- Commands find their instance through the container (`GlobalOptions.resolvedEndpoint`); never persist an endpoint as instance identity.
+- Local state about one running instance (certificates, generated vendor-CLI config) lives under `InstanceState.dir(product, container)`, which is `~/.floci/<product>/<container>/`. Never a fixed per-product path: a second instance would overwrite the first. `floci az setup` is the reference (its az cloud is also named after the container).
+- Hints that tell the user to re-run a command append `global.instanceSelector()` so they select the same instance again.
+- Instance-independent state (the OCI CLI profile from `floci oci setup`) may stay shared.
+- `config profile create` takes `--container --port --persist --services --image` (and `--endpoint`); it reads only flags the user typed (`ParseResult.hasMatchedOption`), never values the profile provider or `FLOCI_*` env vars applied.
+
 ### Self-update
 
 `UpdateCommand` (`floci update`) downloads the release binary for the current platform, verifies its sha256 against the release's `sha256sums.txt`, and atomically replaces the running binary (staged in the same directory, `ATOMIC_MOVE`). It refuses to update Homebrew-managed installs. `--check` exits 0 when up to date, 1 when an update is available. `ReleaseChannel` builds the GitHub release asset URLs.

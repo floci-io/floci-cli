@@ -630,8 +630,9 @@ floci services -o json
 ```sh
 floci config show                          # show active configuration
 floci config default-product aws|gcp|az|oci  # set the default product (persisted to ~/.floci/config.yaml)
-floci config profile list                  # list saved profiles
-floci config profile create <name>         # create a new profile
+floci config profile list                  # list saved profiles: container, port, data dir
+floci config profile create <name>         # create a new profile with the tree's defaults
+floci config profile create <name> --container <c> --port <p> --persist <dir> --services <csv> --image <img>
 floci config profile show <name>           # show a profile
 floci config profile delete <name>         # delete a profile
 floci config validate -f docker-compose.yml  # validate a Compose file
@@ -687,6 +688,48 @@ expect.
 > `floci restart --profile <name>` re-applies the profile's `persistDir`, so state survives the
 > restart. A plain `floci restart` has no `--persist` flag of its own and still falls back to the
 > defaults.
+
+#### Running several instances side by side
+
+An instance is a profile. Its **container name** is its identity, its **port** is the only thing
+that must differ from the other instances, and its **persist dir** keeps its state across
+container recreation. Every command (`status`, `logs`, `env`, `doctor`, `stop`, ...) finds the
+instance through its container, so passing the same `--profile` is all it takes. Any local state
+the CLI keeps about an instance lives in `~/.floci/<product>/<container>/`.
+
+Leave `endpoint` at the product default: the CLI reads the real host port from the running
+container. `config profile create` warns when a new profile reuses another profile's container,
+or its port on the same image.
+
+```sh
+# AWS
+floci config profile create aws-a --container floci-a --port 4566  --persist ~/.floci/data/aws-a
+floci config profile create aws-b --container floci-b --port 14566 --persist ~/.floci/data/aws-b
+floci start --profile aws-a && floci start --profile aws-b
+eval $(floci env --profile aws-b)          # AWS_ENDPOINT_URL points at :14566
+
+# GCP
+floci gcp config profile create gcp-b --container floci-gcp-b --port 14588 --persist ~/.floci/data/gcp-b
+floci gcp start --profile gcp-b
+eval $(floci gcp env --profile gcp-b)
+
+# Azure: setup is per instance too (its own certificate, az cloud and login)
+floci az config profile create az-b --container floci-az-b --port 14577 --persist ~/.floci/data/az-b
+floci az start --profile az-b
+floci az setup --profile az-b
+eval $(floci az env --profile az-b)        # plain az now talks to floci-az-b only
+
+# OCI: 'floci oci setup' is shared, the endpoint is per instance
+floci oci config profile create oci-b --container floci-oci-b --port 14599 --persist ~/.floci/data/oci-b
+floci oci start --profile oci-b
+eval $(floci oci env --profile oci-b)
+
+floci config profile list                  # one row per instance
+floci stop --profile aws-b                 # stop one, the others keep running
+```
+
+Without `--persist` an instance starts empty each time its container is recreated. For floci-az
+it also gets a new certificate, which `floci az env` reports so you can re-run `floci az setup`.
 
 ### `floci snapshot`
 
