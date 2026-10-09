@@ -48,7 +48,7 @@ public class ConfigValidateCommand implements Callable<Integer> {
 
         Path composeFile = resolveComposeFile();
         if (composeFile == null) {
-            printer.error("No docker-compose file found. Pass --file <path> or run in a directory with docker-compose.yml.");
+            printer.error("No docker-compose file found.\nPass --file <path>, or run in a directory with docker-compose.yml.");
             return 1;
         }
 
@@ -56,7 +56,8 @@ public class ConfigValidateCommand implements Callable<Integer> {
         try {
             content = Files.readString(composeFile);
         } catch (IOException e) {
-            printer.error("Could not read " + composeFile + ": " + e.getMessage());
+            printer.error("Could not read " + composeFile + ": " + e.getMessage(),
+                    "Check the file's permissions, or pass another with --file.");
             return 1;
         }
 

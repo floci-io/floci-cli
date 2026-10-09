@@ -27,6 +27,9 @@ public class DockerClient {
     /** How long a non-streaming docker call may take before it is killed. */
     public static final Duration DEFAULT_TIMEOUT = Duration.ofSeconds(30);
 
+    /** The next step for a failed docker call. */
+    public static final String CHECK_DOCKER = "Check that Docker is running ('docker info') and re-run the command.";
+
     private final String binary;
     private final Duration timeout;
 

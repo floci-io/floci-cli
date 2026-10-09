@@ -152,10 +152,9 @@ public class ResetCommand implements Callable<Integer> {
                 printer.error("Resetting state is not available on this " + profile.displayName() + " server version.\n"
                         + "Restart it without --persist for a clean state, or track progress: " + profile.serverRepo() + "/issues");
             } else {
-                String message = "Failed to reset " + profile.displayName() + ": " + e.getMessage();
                 // Connection errors already say what to do; others get the status hint.
-                printer.error(message.contains("\n") ? message
-                        : message + "\nRun '" + profile.commandPrefix() + " status" + global.instanceSelector() + "' to check the emulator.");
+                printer.error("Failed to reset " + profile.displayName() + ": " + e.getMessage(),
+                        "Run '" + profile.commandPrefix() + " status" + global.instanceSelector() + "' to check the emulator.");
             }
             return 1;
         }

@@ -58,7 +58,8 @@ public class SnapshotListCommand implements Callable<Integer> {
                 printer.error("Snapshot API not available on this server version.\n" +
                         "Track progress: " + profile.serverRepo() + "/issues");
             } else {
-                printer.error("Failed to list snapshots: " + e.getMessage());
+                printer.error("Failed to list snapshots: " + e.getMessage(),
+                        "Run '" + profile.commandPrefix() + " status' to check the emulator.");
             }
             return 1;
         }

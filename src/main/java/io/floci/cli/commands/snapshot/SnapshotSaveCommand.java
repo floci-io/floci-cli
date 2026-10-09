@@ -58,7 +58,8 @@ public class SnapshotSaveCommand implements Callable<Integer> {
                 printer.error("Snapshot API not available on this server version.\n" +
                         "Track progress: " + profile.serverRepo() + "/issues");
             } else {
-                printer.error("Failed to save snapshot: " + e.getMessage());
+                printer.error("Failed to save snapshot: " + e.getMessage(),
+                        "Run '" + profile.commandPrefix() + " status' to check the emulator.");
             }
             return 1;
         }

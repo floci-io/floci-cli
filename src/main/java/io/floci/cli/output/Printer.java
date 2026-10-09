@@ -41,6 +41,14 @@ public final class Printer {
         err.println(Ansi.red("Error: ") + message);
     }
 
+    /**
+     * Reports {@code message} followed by {@code nextStep}, unless the message already carries its
+     * own (a second line), as messages from DockerException or FlociException often do.
+     */
+    public void error(String message, String nextStep) {
+        error(message.contains("\n") ? message : message + "\n" + nextStep);
+    }
+
     public void warn(String message) {
         err.println(Ansi.yellow("Warning: ") + message);
     }
