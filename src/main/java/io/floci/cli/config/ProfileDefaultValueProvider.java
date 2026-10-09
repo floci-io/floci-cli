@@ -1,5 +1,6 @@
 package io.floci.cli.config;
 
+import io.floci.cli.output.Ansi;
 import io.floci.cli.output.OutputFormat;
 import picocli.CommandLine;
 import picocli.CommandLine.IDefaultValueProvider;
@@ -9,6 +10,8 @@ import picocli.CommandLine.Model.OptionSpec;
 
 import java.io.IOException;
 import java.util.Optional;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Applies a named config profile as the default value of every option it covers.
@@ -125,6 +128,8 @@ public class ProfileDefaultValueProvider implements IDefaultValueProvider {
         Profile profile = loaded.get();
         validate(commandLine, name, profile);
 
+        warnAboutUnknownKeys(name, profile);
+
         resolvedName = name;
         resolved = profile;
         return resolved;
@@ -149,5 +154,19 @@ public class ProfileDefaultValueProvider implements IDefaultValueProvider {
         return new ProfileNotFoundException(commandLine,
                 "Profile '" + name + "' is invalid: " + detail + "\n"
                         + "Edit " + store.existingFile(name) + " and try again.");
+    }
+
+    // A command can resolve the same profile through more than one provider (config show reads it
+    // back after the parse), so the warning is printed once per profile file per run.
+    private static final Set<String> WARNED = ConcurrentHashMap.newKeySet();
+
+    private void warnAboutUnknownKeys(String name, Profile profile) {
+        if (profile.unknownKeys().isEmpty()) return;
+        if (!WARNED.add(store.profilesDir().toAbsolutePath() + "/" + name)) return;
+        System.err.println(Ansi.yellow("Warning: ") + "Profile '" + name + "' sets "
+                + String.join(", ", profile.unknownKeys().stream().map(k -> "'" + k + "'").toList())
+                + ", which floci does not read, so " + (profile.unknownKeys().size() == 1 ? "it is" : "they are")
+                + " ignored.\nCheck the spelling; the keys a profile can set are: "
+                + String.join(", ", Profile.KNOWN_KEYS) + ".");
     }
 }
