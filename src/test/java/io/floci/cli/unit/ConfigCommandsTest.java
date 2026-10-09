@@ -19,7 +19,10 @@ import java.io.PrintStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Optional;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -180,7 +183,7 @@ class ConfigCommandsTest {
     @Test
     void showReportsTheNamespaceAProfilesContainerImplies() throws Exception {
         writeProfile("b", "container: floci-b\n");
-        writeProfile("plain", "port: 4599\n");
+        writeProfile("plain", "container: floci\nport: 4599\n"); // default container, whatever FLOCI_CONTAINER says
 
         assertTrue(runShow(ProductProfile.AWS, "--profile", "b", "-o", "json")
                 .contains("\"namespace\" : \"b\""));
@@ -358,8 +361,9 @@ class ConfigCommandsTest {
         return s.replaceAll("\u001B\\[[;\\d]*m", "").replace("\r\n", "\n");
     }
 
-    private static List<String> jsonKeys(String json) throws IOException {
-        List<String> keys = new ArrayList<>();
+    // A set: which keys appear is the contract, not the order they are printed in.
+    private static Set<String> jsonKeys(String json) throws IOException {
+        Set<String> keys = new HashSet<>();
         new ObjectMapper().readTree(json).fieldNames().forEachRemaining(keys::add);
         return keys;
     }
@@ -367,29 +371,33 @@ class ConfigCommandsTest {
     /** BL-016: the text output is a user-facing surface, so its lines are pinned. */
     @Test
     void textOutputWithoutAProfile() {
+        // The layout is pinned; the values follow FLOCI_GCP_* if the developer's shell sets them.
+        String endpoint = Optional.ofNullable(System.getenv("FLOCI_GCP_ENDPOINT")).orElse("http://localhost:4588");
+        String container = Optional.ofNullable(System.getenv("FLOCI_GCP_CONTAINER")).orElse("floci-gcp");
         assertEquals("""
                 Active Configuration (Floci GCP)
 
                   Profile:    default
-                  Endpoint:   http://localhost:4588
-                  Container:  floci-gcp
+                  Endpoint:   %s
+                  Container:  %s
                   Output:     text
-                """, plain(runShow(ProductProfile.GCP)));
+                """.formatted(endpoint, container), plain(runShow(ProductProfile.GCP)));
     }
 
     /** BL-016: the -o json key set is a contract; start settings appear only when the profile sets them. */
     @Test
     void jsonKeySetGrowsOnlyWithTheStartSettingsTheProfileDeclares() throws Exception {
-        List<String> base = List.of("profile", "endpoint", "container", "output");
+        Set<String> base = Set.of("profile", "endpoint", "container", "output");
         assertEquals(base, jsonKeys(runShow(ProductProfile.AWS, "-o", "json")));
 
-        writeProfile("full", "image: floci/floci:x\nport: 4599\npersistDir: /d\nservices: s3\n");
-        List<String> full = new ArrayList<>(base);
-        full.addAll(List.of("image", "port", "persistDir", "services"));
+        // The default container pins "no namespace", whatever FLOCI_CONTAINER the shell sets.
+        writeProfile("full", "container: floci\nimage: floci/floci:x\nport: 4599\npersistDir: /d\nservices: s3\n");
+        Set<String> full = new HashSet<>(base);
+        full.addAll(Set.of("image", "port", "persistDir", "services"));
         assertEquals(full, jsonKeys(runShow(ProductProfile.AWS, "--profile", "full", "-o", "json")));
 
-        writeProfile("partial", "port: 4599\n");
-        List<String> partial = new ArrayList<>(base);
+        writeProfile("partial", "container: floci\nport: 4599\n");
+        Set<String> partial = new HashSet<>(base);
         partial.add("port");
         assertEquals(partial, jsonKeys(runShow(ProductProfile.AWS, "--profile", "partial", "-o", "json")));
     }
