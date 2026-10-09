@@ -2,6 +2,7 @@ package io.floci.cli.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
+import io.floci.cli.output.Ansi;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -69,7 +70,12 @@ public class ProfileStore {
                     .forEach(p -> {
                         try {
                             profiles.add(read(p));
-                        } catch (IOException ignored) {}
+                        } catch (IOException e) {
+                            // Skipped, but not silently: --profile on the same name would fail.
+                            System.err.println(Ansi.yellow("Warning: ") + "Skipping profile file " + p
+                                    + ", which is not valid YAML: " + firstLine(e.getMessage())
+                                    + "\nFix the file, or delete it.");
+                        }
                     });
         }
         return profiles;
@@ -79,6 +85,12 @@ public class ProfileStore {
         Path file = existingFile(name);
         if (!Files.exists(file)) return Optional.empty();
         return Optional.of(read(file));
+    }
+
+    private static String firstLine(String message) {
+        if (message == null) return "unreadable";
+        int newline = message.indexOf('\n');
+        return newline >= 0 ? message.substring(0, newline) : message;
     }
 
     // The one read path, so list and show agree on a profile's name.
@@ -106,8 +118,7 @@ public class ProfileStore {
     }
 
     public void save(Profile profile) throws IOException {
-        Files.createDirectories(profilesDir);
-        YAML.writeValue(profileFile(profile.name).toFile(), profile);
+        AtomicFiles.write(profileFile(profile.name), YAML.writeValueAsBytes(profile));
     }
 
     /**

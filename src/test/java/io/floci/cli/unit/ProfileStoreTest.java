@@ -10,6 +10,8 @@ import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
+import java.io.ByteArrayOutputStream;
+import java.io.PrintStream;
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
 import java.nio.file.Files;
@@ -231,5 +233,36 @@ class ProfileStoreTest {
                 .map(Field::getName)
                 .sorted().toList();
         assertEquals(fields, Profile.KNOWN_KEYS.stream().sorted().toList());
+    }
+
+    /** BL-042: saving goes through a temporary file, and none is left behind. */
+    @Test
+    void saveLeavesNoTemporaryFiles() throws Exception {
+        store().save(new Profile(ProductProfile.AWS, "one"));
+        store().save(new Profile(ProductProfile.AWS, "one"));
+
+        try (var files = Files.list(tempDir)) {
+            assertEquals(List.of("one.yaml"), files.map(p -> p.getFileName().toString()).toList());
+        }
+    }
+
+    /** BL-044: an unreadable profile is skipped by list, but reported. */
+    @Test
+    void listReportsAProfileItCannotRead() throws Exception {
+        Files.createDirectories(tempDir);
+        Files.writeString(tempDir.resolve("broken.yaml"), "port: [unterminated\n");
+        Files.writeString(tempDir.resolve("fine.yaml"), "port: 4599\n");
+        PrintStream err = System.err;
+        ByteArrayOutputStream errBuf = new ByteArrayOutputStream();
+        System.setErr(new PrintStream(errBuf));
+        List<Profile> listed;
+        try {
+            listed = store().list();
+        } finally {
+            System.setErr(err);
+        }
+
+        assertEquals(List.of("fine"), listed.stream().map(p -> p.name).toList());
+        assertTrue(errBuf.toString().contains("broken.yaml"), errBuf.toString());
     }
 }
