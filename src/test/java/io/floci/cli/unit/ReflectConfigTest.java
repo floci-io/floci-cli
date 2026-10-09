@@ -8,9 +8,9 @@ import io.floci.cli.update.UpdateCache;
 import org.junit.jupiter.api.Test;
 
 import java.io.InputStream;
-import java.util.HashSet;
+import java.util.HashMap;
 import java.util.List;
-import java.util.Set;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -24,18 +24,26 @@ class ReflectConfigTest {
     private static final List<Class<?>> JACKSON_BOUND = List.of(
             Profile.class, GlobalConfigStore.GlobalConfig.class, UpdateCache.class);
 
+    // Jackson reads the fields, calls the accessors and the constructor of each bound type.
+    private static final List<String> REQUIRED_FLAGS =
+            List.of("allDeclaredFields", "allDeclaredMethods", "allDeclaredConstructors");
+
     @Test
     void everyJacksonBoundTypeIsRegisteredForNativeReflection() throws Exception {
-        Set<String> registered = new HashSet<>();
+        Map<String, JsonNode> registered = new HashMap<>();
         try (InputStream in = getClass().getResourceAsStream(
                 "/META-INF/native-image/io.floci/floci-cli/reflect-config.json")) {
             assertNotNull(in, "reflect-config.json is on the classpath");
             for (JsonNode entry : new ObjectMapper().readTree(in)) {
-                registered.add(entry.path("name").asText());
+                registered.put(entry.path("name").asText(), entry);
             }
         }
         for (Class<?> type : JACKSON_BOUND) {
-            assertTrue(registered.contains(type.getName()), type.getName() + " is missing from reflect-config.json");
+            JsonNode entry = registered.get(type.getName());
+            assertNotNull(entry, type.getName() + " is missing from reflect-config.json");
+            for (String flag : REQUIRED_FLAGS) {
+                assertTrue(entry.path(flag).asBoolean(false), type.getName() + " needs \"" + flag + "\": true");
+            }
         }
     }
 }
