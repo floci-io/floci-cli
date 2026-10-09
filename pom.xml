@@ -157,6 +157,10 @@
                                 <buildArg>--no-fallback</buildArg>
                                 <buildArg>-H:+ReportExceptionStackTraces</buildArg>
                                 <buildArg>-H:IncludeResources=.*\.properties</buildArg>
+                                <!-- Optimize for size, measured 2026-10-08: GraalVM Community linux/arm64 49.2 to 40.8 MB
+                                     (about 17%); Oracle GraalVM about 35% (darwin-arm64 51.8 to 33.6 MB) for
+                                     ~10 ms more startup (~33 to ~43 ms). -->
+                                <buildArg>-Os</buildArg>
                             </buildArgs>
                         </configuration>
                     </plugin>

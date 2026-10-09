@@ -170,6 +170,16 @@ jobs:
           find . -type f \( -name "floci-*" \) | sort | xargs sha256sum > sha256sums.txt
           cat sha256sums.txt
 
+      - name: Report binary sizes
+        run: |
+          {
+            echo "| Asset | Size (MB) |"
+            echo "|---|---|"
+            find dist -type f -name "floci*" ! -name "*.txt" | sort | while read -r f; do
+              echo "| $(basename "$f") | $(awk -v b="$(stat -c %s "$f")" 'BEGIN { printf "%.1f", b / 1048576 }') |"
+            done
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:

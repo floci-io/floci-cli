@@ -137,6 +137,7 @@ Rules when touching this:
 - **New Jackson DTOs** (anything `ObjectMapper` serializes/deserializes by field name) must be added to `src/main/resources/META-INF/native-image/io.floci/floci-cli/reflect-config.json`. Prefer passing `Map`/`JsonNode` to `printer.structured(...)` — those need no registration.
 - **`@Command` classes** do not need manual reflect-config entries — `picocli-codegen` (the annotation processor in `pom.xml`) generates them automatically at compile time.
 - **Do not remove** `--enable-url-protocols=http,https` from `native-image.properties`; `java.net.http.HttpClient` requires it.
+- The native profile builds with `-Os` (about 17% smaller with GraalVM Community, about 35% with Oracle GraalVM, for about 10 ms more startup). `ci.yml` fails the native job when the linux/arm64 binary exceeds `NATIVE_SIZE_BUDGET_MB`; raise the budget deliberately in the PR that needs the room, and say why.
 
 ---
 
