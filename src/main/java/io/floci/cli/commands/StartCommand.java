@@ -164,6 +164,13 @@ public class StartCommand implements Callable<Integer> {
         return args;
     }
 
+    // DockerClient reports a missing binary as "docker binary not found"; on Windows the JDK says
+    // "Cannot run program" instead.
+    static boolean dockerMissing(DockerException e) {
+        String message = e.getMessage() == null ? "" : e.getMessage();
+        return message.contains("docker binary not found") || message.contains("Cannot run program");
+    }
+
     /** {@code endpoint} with its port replaced, or a localhost URL if it cannot be parsed. */
     public static String withPort(String endpoint, int port) {
         try {
@@ -193,13 +200,8 @@ public class StartCommand implements Callable<Integer> {
             return 2;
         }
 
-        // Verify docker is available
-        if (!DockerClient.isInstalled()) {
-            printer.error("docker binary not found in PATH.\nInstall Docker Desktop from https://docs.docker.com/get-docker/");
-            return 1;
-        }
-
-        // Check if container already exists
+        // Check if container already exists. This is also the first docker call, so a missing
+        // binary shows up here, without a separate `docker --version` probe on every start.
         try {
             var existing = docker.inspectContainer(global.container);
             if (existing.isPresent()) {
@@ -213,6 +215,10 @@ public class StartCommand implements Callable<Integer> {
                 docker.removeContainer(global.container);
             }
         } catch (DockerException e) {
+            if (dockerMissing(e)) {
+                printer.error("docker binary not found in PATH.\nInstall Docker Desktop from https://docs.docker.com/get-docker/");
+                return 1;
+            }
             printer.error("Failed to inspect container: " + e.getMessage());
             return 1;
         }
@@ -250,6 +256,7 @@ public class StartCommand implements Callable<Integer> {
         printer.println(Ansi.gray("Waiting for " + profile.displayName() + " to be ready..."));
         WaitCommand wait = new WaitCommand(profile);
         wait.global = global;
+        wait.knownEndpoint = global.endpoint;
         wait.timeout = "30s";
         return wait.call();
     }
