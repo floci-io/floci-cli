@@ -64,11 +64,11 @@ class ProfileStoreTest {
     @Test
     void missingProfileIsEmptyAndDeleteReportsIt() throws Exception {
         assertTrue(store().get("absent").isEmpty());
-        assertFalse(store().delete("absent"));
+        assertTrue(store().delete("absent").isEmpty());
 
         store().save(new Profile(ProductProfile.AWS, "here"));
-        assertTrue(store().delete("here"));
-        assertFalse(store().delete("here"));
+        assertFalse(store().delete("here").isEmpty());
+        assertTrue(store().delete("here").isEmpty());
     }
 
     @Test
@@ -76,7 +76,7 @@ class ProfileStoreTest {
         Files.writeString(tempDir.resolve("staging.yml"), "container: floci-staging\n");
 
         assertEquals("floci-staging", store().get("staging").orElseThrow().container);
-        assertTrue(store().delete("staging"));
+        assertFalse(store().delete("staging").isEmpty());
     }
 
     @Test
@@ -87,6 +87,43 @@ class ProfileStoreTest {
         List<Profile> profiles = store().list();
         assertEquals(1, profiles.size());
         assertEquals("handwritten", profiles.get(0).name);
+    }
+
+    /** BL-011: deleting only the preferred spelling left the other one answering --profile. */
+    @Test
+    void deleteRemovesEverySpelling() throws Exception {
+        Files.createDirectories(tempDir);
+        Files.writeString(tempDir.resolve("dev.yaml"), "port: 4599\n");
+        Files.writeString(tempDir.resolve("dev.yml"), "port: 4600\n");
+
+        assertEquals(2, store().delete("dev").size());
+        assertTrue(store().get("dev").isEmpty());
+    }
+
+    @Test
+    void listSkipsFilesNoCommandCanAddress() throws Exception {
+        Files.createDirectories(tempDir);
+        Files.writeString(tempDir.resolve(".yaml"), "port: 4599\n");
+        Files.writeString(tempDir.resolve("ok.yaml"), "port: 4599\n");
+
+        assertEquals(List.of("ok"), store().list().stream().map(p -> p.name).toList());
+    }
+
+    @Test
+    void existingFileIsTheSpellingOnDisk() throws Exception {
+        Files.createDirectories(tempDir);
+        assertEquals(tempDir.resolve("dev.yaml").toAbsolutePath(), store().existingFile("dev").toAbsolutePath());
+
+        Files.writeString(tempDir.resolve("dev.yml"), "port: 4599\n");
+        assertEquals(tempDir.resolve("dev.yml").toAbsolutePath(), store().existingFile("dev").toAbsolutePath());
+    }
+
+    @Test
+    void getBackfillsTheNameAsListDoes() throws Exception {
+        Files.createDirectories(tempDir);
+        Files.writeString(tempDir.resolve("handwritten.yml"), "container: floci-hand\n");
+
+        assertEquals("handwritten", store().get("handwritten").orElseThrow().name);
     }
 
     @ParameterizedTest
@@ -112,7 +149,7 @@ class ProfileStoreTest {
         Files.writeString(tempDir.resolve("team alpha.yaml"), "container: floci-team\n");
 
         assertEquals("floci-team", store().get("team alpha").orElseThrow().container);
-        assertTrue(store().delete("team alpha"));
+        assertFalse(store().delete("team alpha").isEmpty());
         assertTrue(store().get("team alpha").isEmpty());
     }
 
@@ -138,7 +175,7 @@ class ProfileStoreTest {
         assertEquals("floci-team", store().get("team\\alpha").orElseThrow().container);
         assertEquals(tempDir.toAbsolutePath().normalize(),
                 store().profileFile("team\\alpha").getParent());
-        assertTrue(store().delete("team\\alpha"));
+        assertFalse(store().delete("team\\alpha").isEmpty());
     }
 
     @Test
@@ -159,5 +196,14 @@ class ProfileStoreTest {
             assertEquals(tempDir.toAbsolutePath().normalize(),
                     store().profileFile(name).getParent(), name);
         }
+    }
+
+    /** BL-002: the message names what the user typed, not the file it would have become. */
+    @Test
+    void errorsQuoteTheNameAsTyped() {
+        IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+                () -> store().profileFile("..\u0000x"));
+        assertTrue(e.getMessage().contains("'..\u0000x'"), e.getMessage());
+        assertFalse(e.getMessage().contains(".yaml"), e.getMessage());
     }
 }

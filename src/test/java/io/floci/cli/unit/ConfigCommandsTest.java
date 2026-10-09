@@ -268,4 +268,38 @@ class ConfigCommandsTest {
         assertTrue(json.contains("\"container\" : \"floci-az-b\""), json);
         assertTrue(json.contains("\"port\" : 14577"), json);
     }
+
+    /** BL-009: list names a file without 'name:' after the file, so show must too. */
+    @Test
+    void showNamesAHandWrittenProfileAfterItsFile() throws Exception {
+        writeProfile("handwritten", "container: floci-hand\n");
+
+        Run r = profileCmd(ProductProfile.AWS, "show", "handwritten");
+
+        assertEquals(0, r.exit());
+        assertTrue(r.out().contains("handwritten"), r.out());
+        assertFalse(r.out().contains("null"), r.out());
+    }
+
+    @Test
+    void deleteReportsBothFilesWhenTwoSpellingsExist() throws Exception {
+        writeProfile("dev", "port: 4599\n");
+        Files.writeString(tempDir.resolve("dev.yml"), "port: 4600\n");
+
+        Run r = profileCmd(ProductProfile.AWS, "delete", "dev");
+
+        assertEquals(0, r.exit());
+        assertTrue(r.out().contains("dev.yaml and dev.yml"), r.out());
+        assertTrue(store().get("dev").isEmpty());
+    }
+
+    /** BL-003: same cause as a bad --profile at parse time, so the same exit code. */
+    @Test
+    void showExitsTwoWhenTheProfileIsGoneAfterTheParse() {
+        ConfigShowCommand show = new ConfigShowCommand(ProductProfile.AZ, store());
+        // Parsed without the provider, so the profile is never read here, as if it existed then.
+        new CommandLine(show).parseArgs("--profile", "gone");
+
+        assertEquals(CommandLine.ExitCode.USAGE, show.call());
+    }
 }

@@ -128,6 +128,6 @@ public class ProfileDefaultValueProvider implements IDefaultValueProvider {
     private ProfileNotFoundException invalid(CommandLine commandLine, String name, String detail) {
         return new ProfileNotFoundException(commandLine,
                 "Profile '" + name + "' is invalid: " + detail + "\n"
-                        + "Edit " + store.profileFile(name) + " and try again.");
+                        + "Edit " + store.existingFile(name) + " and try again.");
     }
 }

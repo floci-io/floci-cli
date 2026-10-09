@@ -125,4 +125,15 @@ class RestartCommandTest {
             System.setErr(err);
         }
     }
+
+    /**
+     * BL-003: a profile that disappears between the parse and the restart is the same user error
+     * as a bad --profile at parse time: exit 2, and nothing stopped.
+     */
+    @Test
+    void aProfileGoneAfterTheParseExitsTwoBeforeStoppingAnything() {
+        RestartCommand restart = parse(ProductProfile.AZ, "--profile", "gone", "--container", "floci-az-never-started");
+
+        assertEquals(CommandLine.ExitCode.USAGE, restart.call());
+    }
 }

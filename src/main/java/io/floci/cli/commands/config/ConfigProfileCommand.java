@@ -11,6 +11,7 @@ import picocli.CommandLine.*;
 import picocli.CommandLine.Model.CommandSpec;
 
 import java.io.IOException;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -78,16 +79,23 @@ public class ConfigProfileCommand implements Callable<Integer> {
     public Integer call() {
         Printer printer = global.printer();
 
-        return switch (action.toLowerCase()) {
-            case "list" -> listProfiles(printer, store);
-            case "show" -> showProfile(printer, store);
-            case "create" -> createProfile(printer, store);
-            case "delete" -> deleteProfile(printer, store);
-            default -> {
-                printer.error("Unknown action '" + action + "'. Use: list, show, create, delete");
-                yield 1;
-            }
-        };
+        try {
+            return switch (action.toLowerCase()) {
+                case "list" -> listProfiles(printer, store);
+                case "show" -> showProfile(printer, store);
+                case "create" -> createProfile(printer, store);
+                case "delete" -> deleteProfile(printer, store);
+                default -> {
+                    printer.error("Unknown action '" + action + "'. Use: list, show, create, delete");
+                    yield 1;
+                }
+            };
+        } catch (IllegalArgumentException e) {
+            // An invalid profile name: the same cause exits 2 from --profile, so it does here too.
+            // The message already ends with the next step.
+            printer.error(e.getMessage());
+            return ExitCode.USAGE;
+        }
     }
 
     private int listProfiles(Printer printer, ProfileStore store) {
@@ -159,7 +167,7 @@ public class ConfigProfileCommand implements Callable<Integer> {
         if (name == null) { printer.error("Profile name required."); return 1; }
         try {
             if (store.get(name).isPresent()) {
-                printer.error("Profile '" + name + "' already exists. Delete it first or edit " + store.profileFile(name));
+                printer.error("Profile '" + name + "' already exists. Delete it first or edit " + store.existingFile(name));
                 return 1;
             }
             if (port != null && (port < 1 || port > 65535)) {
@@ -247,11 +255,15 @@ public class ConfigProfileCommand implements Callable<Integer> {
     private int deleteProfile(Printer printer, ProfileStore store) {
         if (name == null) { printer.error("Profile name required."); return 1; }
         try {
-            if (!store.delete(name)) {
-                printer.error("Profile '" + name + "' not found.");
+            List<Path> removed = store.delete(name);
+            if (removed.isEmpty()) {
+                printer.error("Profile '" + name + "' not found.\nRun '" + profile.commandPrefix() + " config profile list' to see available profiles.");
                 return 1;
             }
-            printer.println(Ansi.green("Deleted") + " profile '" + name + "'");
+            String files = removed.size() > 1
+                    ? " (" + removed.get(0).getFileName() + " and " + removed.get(1).getFileName() + ")"
+                    : "";
+            printer.println(Ansi.green("Deleted") + " profile '" + name + "'" + files);
             return 0;
         } catch (IOException e) {
             printer.error("Could not delete profile: " + e.getMessage());

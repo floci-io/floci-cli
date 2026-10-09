@@ -2,6 +2,7 @@ package io.floci.cli.commands;
 
 import io.floci.cli.GlobalOptions;
 import io.floci.cli.ProductProfile;
+import io.floci.cli.config.ProfileNotFoundException;
 import io.floci.cli.config.ProfileStore;
 import io.floci.cli.output.Printer;
 import picocli.CommandLine.*;
@@ -44,7 +45,15 @@ public class RestartCommand implements Callable<Integer> {
         // Resolve the profile BEFORE stopping anything. A failure here must not leave the
         // container stopped, and the values must not be re-read from a file that could change
         // during the stop plus the one second wait below.
-        StartCommand start = buildStartCommand();
+        StartCommand start;
+        try {
+            start = buildStartCommand();
+        } catch (ProfileNotFoundException e) {
+            // Gone or broken since the parse resolved it: nothing has been stopped yet, and the
+            // exit code matches a bad --profile at parse time.
+            printer.error(e.getMessage());
+            return ExitCode.USAGE;
+        }
         String invalid = start.validationError();
         if (invalid != null) {
             printer.error(invalid);
