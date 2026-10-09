@@ -697,6 +697,8 @@ So `floci start --profile probe --container other` starts `other`, and a profile
 `FLOCI_CONTAINER` exported in your shell. A field the profile leaves out changes nothing.
 
 An unknown or unreadable profile is an error (exit 2), not a silent fall back to the defaults.
+A key floci does not read (a typo such as `persist_dir:`) is ignored with a warning that lists
+the keys a profile can set.
 Values are interpolated by the CLI, so `persistDir: ${env:HOME}/floci-data` expands as you would
 expect.
 

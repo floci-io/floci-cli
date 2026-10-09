@@ -321,4 +321,35 @@ class ConfigCommandsTest {
         assertTrue(out.contains("\"container\" : \"floci-snap\""), out);
         assertTrue(out.contains("\"persistDir\" : \"/from-the-parse\""), out);
     }
+
+    /** config profile show reads the file directly; a misspelled key must still be reported. */
+    @Test
+    void profileShowWarnsAboutAMisspelledKey() throws Exception {
+        writeProfile("typo-key", "container: floci-typo\npersist_dir: /data\n");
+
+        Run r = profileCmd(ProductProfile.AWS, "show", "typo-key");
+
+        assertEquals(0, r.exit());
+        assertTrue(r.err().contains("'persist_dir'"), r.err());
+    }
+
+    /** config show reads the profile once and reports a misspelled key exactly once. */
+    @Test
+    void configShowWarnsOnceAboutAMisspelledKey() throws Exception {
+        writeProfile("typo-twice", "container: floci-typo\npersist_dir: /data\n");
+        CommandLine cmd = FlociCli.buildCommandLine(store());
+        PrintStream out = System.out;
+        PrintStream err = System.err;
+        ByteArrayOutputStream errBuf = new ByteArrayOutputStream();
+        System.setOut(new PrintStream(new ByteArrayOutputStream()));
+        System.setErr(new PrintStream(errBuf));
+        try {
+            assertEquals(0, cmd.execute("config", "show", "--profile", "typo-twice"));
+        } finally {
+            System.setOut(out);
+            System.setErr(err);
+        }
+
+        assertEquals(1, errBuf.toString().split("'persist_dir'", -1).length - 1, errBuf.toString());
+    }
 }

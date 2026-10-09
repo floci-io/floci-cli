@@ -89,6 +89,23 @@ class MissingProfileTest {
         assertTrue(out.toString().contains("enforced"), out.toString()); // help wraps the image value
     }
 
+    /** BL-013: a misspelled key is still ignored, but no longer silently. */
+    @Test
+    void aMisspelledKeyIsReportedOnceAndTheProfileStillApplies() throws Exception {
+        writeProfile("typo-key", "container: floci-typo\npersist_dir: /data\n");
+
+        int[] exit = new int[1];
+        String err = captureStderr(() -> {
+            cli().parseArgs("start", "--profile", "typo-key");
+            return 0;
+        }, exit);
+
+        assertEquals(0, exit[0]);
+        assertTrue(err.contains("Profile 'typo-key' sets 'persist_dir'"), err);
+        assertTrue(err.contains("persistDir"), err);
+        assertEquals(1, err.split("Warning").length - 1, err);
+    }
+
     @Test
     void helpStillWorksWithABadProfile() {
         int[] exit = new int[1];

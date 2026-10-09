@@ -10,8 +10,11 @@ import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
+import java.lang.reflect.Field;
+import java.lang.reflect.Modifier;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Arrays;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -205,5 +208,28 @@ class ProfileStoreTest {
                 () -> store().profileFile("..\u0000x"));
         assertTrue(e.getMessage().contains("'..\u0000x'"), e.getMessage());
         assertFalse(e.getMessage().contains(".yaml"), e.getMessage());
+    }
+
+    @Test
+    void unknownKeysAreRecordedButNeverWrittenBack() throws Exception {
+        Files.createDirectories(tempDir);
+        Files.writeString(tempDir.resolve("typo.yaml"), "name: typo\npersist_dir: /data\nport: 4599\n");
+
+        Profile p = store().get("typo").orElseThrow();
+        assertEquals(List.of("persist_dir"), p.unknownKeys());
+        assertEquals(4599, p.port);
+
+        store().save(p);
+        assertFalse(Files.readString(tempDir.resolve("typo.yaml")).contains("persist_dir"));
+        assertFalse(Files.readString(tempDir.resolve("typo.yaml")).contains("unknownKeys"));
+    }
+
+    @Test
+    void knownKeysAreExactlyTheProfileFields() {
+        List<String> fields = Arrays.stream(Profile.class.getFields())
+                .filter(f -> !Modifier.isStatic(f.getModifiers()))
+                .map(Field::getName)
+                .sorted().toList();
+        assertEquals(fields, Profile.KNOWN_KEYS.stream().sorted().toList());
     }
 }
