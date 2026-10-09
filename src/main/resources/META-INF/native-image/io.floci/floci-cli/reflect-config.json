@@ -12,6 +12,12 @@
     "allDeclaredConstructors": true
   },
   {
+    "name": "io.floci.cli.update.UpdateCache",
+    "allDeclaredFields": true,
+    "allDeclaredMethods": true,
+    "allDeclaredConstructors": true
+  },
+  {
     "name": "com.fasterxml.jackson.databind.ser.std.ToStringSerializer",
     "allDeclaredMethods": true
   },
