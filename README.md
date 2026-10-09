@@ -659,7 +659,8 @@ floci config validate -f docker-compose.yml  # validate a Compose file
 ```
 
 Each product tree has its own `config show|validate|profile` (`floci gcp config show`, ...), which
-uses that product's defaults; `config default-product` exists only at the top level.
+uses that product's defaults; `config default-product` is available through bare `floci config`
+and `floci aws config`, but not through the GCP, Azure, or OCI config trees.
 
 #### Profiles
 
