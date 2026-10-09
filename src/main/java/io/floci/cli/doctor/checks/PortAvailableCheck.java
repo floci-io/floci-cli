@@ -46,7 +46,7 @@ public class PortAvailableCheck implements Check {
                 "Run 'lsof -i :" + port + "' to identify the process, or start Floci with --port <other>");
     }
 
-    private static boolean isPortFree(int port) {
+    public static boolean isPortFree(int port) {
         try (ServerSocket s = new ServerSocket(port)) {
             return true;
         } catch (IOException e) {

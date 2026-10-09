@@ -5,6 +5,10 @@ import io.floci.cli.ProductProfile;
 import io.floci.cli.config.ProfileDefaultValueProvider;
 import io.floci.cli.docker.DockerClient;
 import io.floci.cli.docker.DockerException;
+import io.floci.cli.doctor.CheckResult;
+import io.floci.cli.doctor.CheckStatus;
+import io.floci.cli.doctor.checks.DockerSocketCheck;
+import io.floci.cli.doctor.checks.PortAvailableCheck;
 import io.floci.cli.output.Ansi;
 import io.floci.cli.output.Printer;
 import picocli.CommandLine;
@@ -29,11 +33,19 @@ public class StartCommand implements Callable<Integer> {
     @Mixin
     protected GlobalOptions global;
 
+    private final DockerClient docker;
+
     public StartCommand() {
         this(ProductProfile.AWS);
     }
 
     protected StartCommand(ProductProfile profile) {
+        this(profile, new DockerClient());
+    }
+
+    /** Test seam: {@code docker} answers every docker call this start makes. */
+    public StartCommand(ProductProfile profile, DockerClient docker) {
+        this.docker = docker;
         this.profile = profile;
         this.global = new GlobalOptions(profile);
         this.port = profile.defaultPort();
@@ -192,7 +204,6 @@ public class StartCommand implements Callable<Integer> {
     @Override
     public Integer call() {
         Printer printer = global.printer();
-        DockerClient docker = new DockerClient();
 
         String invalid = validationError();
         if (invalid != null) {
@@ -219,7 +230,16 @@ public class StartCommand implements Callable<Integer> {
                 printer.error("docker binary not found in PATH.\nInstall Docker Desktop from https://docs.docker.com/get-docker/");
                 return 1;
             }
-            printer.error("Failed to inspect container: " + e.getMessage());
+            printer.error("Failed to inspect container: " + e.getMessage() + socketGuidance());
+            return 1;
+        }
+
+        // Checked here rather than left to 'docker run', whose bind error names neither the port
+        // flag nor how to find what holds the port. A remote daemon publishes on another machine,
+        // so a local probe would say nothing about it.
+        if (DockerClient.dockerHost().kind() != DockerClient.Kind.TCP && !PortAvailableCheck.isPortFree(port)) {
+            printer.error("Port " + port + " is already in use by another process.\n"
+                    + "Run 'lsof -i :" + port + "' to find it, or pass --port <other> to use a different port.");
             return 1;
         }
 
@@ -259,5 +279,14 @@ public class StartCommand implements Callable<Integer> {
         wait.knownEndpoint = global.endpoint;
         wait.timeout = "30s";
         return wait.call();
+    }
+
+    // When the daemon is unreachable because its local socket is missing, say so: docker's own
+    // error ("Cannot connect to the Docker daemon") does not say what to do about it.
+    private static String socketGuidance() {
+        CheckResult socket = new DockerSocketCheck().run(null, null);
+        return socket.status() == CheckStatus.fail
+                ? "\n" + socket.message() + ".\n" + socket.fix() + ", then re-run the command."
+                : "";
     }
 }
