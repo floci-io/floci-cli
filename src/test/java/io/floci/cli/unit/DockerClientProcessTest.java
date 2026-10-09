@@ -1,5 +1,6 @@
 package io.floci.cli.unit;
 
+import io.floci.cli.GlobalOptions;
 import io.floci.cli.docker.DockerClient;
 import io.floci.cli.docker.DockerException;
 import org.junit.jupiter.api.Test;
@@ -9,6 +10,8 @@ import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
+import java.io.ByteArrayOutputStream;
+import java.io.PrintStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
@@ -202,5 +205,27 @@ class DockerClientProcessTest {
         List<String> args = Files.readAllLines(argsFile);
 
         assertEquals(List.of("rm", "--", "--rm-everything"), args);
+    }
+
+    /** BL-041: with --verbose set, each docker command is echoed to stderr before it runs. */
+    @Test
+    @DisabledOnOs(OS.WINDOWS)
+    void verboseEchoesTheDockerCommand() throws Exception {
+        Path fakeDocker = tempDir.resolve("docker");
+        Files.writeString(fakeDocker, "#!/bin/sh\nexit 0\n");
+        assertTrue(fakeDocker.toFile().setExecutable(true));
+        PrintStream err = System.err;
+        ByteArrayOutputStream errBuf = new ByteArrayOutputStream();
+        System.setErr(new PrintStream(errBuf));
+        System.setProperty(GlobalOptions.VERBOSE_PROPERTY, "true");
+        try {
+            new DockerClient(fakeDocker.toString()).removeContainer("floci-x");
+        } finally {
+            System.clearProperty(GlobalOptions.VERBOSE_PROPERTY);
+            System.setErr(err);
+        }
+
+        assertTrue(errBuf.toString().contains("+ docker rm"), errBuf.toString());
+        assertTrue(errBuf.toString().contains("floci-x"), errBuf.toString());
     }
 }
