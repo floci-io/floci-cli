@@ -4,11 +4,13 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Thin subprocess wrapper around the docker CLI.
@@ -16,7 +18,11 @@ import java.util.concurrent.CompletableFuture;
  */
 public class DockerClient {
 
+    /** How long a non-streaming docker call may take before it is killed. */
+    public static final Duration DEFAULT_TIMEOUT = Duration.ofSeconds(30);
+
     private final String binary;
+    private final Duration timeout;
 
     public DockerClient() {
         this("docker");
@@ -24,7 +30,13 @@ public class DockerClient {
 
     /** Test seam: run {@code binary} in place of {@code docker}. */
     public DockerClient(String binary) {
+        this(binary, DEFAULT_TIMEOUT);
+    }
+
+    /** Test seam: run {@code binary}, killing any non-streaming call that outlives {@code timeout}. */
+    public DockerClient(String binary, Duration timeout) {
         this.binary = binary;
+        this.timeout = timeout;
     }
 
     public record ContainerInfo(
@@ -63,7 +75,7 @@ public class DockerClient {
                     "--format",
                     "{{.Id}}|{{.Name}}|{{.Config.Image}}|{{.State.Status}}|" +
                             "{{range $p, $b := .NetworkSettings.Ports}}{{if $b}}{{(index $b 0).HostPort}}->{{$p}} {{end}}{{end}}",
-                    name);
+                    "--", name);
             if (out.isBlank()) return Optional.empty();
             String[] parts = out.trim().split("\\|", -1);
             return Optional.of(new ContainerInfo(
@@ -82,7 +94,7 @@ public class DockerClient {
 
     public boolean isImagePresent(String image) throws DockerException {
         try {
-            String out = run("docker", "images", "-q", image);
+            String out = run("docker", "images", "-q", "--", image);
             return !out.isBlank();
         } catch (DockerException e) {
             return false;
@@ -91,7 +103,7 @@ public class DockerClient {
 
     public Optional<String> imageDigest(String image) throws DockerException {
         try {
-            String out = run("docker", "inspect", "--format", "{{index .RepoDigests 0}}", image);
+            String out = run("docker", "inspect", "--format", "{{index .RepoDigests 0}}", "--", image);
             return out.isBlank() ? Optional.empty() : Optional.of(out.trim());
         } catch (DockerException e) {
             return Optional.empty();
@@ -102,7 +114,7 @@ public class DockerClient {
     public Optional<String> imageLabel(String image, String key) throws DockerException {
         try {
             String out = run("docker", "inspect", "--format",
-                    "{{index .Config.Labels \"" + key + "\"}}", image);
+                    "{{index .Config.Labels \"" + key + "\"}}", "--", image);
             String value = out.trim();
             return value.isEmpty() || "<no value>".equals(value) ? Optional.empty() : Optional.of(value);
         } catch (DockerException e) {
@@ -113,7 +125,7 @@ public class DockerClient {
     public void pull(String image, String policy) throws DockerException {
         if ("never".equalsIgnoreCase(policy)) return;
         if ("missing".equalsIgnoreCase(policy) && isImagePresent(image)) return;
-        runStreaming("docker", "pull", image);
+        runStreaming("docker", "pull", "--", image);
     }
 
     public String startContainer(List<String> args) throws DockerException {
@@ -121,15 +133,17 @@ public class DockerClient {
         cmd.add("docker");
         cmd.add("run");
         cmd.addAll(args);
-        return run(cmd.toArray(String[]::new)).trim();
+        // docker run may still pull the image (--pull never with a missing image), so it gets
+        // far longer than the lookups.
+        return run(Duration.ofMinutes(10), cmd.toArray(String[]::new)).trim();
     }
 
     public void stopContainer(String name, int timeout) throws DockerException {
-        run("docker", "stop", "--time", String.valueOf(timeout), name);
+        run(Duration.ofSeconds(timeout).plus(DEFAULT_TIMEOUT), "docker", "stop", "--time", String.valueOf(timeout), "--", name);
     }
 
     public void removeContainer(String name) throws DockerException {
-        run("docker", "rm", name);
+        run("docker", "rm", "--", name);
     }
 
     public void streamLogs(String name, boolean follow, int tail, String since) throws DockerException {
@@ -137,28 +151,37 @@ public class DockerClient {
         if (follow) cmd.add("--follow");
         if (tail > 0) { cmd.add("--tail"); cmd.add(String.valueOf(tail)); }
         if (since != null && !since.isBlank()) { cmd.add("--since"); cmd.add(since); }
+        cmd.add("--");
         cmd.add(name);
         runStreaming(cmd.toArray(String[]::new));
     }
 
     private String run(String... cmd) throws DockerException {
+        return run(timeout, cmd);
+    }
+
+    private String run(Duration limit, String... cmd) throws DockerException {
         Process proc = null;
+        boolean finished = false;
         try {
             proc = runProcess(cmd);
-            // Both streams drain at once, so a full stderr pipe cannot stall the process, and the
-            // wait below is interruptible: an abandoned lookup kills its process instead of
-            // leaving it running after the CLI exits.
+            // Both streams drain at once, so a full stderr pipe cannot stall the process; the wait
+            // is bounded and interruptible, and any way out of it but a normal exit kills the
+            // process, so no docker call outlives the CLI.
             CompletableFuture<String> stdout = drain(proc.getInputStream());
             CompletableFuture<String> stderr = drain(proc.getErrorStream());
-            int code = proc.waitFor();
+            if (!proc.waitFor(limit.toMillis(), TimeUnit.MILLISECONDS)) {
+                throw new DockerException("'" + describe(cmd) + "' did not finish within " + limit.toSeconds()
+                        + "s.\nCheck that the Docker daemon is responsive ('docker info') and re-run the command.");
+            }
+            finished = true;
             String out = stdout.join();
             String err = stderr.join();
-            if (code != 0) {
+            if (proc.exitValue() != 0) {
                 throw new DockerException(err.isBlank() ? out : err);
             }
             return out;
         } catch (InterruptedException e) {
-            if (proc != null) proc.destroyForcibly();
             Thread.currentThread().interrupt();
             throw new DockerException("Interrupted");
         } catch (IOException e) {
@@ -166,25 +189,42 @@ public class DockerClient {
                 throw new DockerException("docker binary not found in PATH. Install Docker Desktop or Docker Engine.");
             }
             throw new DockerException(e.getMessage());
+        } finally {
+            if (proc != null && !finished) proc.destroyForcibly();
         }
     }
 
+    // "docker container inspect" for messages: the subcommand words, never the user's arguments.
+    private static String describe(String... cmd) {
+        StringBuilder words = new StringBuilder();
+        for (String part : cmd) {
+            if (part.startsWith("-")) break;
+            if (!words.isEmpty()) words.append(' ');
+            words.append(part);
+        }
+        return words.toString();
+    }
+
     private void runStreaming(String... cmd) throws DockerException {
+        Process proc = null;
+        boolean finished = false;
         try {
-            Process proc = runProcess(cmd);
+            Process started = runProcess(cmd);
+            proc = started;
             Thread out = new Thread(() -> {
-                try (var reader = new BufferedReader(new InputStreamReader(proc.getInputStream()))) {
+                try (var reader = new BufferedReader(new InputStreamReader(started.getInputStream()))) {
                     reader.lines().forEach(System.out::println);
                 } catch (IOException ignored) {}
             });
             Thread err = new Thread(() -> {
-                try (var reader = new BufferedReader(new InputStreamReader(proc.getErrorStream()))) {
+                try (var reader = new BufferedReader(new InputStreamReader(started.getErrorStream()))) {
                     reader.lines().forEach(System.err::println);
                 } catch (IOException ignored) {}
             });
             out.start();
             err.start();
             int code = proc.waitFor();
+            finished = true;
             out.join();
             err.join();
             if (code != 0) {
@@ -195,6 +235,9 @@ public class DockerClient {
             throw new DockerException("Interrupted");
         } catch (IOException e) {
             throw new DockerException(e.getMessage());
+        } finally {
+            // Streaming calls (pull, logs --follow) have no time limit, but never outlive the CLI.
+            if (proc != null && !finished) proc.destroyForcibly();
         }
     }
 
