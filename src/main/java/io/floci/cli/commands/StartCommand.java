@@ -3,7 +3,6 @@ package io.floci.cli.commands;
 import io.floci.cli.GlobalOptions;
 import io.floci.cli.ProductProfile;
 import io.floci.cli.config.ProfileDefaultValueProvider;
-import io.floci.cli.config.ProfileStore;
 import io.floci.cli.docker.DockerClient;
 import io.floci.cli.docker.DockerException;
 import io.floci.cli.output.Ansi;
@@ -71,15 +70,11 @@ public class StartCommand implements Callable<Integer> {
      * interpolation. Anything that needs to know what a profile would start with must go through
      * here rather than reading the {@link io.floci.cli.config.Profile} bean, or it silently
      * disagrees with {@code start} on any interpolated value.
-     */
-    public static StartCommand resolvedFor(ProductProfile product, ProfileStore store, String profileName) {
-        return resolvedFor(product, new ProfileDefaultValueProvider(store), profileName);
-    }
-
-    /**
-     * As above, but with the provider supplied so a caller can read back the one profile snapshot
-     * it resolved ({@link ProfileDefaultValueProvider#resolved()}) instead of reading the file a
-     * second time and risking a mix of two versions.
+     *
+     * <p>Pass the provider the outer parse used ({@link ProfileDefaultValueProvider#of}): it
+     * memoizes the profile it resolved, so this applies that same snapshot instead of reading the
+     * file again, and a caller can read the snapshot back through
+     * {@link ProfileDefaultValueProvider#resolved()}.
      */
     public static StartCommand resolvedFor(ProductProfile product,
                                            ProfileDefaultValueProvider provider,

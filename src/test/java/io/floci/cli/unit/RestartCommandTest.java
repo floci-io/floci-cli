@@ -1,18 +1,19 @@
 package io.floci.cli.unit;
 
+import io.floci.cli.FlociCli;
 import io.floci.cli.ProductProfile;
 import io.floci.cli.commands.RestartCommand;
-import io.floci.cli.config.ProfileDefaultValueProvider;
 import io.floci.cli.config.ProfileStore;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-import picocli.CommandLine;
+import picocli.CommandLine.ParseResult;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.PrintStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -29,10 +30,15 @@ class RestartCommandTest {
     @TempDir
     Path tempDir;
 
+    // Through the real wiring, so restart sees the provider the parse used.
     private RestartCommand parse(ProductProfile product, String... args) {
-        RestartCommand restart = new RestartCommand(product, new ProfileStore(tempDir));
-        new CommandLine(restart).parseArgs(args);
-        return restart;
+        List<String> all = new ArrayList<>();
+        if (product != ProductProfile.AWS) all.add(product.name());
+        all.add("restart");
+        all.addAll(List.of(args));
+        ParseResult r = FlociCli.buildCommandLine(new ProfileStore(tempDir)).parseArgs(all.toArray(String[]::new));
+        while (r.hasSubcommand()) r = r.subcommand();
+        return (RestartCommand) r.commandSpec().userObject();
     }
 
     private void writeProfile(String name, String yaml) throws IOException {
@@ -128,37 +134,19 @@ class RestartCommandTest {
     }
 
     /**
-     * BL-003: a profile that disappears between the parse and the restart is the same user error
-     * as a bad --profile at parse time: exit 2, and nothing stopped.
+     * One snapshot: restart applies the profile the parse read, not a second read of the file, so
+     * an edit or delete in between cannot mix two versions into one restart.
      */
     @Test
-    void aProfileGoneAfterTheParseExitsTwoBeforeStoppingAnything() throws Exception {
-        writeProfile("gone", "container: floci-az-never-started\n");
-        ProfileStore store = new ProfileStore(tempDir);
-        RestartCommand restart = new RestartCommand(ProductProfile.AZ, store);
-        // A real parse: the provider reads the profile while it still exists.
-        new CommandLine(restart)
-                .setDefaultValueProvider(new ProfileDefaultValueProvider(store))
-                .parseArgs("--profile", "gone");
-        Files.delete(tempDir.resolve("gone.yaml"));
+    void usesTheParsesSnapshotEvenIfTheFileChangesAfterwards() throws Exception {
+        writeProfile("snap", "container: floci-snap\npersistDir: /from-the-parse\n");
+        RestartCommand restart = parse(ProductProfile.AWS, "--profile", "snap");
 
-        PrintStream out = System.out;
-        PrintStream err = System.err;
-        ByteArrayOutputStream outBuf = new ByteArrayOutputStream();
-        ByteArrayOutputStream errBuf = new ByteArrayOutputStream();
-        System.setOut(new PrintStream(outBuf));
-        System.setErr(new PrintStream(errBuf));
-        int exit;
-        try {
-            exit = restart.call();
-        } finally {
-            System.setOut(out);
-            System.setErr(err);
-        }
+        writeProfile("snap", "container: floci-snap\npersistDir: /edited-later\n");
+        List<String> args = restart.buildStartCommand().dockerRunArgs(SOCKET);
+        assertTrue(args.contains("/from-the-parse:/app/data"), args.toString());
 
-        assertEquals(CommandLine.ExitCode.USAGE, exit);
-        assertTrue(errBuf.toString().contains("Profile 'gone' not found"), errBuf.toString());
-        // Stop prints this before calling docker; its absence means nothing was stopped.
-        assertFalse(outBuf.toString().contains("Stopping"), outBuf.toString());
+        Files.delete(tempDir.resolve("snap.yaml"));
+        assertTrue(restart.buildStartCommand().dockerRunArgs(SOCKET).contains("/from-the-parse:/app/data"));
     }
 }

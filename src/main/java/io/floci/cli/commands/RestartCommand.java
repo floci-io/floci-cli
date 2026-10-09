@@ -3,9 +3,10 @@ package io.floci.cli.commands;
 import io.floci.cli.GlobalOptions;
 import io.floci.cli.ProductProfile;
 import io.floci.cli.config.ProfileNotFoundException;
-import io.floci.cli.config.ProfileStore;
+import io.floci.cli.config.ProfileDefaultValueProvider;
 import io.floci.cli.output.Printer;
 import picocli.CommandLine.*;
+import picocli.CommandLine.Model.CommandSpec;
 
 import java.util.concurrent.Callable;
 
@@ -18,23 +19,18 @@ public class RestartCommand implements Callable<Integer> {
 
     protected final ProductProfile profile;
 
-    private final ProfileStore store;
-
     @Mixin
     protected GlobalOptions global;
+
+    @Spec
+    CommandSpec spec;
 
     public RestartCommand() {
         this(ProductProfile.AWS);
     }
 
     protected RestartCommand(ProductProfile profile) {
-        this(profile, new ProfileStore());
-    }
-
-    /** Test seam: a store pointed at a temporary profiles directory. */
-    public RestartCommand(ProductProfile profile, ProfileStore store) {
         this.profile = profile;
-        this.store = store;
         this.global = new GlobalOptions(profile);
     }
 
@@ -82,15 +78,12 @@ public class RestartCommand implements Callable<Integer> {
      * directory on {@code start} and a different one on {@code restart}.
      */
     public StartCommand buildStartCommand() {
-        StartCommand start = StartCommand.resolvedFor(profile, store, global.profile);
+        // The outer parse's provider: its memoized profile is the snapshot the globals below were
+        // resolved from, so the start settings cannot come from a newer version of the file.
+        StartCommand start = StartCommand.resolvedFor(profile, ProfileDefaultValueProvider.of(spec), global.profile);
 
         // The real invocation's globals win: they already carry the profile plus any flag the
         // user passed, resolved once by the outer parse.
-        //
-        // Known residual: those globals come from the outer parse's read of the profile while the
-        // fields above come from resolvedFor's, so a profile edited between the two would mix
-        // snapshots. Closing it means making the outer provider reachable from commands, which is
-        // a wider change than this fix; tracked as batman LAY-1.
         start.global = global;
         start.pull = "missing";
         start.detach = false;

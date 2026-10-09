@@ -6,11 +6,11 @@ import io.floci.cli.commands.StartCommand;
 import io.floci.cli.config.Profile;
 import io.floci.cli.config.ProfileDefaultValueProvider;
 import io.floci.cli.config.ProfileNotFoundException;
-import io.floci.cli.config.ProfileStore;
 import io.floci.cli.output.Ansi;
 import io.floci.cli.output.OutputFormat;
 import io.floci.cli.output.Printer;
 import picocli.CommandLine.*;
+import picocli.CommandLine.Model.CommandSpec;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -26,23 +26,18 @@ public class ConfigShowCommand implements Callable<Integer> {
 
     protected final ProductProfile profile;
 
-    private final ProfileStore store;
-
     @Mixin
     protected GlobalOptions global;
+
+    @Spec
+    CommandSpec spec;
 
     public ConfigShowCommand() {
         this(ProductProfile.AWS);
     }
 
     protected ConfigShowCommand(ProductProfile profile) {
-        this(profile, new ProfileStore());
-    }
-
-    /** Test seam: a store pointed at a temporary profiles directory. */
-    public ConfigShowCommand(ProductProfile profile, ProfileStore store) {
         this.profile = profile;
-        this.store = store;
         this.global = new GlobalOptions(profile);
     }
 
@@ -85,14 +80,14 @@ public class ConfigShowCommand implements Callable<Integer> {
     // interpolated persistDir reads here exactly as 'start' would use it. The bean is consulted
     // for presence, so a product default never shows up looking like a profile value.
     //
-    // Both come from ONE snapshot: the provider memoizes the profile it read, so presence and
-    // values cannot disagree if another process edits the file mid-command. If the profile has
-    // gone since the outer parse resolved it, resolvedFor throws and the command fails loudly,
-    // which beats printing half of an old profile next to half of a new one.
+    // All of it comes from ONE snapshot, the one the outer parse took for the global rows above:
+    // the provider is that parse's, and it memoizes the profile it read, so no row can come from a
+    // newer version of the file. Built by hand, outside FlociCli's wiring, the provider is fresh
+    // and reads the file here; if it has gone, resolvedFor throws and call() exits 2.
     private void addStartSettings(Map<String, Object> data) {
         if (global.profile == null) return;
 
-        ProfileDefaultValueProvider provider = new ProfileDefaultValueProvider(store);
+        ProfileDefaultValueProvider provider = ProfileDefaultValueProvider.of(spec);
         StartCommand resolved = StartCommand.resolvedFor(profile, provider, global.profile);
         Optional<Profile> declared = provider.resolved();
         if (declared.isEmpty()) return;
