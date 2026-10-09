@@ -32,13 +32,28 @@ public class ProfileDefaultValueProvider implements IDefaultValueProvider {
     private String resolvedName;
     private Profile resolved;
 
-    public ProfileDefaultValueProvider() {
-        this(new ProfileStore());
-    }
-
-    /** Test seam: a store pointed at a temporary profiles directory. */
     public ProfileDefaultValueProvider(ProfileStore store) {
         this.store = store;
+    }
+
+    /**
+     * The provider {@code FlociCli.buildCommandLine} registered, as picocli propagated it to
+     * {@code spec}'s command. A command that reads a profile back after parsing goes through here,
+     * so it reuses the store the CLI was built with and the snapshot the parse already took, never a
+     * second read of the file. A command built by hand, outside that wiring, gets a fresh provider
+     * over the default store.
+     */
+    public static ProfileDefaultValueProvider of(CommandSpec spec) {
+        if (spec != null && spec.commandLine() != null
+                && spec.commandLine().getDefaultValueProvider() instanceof ProfileDefaultValueProvider provider) {
+            return provider;
+        }
+        return new ProfileDefaultValueProvider(new ProfileStore());
+    }
+
+    /** The store profiles are read from. */
+    public ProfileStore store() {
+        return store;
     }
 
     /**

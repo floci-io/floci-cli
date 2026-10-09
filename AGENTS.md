@@ -113,7 +113,7 @@ Rules when touching this:
 - The provider is called for positionals and for commands with no `GlobalOptions` mixin (`update`, the group commands, the root) — both guards must stay.
 - Register it **programmatically**. The annotation form `@Command(defaultValueProvider = ...)` makes picocli instantiate it reflectively and would need a `reflect-config.json` entry.
 - A bad profile throws `ProfileNotFoundException` (a `ParameterException`), which `FlociCli`'s parameter-exception handler renders without a usage dump and exits 2. The provider returns `null` when `-h`/`-V` was requested so `--help` still works.
-- Commands that build another command programmatically (`RestartCommand` → `StartCommand`) are never parsed by picocli, so they must carry the profile across by hand.
+- A command that reads the profile back after parsing (`RestartCommand` building its `StartCommand`, `ConfigShowCommand`) gets the parse's provider with `ProfileDefaultValueProvider.of(spec)` (an `@Spec CommandSpec spec` field) and passes it to `StartCommand.resolvedFor`. The provider memoizes the profile it resolved, so this reuses the parse's snapshot; never construct a `ProfileStore` or a second provider in a command.
 - Use `FlociCli.buildCommandLine(ProfileStore)` in tests — `new CommandLine(new FlociCli())` has none of the wiring.
 
 ### Multiple instances

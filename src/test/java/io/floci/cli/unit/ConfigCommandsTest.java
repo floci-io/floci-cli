@@ -1,5 +1,6 @@
 package io.floci.cli.unit;
 
+import io.floci.cli.FlociCli;
 import io.floci.cli.ProductProfile;
 import io.floci.cli.commands.config.ConfigProfileCommand;
 import io.floci.cli.commands.config.ConfigShowCommand;
@@ -9,12 +10,15 @@ import io.floci.cli.config.ProfileStore;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import picocli.CommandLine;
+import picocli.CommandLine.ParseResult;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.PrintStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -33,15 +37,18 @@ class ConfigCommandsTest {
         Files.writeString(tempDir.resolve(name + ".yaml"), yaml);
     }
 
+    // Through the real wiring, so config show sees the provider the parse used.
     private String runShow(ProductProfile product, String... args) {
-        CommandLine cmd = new CommandLine(new ConfigShowCommand(product, store()))
-                .setCaseInsensitiveEnumValuesAllowed(true)
-                .setDefaultValueProvider(new ProfileDefaultValueProvider(store()));
+        List<String> all = new ArrayList<>();
+        if (product != ProductProfile.AWS) all.add(product.name());
+        all.addAll(List.of("config", "show"));
+        all.addAll(List.of(args));
+        CommandLine cmd = FlociCli.buildCommandLine(store());
         PrintStream original = System.out;
         ByteArrayOutputStream captured = new ByteArrayOutputStream();
         System.setOut(new PrintStream(captured));
         try {
-            assertEquals(0, cmd.execute(args));
+            assertEquals(0, cmd.execute(all.toArray(String[]::new)));
         } finally {
             System.setOut(original);
         }
@@ -293,23 +300,25 @@ class ConfigCommandsTest {
         assertTrue(store().get("dev").isEmpty());
     }
 
-    /** BL-003: same cause as a bad --profile at parse time, so the same exit code. */
+    /** Every row comes from the snapshot the parse took, even if the file goes away afterwards. */
     @Test
-    void showExitsTwoWhenTheProfileIsGoneAfterTheParse() throws Exception {
-        writeProfile("gone", "container: floci-az-gone\n");
-        ConfigShowCommand show = new ConfigShowCommand(ProductProfile.AZ, store());
-        // A real parse: the provider reads the profile while it still exists.
-        new CommandLine(show)
-                .setDefaultValueProvider(new ProfileDefaultValueProvider(store()))
-                .parseArgs("--profile", "gone");
-        Files.delete(tempDir.resolve("gone.yaml"));
+    void showReportsTheParsesSnapshotEvenIfTheFileIsDeletedAfterwards() throws Exception {
+        writeProfile("snap", "container: floci-snap\npersistDir: /from-the-parse\n");
+        CommandLine cmd = FlociCli.buildCommandLine(store());
+        ParseResult parsed = cmd.parseArgs("config", "show", "--profile", "snap", "-o", "json");
+        while (parsed.hasSubcommand()) parsed = parsed.subcommand();
+        Files.delete(tempDir.resolve("snap.yaml"));
 
-        PrintStream err = System.err;
-        System.setErr(new PrintStream(new ByteArrayOutputStream()));
+        PrintStream original = System.out;
+        ByteArrayOutputStream captured = new ByteArrayOutputStream();
+        System.setOut(new PrintStream(captured));
         try {
-            assertEquals(CommandLine.ExitCode.USAGE, show.call());
+            assertEquals(0, ((ConfigShowCommand) parsed.commandSpec().userObject()).call());
         } finally {
-            System.setErr(err);
+            System.setOut(original);
         }
+        String out = captured.toString();
+        assertTrue(out.contains("\"container\" : \"floci-snap\""), out);
+        assertTrue(out.contains("\"persistDir\" : \"/from-the-parse\""), out);
     }
 }
