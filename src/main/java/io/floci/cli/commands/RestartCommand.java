@@ -45,6 +45,11 @@ public class RestartCommand implements Callable<Integer> {
         // container stopped, and the values must not be re-read from a file that could change
         // during the stop plus the one second wait below.
         StartCommand start = buildStartCommand();
+        String invalid = start.validationError();
+        if (invalid != null) {
+            printer.error(invalid);
+            return 2;
+        }
 
         StopCommand stop = new StopCommand(profile);
         stop.global = global;

@@ -158,6 +158,38 @@ class ConfigCommandsTest {
         assertEquals(14578, b.port);
         assertEquals("floci-az", b.container);
         assertNull(b.persistDir);
+        assertNull(b.namespace);
+    }
+
+    @Test
+    void createStoresATypedNamespace() throws Exception {
+        assertEquals(0, profileCmd(ProductProfile.GCP, "create", "ns",
+                "--container", "floci-gcp-b", "--namespace", "team-b").exit());
+
+        assertEquals("team-b", store().get("ns").orElseThrow().namespace);
+    }
+
+    @Test
+    void showReportsTheNamespaceAProfilesContainerImplies() throws Exception {
+        writeProfile("b", "container: floci-b\n");
+        writeProfile("plain", "port: 4599\n");
+
+        assertTrue(runShow(ProductProfile.AWS, "--profile", "b", "-o", "json")
+                .contains("\"namespace\" : \"b\""));
+        assertFalse(runShow(ProductProfile.AWS, "--profile", "plain", "-o", "json")
+                .contains("namespace"));
+    }
+
+    @Test
+    void createWarnsWhenTwoInstancesOfOneEmulatorWouldShareANamespace() throws Exception {
+        writeProfile("a", "container: floci-gcp-b\nport: 14588\nimage: floci/floci-gcp:latest\n");
+
+        Run same = profileCmd(ProductProfile.GCP, "create", "c", "--container", "b", "--port", "14589");
+        assertTrue(same.err().contains("resource namespace 'b'"), same.err());
+
+        Run own = profileCmd(ProductProfile.GCP, "create", "d", "--container", "b", "--port", "14590",
+                "--namespace", "team-d");
+        assertFalse(own.err().contains("resource namespace"), own.err());
     }
 
     @Test
@@ -182,6 +214,25 @@ class ConfigCommandsTest {
         // Another emulator on the same port is not this instance's concern.
         Run otherProduct = profileCmd(ProductProfile.GCP, "create", "d", "--container", "floci-gcp-d", "--port", "14577");
         assertFalse(otherProduct.err().contains("already uses"), otherProduct.err());
+    }
+
+    @Test
+    void showDerivesTheNamespaceFromTheContainerInEffect() throws Exception {
+        writeProfile("b", "container: floci-b\n");
+
+        String out = runShow(ProductProfile.AWS, "--profile", "b", "--container", "floci-custom", "-o", "json");
+
+        assertTrue(out.contains("\"namespace\" : \"custom\""), out);
+    }
+
+    @Test
+    void aSharedNamespaceIsReportedEvenWhenThePortAlsoCollides() throws Exception {
+        writeProfile("a", "container: floci-gcp-b\nport: 14588\nimage: floci/floci-gcp:latest\n");
+
+        Run r = profileCmd(ProductProfile.GCP, "create", "c", "--container", "b", "--port", "14588");
+
+        assertTrue(r.err().contains("already uses port 14588"), r.err());
+        assertTrue(r.err().contains("already uses resource namespace 'b'"), r.err());
     }
 
     @Test

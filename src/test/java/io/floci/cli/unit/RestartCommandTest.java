@@ -7,7 +7,9 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import picocli.CommandLine;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.PrintStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -56,6 +58,7 @@ class RestartCommandTest {
                 "-v", "/tmp/floci-persist-test:/app/data",
                 "-e", "FLOCI_STORAGE_MODE=persistent",
                 "-e", "FLOCI_SERVICES=s3,lambda",
+                "-e", "FLOCI_BASE_URL=http://localhost:4599",
                 "floci/floci:enforced"), args);
     }
 
@@ -74,6 +77,16 @@ class RestartCommandTest {
         assertTrue(args.contains(System.getenv("HOME") + "/floci-data:/app/data"),
                 "restart must expand the profile the way start does, but got: " + args);
         assertFalse(args.stream().anyMatch(a -> a.contains("${env:")), args.toString());
+    }
+
+    @Test
+    void carriesTheProfileNamespaceIntoTheStartItRuns() throws Exception {
+        writeProfile("ns", "container: floci-oci-b\nnamespace: team-b\n");
+
+        List<String> args = parse(ProductProfile.OCI, "--profile", "ns")
+                .buildStartCommand().dockerRunArgs(SOCKET);
+
+        assertTrue(args.contains("FLOCI_OCI_DOCKER_RESOURCE_NAMESPACE=team-b"), args.toString());
     }
 
     @Test
@@ -96,5 +109,20 @@ class RestartCommandTest {
                 "-v", "/tmp/only-persist:/app/data",
                 "-e", "FLOCI_OCI_STORAGE_MODE=persistent",
                 "floci/floci-oci:latest"), args);
+    }
+
+    /** A namespace start would reject must fail restart before it stops anything. */
+    @Test
+    void anInvalidProfileNamespaceFailsBeforeTheStop() throws Exception {
+        writeProfile("bad", "container: floci-bad\nnamespace: bad/name\n");
+        RestartCommand restart = parse(ProductProfile.AWS, "--profile", "bad");
+
+        PrintStream err = System.err;
+        System.setErr(new PrintStream(new ByteArrayOutputStream()));
+        try {
+            assertEquals(2, restart.call());
+        } finally {
+            System.setErr(err);
+        }
     }
 }

@@ -36,6 +36,21 @@ public record ProductProfile(
         return "aws".equals(name) ? "floci" : "floci " + name;
     }
 
+    /**
+     * The Docker resource namespace an instance in {@code container} gets when none is set: none
+     * for the default container, so its child containers keep their names; otherwise the container
+     * name without the default-container prefix. The emulator already prefixes child names with
+     * {@code floci-<cloud>-}, so {@code floci-gcp-b} becomes {@code b}, not
+     * {@code floci-gcp-floci-gcp-b-...}.
+     */
+    public String resourceNamespace(String container) {
+        if (container == null || container.equals(defaultContainer)) return null;
+        String prefix = defaultContainer + "-";
+        return container.startsWith(prefix) && container.length() > prefix.length()
+                ? container.substring(prefix.length())
+                : container;
+    }
+
     /** GitHub repository of the product's emulator server, for issue-tracker hints. */
     public String serverRepo() {
         return "https://github.com/floci-io/" + ("aws".equals(name) ? "floci" : "floci-" + name);

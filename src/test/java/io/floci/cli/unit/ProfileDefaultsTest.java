@@ -22,6 +22,7 @@ class ProfileDefaultsTest {
         p.persistDir = "/tmp/floci-persist-test";
         p.services = "s3,lambda";
         p.output = "json";
+        p.namespace = "team-b";
         return p;
     }
 
@@ -34,6 +35,7 @@ class ProfileDefaultsTest {
             "--persist,   /tmp/floci-persist-test",
             "--services,  's3,lambda'",
             "--output,    json",
+            "--namespace, team-b",
     })
     void mapsEveryProfileField(String option, String expected) {
         assertEquals(expected, ProfileDefaults.valueFor(fullProfile(), option), option);
@@ -43,6 +45,7 @@ class ProfileDefaultsTest {
     @ValueSource(strings = {
             "--service",       // wait/logs/env filter — NOT the profile's 'services'
             "--profile-name",  // the OCI CLI profile written by 'floci oci setup'
+            "--namespace-name",
             "--global",        // 'floci az setup' target, not a profile field
             "--reset",
             "--tenant",

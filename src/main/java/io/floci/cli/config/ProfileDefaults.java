@@ -27,6 +27,7 @@ public final class ProfileDefaults {
             case "--port"      -> profile.port == null ? null : String.valueOf(profile.port);
             case "--persist"   -> profile.persistDir;
             case "--services"  -> profile.services;
+            case "--namespace" -> profile.namespace;
             case "--output"    -> profile.output;
             default -> null;
         };
