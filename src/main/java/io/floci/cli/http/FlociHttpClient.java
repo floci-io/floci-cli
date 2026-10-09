@@ -13,6 +13,10 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 public class FlociHttpClient {
 
@@ -182,13 +186,29 @@ public class FlociHttpClient {
                     .header("Accept", "application/json")
                     .GET()
                     .build();
-            HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
+            // HttpRequest.timeout stops counting once the headers arrive, so a server that stalls
+            // mid-body would outlive it; the whole exchange is bounded here and cancelled on expiry.
+            CompletableFuture<HttpResponse<String>> pending = http.sendAsync(req, HttpResponse.BodyHandlers.ofString());
+            HttpResponse<String> resp;
+            try {
+                resp = pending.get(timeout.toMillis(), TimeUnit.MILLISECONDS);
+            } catch (TimeoutException e) {
+                pending.cancel(true);
+                throw new FlociException("No complete response from " + endpoint + path + " within "
+                        + timeout.toMillis() + " ms. Is Floci running? Try 'floci status'.");
+            } catch (ExecutionException e) {
+                if (e.getCause() instanceof ConnectException) throw (ConnectException) e.getCause();
+                throw new FlociException("Request failed: " + e.getCause().getMessage());
+            }
             if (resp.statusCode() >= 400) {
                 throw new FlociException("Server returned HTTP " + resp.statusCode() + " for " + path);
             }
             return MAPPER.readTree(resp.body());
         } catch (FlociException e) {
             throw e;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new FlociException("Request interrupted.\nRe-run the command.");
         } catch (ConnectException e) {
             throw new FlociException("Connection refused at " + endpoint + ". Is Floci running? Try 'floci status' or 'floci start'.");
         } catch (Exception e) {

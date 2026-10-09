@@ -108,4 +108,45 @@ class WaitCommandTimingTest {
             System.setOut(out);
         }
     }
+
+    /** Headers arrive at once, then the body stalls: HttpRequest.timeout alone would not cover it. */
+    @Test
+    void aServerThatStallsMidBodyStillTimesOutOnTime() throws Exception {
+        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/", exchange -> {
+            exchange.sendResponseHeaders(200, 0); // chunked: the body never completes
+            exchange.getResponseBody().write("{\"version\":".getBytes());
+            exchange.getResponseBody().flush();
+            try {
+                Thread.sleep(5_000);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            exchange.close();
+        });
+        server.start();
+        DockerClient noContainer = new DockerClient() {
+            @Override
+            public Optional<ContainerInfo> inspectContainer(String name) {
+                return Optional.empty();
+            }
+        };
+        PrintStream err = System.err;
+        PrintStream out = System.out;
+        System.setErr(new PrintStream(new ByteArrayOutputStream()));
+        System.setOut(new PrintStream(new ByteArrayOutputStream()));
+        try {
+            long start = System.nanoTime();
+            int exit = new CommandLine(new WaitCommand(ProductProfile.AWS, noContainer)).execute(
+                    "--timeout", "1s", "--endpoint", "http://127.0.0.1:" + server.getAddress().getPort());
+            long elapsedMs = (System.nanoTime() - start) / 1_000_000;
+
+            assertEquals(1, exit);
+            assertTrue(elapsedMs < 1_800, "took " + elapsedMs + " ms");
+        } finally {
+            System.setErr(err);
+            System.setOut(out);
+            server.stop(0);
+        }
+    }
 }
