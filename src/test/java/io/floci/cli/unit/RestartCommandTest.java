@@ -149,4 +149,12 @@ class RestartCommandTest {
         Files.delete(tempDir.resolve("snap.yaml"));
         assertTrue(restart.buildStartCommand().dockerRunArgs(SOCKET).contains("/from-the-parse:/app/data"));
     }
+
+    /** BL-029: the stop removes the container, so start needs no pause and no second removal. */
+    @Test
+    void theStopItRunsRemovesTheContainer() {
+        var stop = parse(ProductProfile.AWS).buildStopCommand();
+
+        assertEquals(Boolean.TRUE, new CommandLine(stop).getCommandSpec().findOption("--remove").getValue());
+    }
 }

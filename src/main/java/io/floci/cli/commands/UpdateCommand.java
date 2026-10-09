@@ -58,10 +58,19 @@ public class UpdateCommand implements Callable<Integer> {
 
     private static final ObjectMapper JSON = new ObjectMapper();
 
-    private final HttpClient http = HttpClient.newBuilder()
-            .followRedirects(HttpClient.Redirect.NORMAL)
-            .connectTimeout(Duration.ofSeconds(10))
-            .build();
+    // Built on first use: picocli constructs every command on every run, and an HttpClient
+    // (selector thread, TLS context) is too much to pay for commands that never update.
+    private HttpClient http;
+
+    private HttpClient http() {
+        if (http == null) {
+            http = HttpClient.newBuilder()
+                    .followRedirects(HttpClient.Redirect.NORMAL)
+                    .connectTimeout(Duration.ofSeconds(10))
+                    .build();
+        }
+        return http;
+    }
 
     /** The binary to replace; {@code null} means "resolve the running executable". Test seam. */
     Path selfPath;
@@ -220,7 +229,7 @@ public class UpdateCommand implements Callable<Integer> {
     // ── download + verify ────────────────────────────────────────────────────
 
     private String fetchString(String url) throws IOException, InterruptedException {
-        HttpResponse<String> resp = http.send(get(url), HttpResponse.BodyHandlers.ofString());
+        HttpResponse<String> resp = http().send(get(url), HttpResponse.BodyHandlers.ofString());
         if (resp.statusCode() != 200) {
             throw new IOException("GET " + url + " → HTTP " + resp.statusCode());
         }
@@ -232,7 +241,7 @@ public class UpdateCommand implements Callable<Integer> {
     }
 
     private void fetchFile(String url, Path dest) throws IOException, InterruptedException {
-        HttpResponse<Path> resp = http.send(get(url), HttpResponse.BodyHandlers.ofFile(dest));
+        HttpResponse<Path> resp = http().send(get(url), HttpResponse.BodyHandlers.ofFile(dest));
         if (resp.statusCode() != 200) {
             throw new UpdateException("download failed: " + url + " → HTTP " + resp.statusCode()
                     + (resp.statusCode() == 404 ? " (does that release exist?)" : ""));

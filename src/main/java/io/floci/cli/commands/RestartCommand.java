@@ -40,7 +40,7 @@ public class RestartCommand implements Callable<Integer> {
 
         // Resolve the profile BEFORE stopping anything. A failure here must not leave the
         // container stopped, and the values must not be re-read from a file that could change
-        // during the stop plus the one second wait below.
+        // during the stop.
         StartCommand start;
         try {
             start = buildStartCommand();
@@ -56,17 +56,23 @@ public class RestartCommand implements Callable<Integer> {
             return 2;
         }
 
-        StopCommand stop = new StopCommand(profile);
-        stop.global = global;
-        stop.remove = false;
-        stop.timeout = 10;
-        int stopResult = stop.call();
+        int stopResult = buildStopCommand().call();
         if (stopResult != 0) return stopResult;
 
-        // Minimal wait to avoid port-already-in-use races
-        try { Thread.sleep(1000); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
-
         return start.call();
+    }
+
+    /**
+     * The {@code stop} this restart runs. It removes the container: {@code docker stop} returns
+     * once the container has exited, and removing it releases its port bindings, so the start
+     * that follows needs neither a pause nor a second inspect-and-remove of its own.
+     */
+    public StopCommand buildStopCommand() {
+        StopCommand stop = new StopCommand(profile);
+        stop.global = global;
+        stop.remove = true;
+        stop.timeout = 10;
+        return stop;
     }
 
     /**
