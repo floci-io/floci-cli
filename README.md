@@ -1,6 +1,37 @@
-# floci-cli
+<p align="center">
+  <img src="https://raw.githubusercontent.com/floci-io/.github/main/floci.svg#gh-light-mode-only" alt="Floci" width="500" />
+  <img src="https://github.com/user-attachments/assets/edfff8b3-926c-471e-9549-77fb90a21b49#gh-dark-mode-only" alt="Floci" width="500" />
+</p>
 
-Official command-line interface for [Floci](https://floci.io) — the free, open-source local cloud emulator for AWS, GCP, Azure, and OCI.
+<p align="center">
+  <strong>Any Cloud. Locally.</strong><br />
+  Light, fluffy, and always free: the Floci command-line interface<br />
+  No account. No auth token. No feature gates.
+</p>
+
+<p align="center">
+  <a href="https://github.com/floci-io/floci-cli/releases/latest"><img src="https://img.shields.io/github/v/release/floci-io/floci-cli?label=release&color=blue" alt="Latest release"></a>
+  <a href="https://github.com/floci-io/floci-cli/actions/workflows/ci.yml"><img src="https://github.com/floci-io/floci-cli/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI"></a>
+  <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/license-MIT-green" alt="License: MIT"></a>
+  <a href="https://github.com/floci-io/floci-cli/stargazers"><img src="https://img.shields.io/github/stars/floci-io/floci-cli?style=flat" alt="GitHub Stars"></a>
+</p>
+
+<p align="center">
+  <a href="#installation">Install</a> ·
+  <a href="#quick-start">Quick Start</a> ·
+  <a href="#command-reference">Commands</a> ·
+  <a href="#the-floci-emulators">Emulators</a> ·
+  <a href="https://floci.io">Docs</a>
+</p>
+
+---
+
+## What is this?
+
+`floci-cli` is the official command-line interface for [Floci](https://github.com/floci-io), the free, open-source
+local cloud emulators. It starts, stops, configures and diagnoses the emulator containers, and prints the
+environment your cloud CLI or SDK needs to talk to them. It does not manage cloud resources itself; your usual
+`aws`, `gcloud`, `az` and `oci` tools do that against the emulator (see [Scope](#scope)).
 
 ```sh
 # AWS (default)
@@ -26,6 +57,18 @@ floci oci setup
 eval $(floci oci env)
 oci os ns get
 ```
+
+### The Floci emulators
+
+floci-cli drives every member of the [Floci](https://github.com/floci-io) emulator family. Floci is named after
+[floccus](https://en.wikipedia.org/wiki/Cirrocumulus_floccus), the cloud formation that looks like popcorn.
+
+| Emulator                                           | Cloud | Port | CLI tree                         |
+|----------------------------------------------------|-------|:----:|----------------------------------|
+| [floci](https://github.com/floci-io/floci)         | AWS   | 4566 | `floci` / `floci aws` (default)  |
+| [floci-az](https://github.com/floci-io/floci-az)   | Azure | 4577 | `floci az`                       |
+| [floci-gcp](https://github.com/floci-io/floci-gcp) | GCP   | 4588 | `floci gcp`                      |
+| [floci-oci](https://github.com/floci-io/floci-oci) | OCI   | 4599 | `floci oci`                      |
 
 ## Installation
 
@@ -71,7 +114,7 @@ floci update --check   # exit 0: up to date, exit 1: update available
 floci update           # download, verify checksum, replace the binary
 ```
 
-Homebrew and Scoop installs are updated through their package manager (`brew upgrade floci`) — `floci update` detects Homebrew-managed binaries and refuses to touch them.
+Homebrew and Scoop installs are updated through their package manager (`brew upgrade floci`); `floci update` detects Homebrew-managed binaries and refuses to touch them.
 
 ---
 
@@ -183,7 +226,7 @@ floci config default-product aws  # revert to aws
 
 ## Command Reference
 
-Commands are organized into four product groups — `floci aws` (or bare `floci`), `floci gcp`, `floci az`, and `floci oci`. All groups expose the same lifecycle commands.
+Commands are organized into four product groups: `floci aws` (or bare `floci`), `floci gcp`, `floci az`, and `floci oci`. All groups expose the same lifecycle commands.
 
 ### Shared commands (product-independent)
 
@@ -328,7 +371,7 @@ Explicit flags override the profile; the profile overrides the environment varia
 
 Explicit flags override the profile; the profile overrides the environment variables.
 
-> **Port auto-detection** — `status`, `version`, `wait`, and `env` automatically derive the correct
+> **Port auto-detection:** `status`, `version`, `wait`, and `env` automatically derive the correct
 > endpoint from the container's port mapping. You don't need to pass `--endpoint` when using
 > a non-default port, as long as `--container` points to the right container.
 
@@ -404,9 +447,9 @@ floci start
 
 Resolution precedence:
 
-1. **`DOCKER_HOST`** — the standard Docker/Podman variable (`unix://` socket, `tcp://` daemon, or `npipe://` on Windows)
-2. **`DOCKER_SOCK`** — legacy override (a bare socket path)
-3. **OS default** — `/var/run/docker.sock` on Linux/macOS, or the Docker named pipe on Windows
+1. **`DOCKER_HOST`**: the standard Docker/Podman variable (`unix://` socket, `tcp://` daemon, or `npipe://` on Windows)
+2. **`DOCKER_SOCK`**: legacy override (a bare socket path)
+3. **OS default**: `/var/run/docker.sock` on Linux/macOS, or the Docker named pipe on Windows
 
 For a `unix://` socket the resolved path is bind-mounted into the container; for a
 remote `tcp://` daemon the `DOCKER_HOST` value is passed through to the container
@@ -434,7 +477,7 @@ Prints AWS environment variables pointing at the running Floci instance. The def
 hostname is `localhost.floci.io` (resolves to `127.0.0.1`, enables virtual-hosted S3 bucket names).
 
 ```sh
-eval $(floci env)                          # bash/zsh — sets all four AWS vars
+eval $(floci env)                          # bash/zsh: sets all four AWS vars
 floci env --shell fish | source            # fish
 floci env --shell powershell | Invoke-Expression  # PowerShell
 
@@ -580,11 +623,11 @@ Variables exported:
 | `OCI_CLI_ENDPOINT` | Default `--endpoint` for the `oci` CLI |
 | `FLOCI_OCI_ENDPOINT` | Used by this CLI and the `ocilocal` wrapper |
 | `TF_VAR_CLIENT_HOST_OVERRIDES` | Per-client host overrides for the `oracle/oci` Terraform provider |
-| `OCI_CLI_PROFILE` | The profile `floci oci setup` wrote (default `FLOCI`) — only exported when detected in `~/.oci/config`, and skipped for `DEFAULT` |
+| `OCI_CLI_PROFILE` | The profile `floci oci setup` wrote (default `FLOCI`); only exported when detected in `~/.oci/config`, and skipped for `DEFAULT` |
 
 ### `floci oci setup`
 
-The OCI CLI and SDKs refuse to run without a config file and an API signing key — even
+The OCI CLI and SDKs refuse to run without a config file and an API signing key, even
 against an emulator that never validates them. `floci oci setup` creates both in one step:
 a locally generated RSA-2048 key at `~/.oci/floci_key.pem` and a `[FLOCI]` profile in
 `~/.oci/config` with the emulator's canonical throwaway tenancy. Existing profiles are
@@ -711,7 +754,7 @@ the keys a profile can set.
 Values are interpolated by the CLI, so `persistDir: ${env:HOME}/floci-data` expands as you would
 expect.
 
-> Profiles are shared by all four product trees — there is one `~/.floci/profiles/` directory, not
+> Profiles are shared by all four product trees: there is one `~/.floci/profiles/` directory, not
 > one per product. A profile created under `floci gcp` carries GCP defaults, so passing it to the
 > AWS tree will start a GCP container; name them accordingly.
 
@@ -779,7 +822,7 @@ floci snapshot export <name> -f tarball.tar.gz
 floci snapshot import tarball.tar.gz
 ```
 
-> GCP, Azure, and OCI snapshots (`floci gcp snapshot` / `floci az snapshot` / `floci oci snapshot`) require server-side endpoints not yet implemented in Floci GCP / Floci Azure / Floci OCI — until then those commands report the missing API and exit 1. `floci snapshot export|import` (AWS) are also pending server support and exit 1.
+> GCP, Azure, and OCI snapshots (`floci gcp snapshot` / `floci az snapshot` / `floci oci snapshot`) require server-side endpoints not yet implemented in Floci GCP / Floci Azure / Floci OCI. Until then, those commands report the missing API and exit 1. `floci snapshot export|import` (AWS) are also pending server support and exit 1.
 
 ### `floci completion`
 
@@ -800,7 +843,7 @@ floci update --version 0.1.7      # install a specific version
 floci update --check || floci update   # script-friendly: update only when stale
 ```
 
-Homebrew installs are managed by brew and are detected and refused — use `brew upgrade floci` there instead.
+Homebrew installs are managed by brew and are detected and refused; use `brew upgrade floci` there instead.
 
 When run from an interactive terminal, floci also checks for new releases in the
 background (at most once per 24h, cached in `~/.floci/update-check.json`) and prints a
@@ -835,7 +878,7 @@ services:
 
 > Using Podman or a non-default daemon? Swap the host side of the socket mount for
 > your daemon's socket (e.g. `/run/user/1000/podman/podman.sock:/var/run/docker.sock`).
-> With the CLI, setting `DOCKER_HOST` is enough — see
+> With the CLI, setting `DOCKER_HOST` is enough; see
 > [Docker daemon resolution](#docker-daemon-resolution-podman-rootless-remote-contexts).
 
 ### GCP CI
@@ -914,12 +957,33 @@ Use `aws` with `AWS_ENDPOINT_URL`, `gcloud`/SDKs with the emulator host variable
 
 ---
 
-## Contributing
+## Testcontainers
 
-Contributions are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md) for how to build, test, and submit changes.
+Running Floci in tests? Use the Testcontainers module for your language instead of scripting the CLI:
 
----
+| Language | Repository |
+|---|---|
+| Java | [testcontainers-floci](https://github.com/floci-io/testcontainers-floci) |
+| Node.js / TypeScript | [testcontainers-floci-node](https://github.com/floci-io/testcontainers-floci-node) |
+| Python | [testcontainers-floci-python](https://github.com/floci-io/testcontainers-floci-python) |
+| Go | [testcontainers-floci-go](https://github.com/floci-io/testcontainers-floci-go) |
+| .NET | [testcontainers-floci-dotnet](https://github.com/floci-io/testcontainers-floci-dotnet) |
+
+## Community
+
+- 💬 [Slack](https://join.slack.com/t/floci/shared_invite/zt-3tjn02s3q-A00kEjJ1cZxsg_imTfy6Cw): quick questions and community chat
+- 🗣️ [GitHub Discussions](https://github.com/orgs/floci-io/discussions): ideas, design tradeoffs, and proposals
+- [CONTRIBUTING.md](CONTRIBUTING.md) · [SECURITY.md](https://github.com/floci-io/.github/blob/main/SECURITY.md) · [CODE_OF_CONDUCT.md](https://github.com/floci-io/.github/blob/main/CODE_OF_CONDUCT.md) · [MAINTAINERS.md](MAINTAINERS.md)
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT. See [LICENSE](LICENSE).
+
+---
+
+<div align="center">
+
+Floci™ is a trademark of Hector Ventura. Code is MIT-licensed; see
+[TRADEMARK.md](https://github.com/floci-io/.github/blob/main/TRADEMARK.md) for name and logo use.
+
+</div>
