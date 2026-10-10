@@ -10,14 +10,19 @@ import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.PrintStream;
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.PosixFilePermissions;
 import java.util.Arrays;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assumptions.assumeFalse;
 
 /** First coverage of the profile persistence layer, including the path-traversal guard. */
 class ProfileStoreTest {
@@ -231,5 +236,86 @@ class ProfileStoreTest {
                 .map(Field::getName)
                 .sorted().toList();
         assertEquals(fields, Profile.KNOWN_KEYS.stream().sorted().toList());
+    }
+
+    /** BL-042: saving goes through a temporary file, and none is left behind. */
+    @Test
+    void saveLeavesNoTemporaryFiles() throws Exception {
+        store().save(new Profile(ProductProfile.AWS, "one"));
+        store().save(new Profile(ProductProfile.AWS, "one"));
+
+        try (var files = Files.list(tempDir)) {
+            assertEquals(List.of("one.yaml"), files.map(p -> p.getFileName().toString()).toList());
+        }
+    }
+
+    /** BL-044: an unreadable profile is skipped by list, but reported. */
+    @Test
+    void listReportsAProfileItCannotRead() throws Exception {
+        Files.createDirectories(tempDir);
+        Files.writeString(tempDir.resolve("broken.yaml"), "port: [unterminated\n");
+        Files.writeString(tempDir.resolve("fine.yaml"), "port: 4599\n");
+        PrintStream err = System.err;
+        ByteArrayOutputStream errBuf = new ByteArrayOutputStream();
+        System.setErr(new PrintStream(errBuf));
+        List<Profile> listed;
+        try {
+            listed = store().list();
+        } finally {
+            System.setErr(err);
+        }
+
+        assertEquals(List.of("fine"), listed.stream().map(p -> p.name).toList());
+        assertTrue(errBuf.toString().contains("broken.yaml"), errBuf.toString());
+    }
+
+    /** BL-042: a save whose final move fails removes its temporary file and leaves the target alone. */
+    @Test
+    void aFailedSaveRemovesTheTemporaryFile() throws Exception {
+        Path inTheWay = Files.createDirectories(tempDir.resolve("one.yaml"));
+        Files.writeString(inTheWay.resolve("keep"), "untouched");
+
+        assertThrows(IOException.class, () -> store().save(new Profile(ProductProfile.AWS, "one")));
+
+        assertEquals("untouched", Files.readString(inTheWay.resolve("keep")));
+        try (var files = Files.list(tempDir)) {
+            assertEquals(List.of("one.yaml"), files.map(p -> p.getFileName().toString()).toList());
+        }
+    }
+
+    /** The temporary file's name does not grow with the profile's, so a name at the limit still saves. */
+    @Test
+    void aNameAtTheFileNameLimitStillSaves() throws Exception {
+        String name = "n".repeat(250); // + ".yaml" = 255 bytes, the usual file name limit
+
+        store().save(new Profile(ProductProfile.AWS, name));
+
+        assertEquals(name, store().get(name).orElseThrow().name);
+    }
+
+    /** A profile that cannot be opened is reported as that, with the cause, not as bad YAML. */
+    @Test
+    @DisabledOnOs(OS.WINDOWS)
+    void listReportsWhyAProfileCouldNotBeOpened() throws Exception {
+        Files.createDirectories(tempDir);
+        Path locked = tempDir.resolve("locked.yaml");
+        Files.writeString(locked, "port: 4599\n");
+        Files.setPosixFilePermissions(locked, PosixFilePermissions.fromString("---------"));
+        assumeFalse(Files.isReadable(locked), "permissions do not bind this user (root)");
+        PrintStream err = System.err;
+        ByteArrayOutputStream errBuf = new ByteArrayOutputStream();
+        System.setErr(new PrintStream(errBuf));
+        List<Profile> listed;
+        try {
+            listed = store().list();
+        } finally {
+            System.setErr(err);
+        }
+
+        assertEquals(List.of(), listed);
+        assertTrue(errBuf.toString().contains("Could not read profile file"), errBuf.toString());
+        assertTrue(errBuf.toString().contains("locked.yaml"), errBuf.toString());
+        assertTrue(errBuf.toString().contains("Permission denied"), errBuf.toString());
+        assertFalse(errBuf.toString().contains("not valid YAML"), errBuf.toString());
     }
 }
