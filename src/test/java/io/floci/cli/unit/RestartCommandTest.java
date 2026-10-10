@@ -10,6 +10,8 @@ import io.floci.cli.config.ProfileStore;
 import io.floci.cli.docker.DockerClient;
 import io.floci.cli.docker.DockerException;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.DisabledOnOs;
+import org.junit.jupiter.api.condition.OS;
 import org.junit.jupiter.api.io.TempDir;
 import picocli.CommandLine;
 import picocli.CommandLine.ParseResult;
@@ -25,6 +27,7 @@ import java.util.Map;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assumptions.assumeFalse;
 
 /**
  * Restart builds its StartCommand programmatically, so picocli never applies the profile to it.
@@ -157,6 +160,37 @@ class RestartCommandTest {
     }
 
     /**
+     * A persist directory that cannot be created fails the restart before the stop, so the running
+     * instance is left alone instead of being removed and never started again.
+     */
+    @Test
+    @DisabledOnOs(OS.WINDOWS)
+    void anUnwritablePersistDirFailsBeforeTheStop() throws Exception {
+        Path readOnly = Files.createDirectories(tempDir.resolve("read-only"));
+        assertTrue(readOnly.toFile().setWritable(false));
+        writeProfile("ro", "container: floci-ro-none\npersistDir: " + readOnly.resolve("state") + "\n");
+        RestartCommand restart = parse(ProductProfile.AWS, "--profile", "ro");
+
+        PrintStream out = System.out;
+        PrintStream err = System.err;
+        ByteArrayOutputStream outBuf = new ByteArrayOutputStream();
+        ByteArrayOutputStream errBuf = new ByteArrayOutputStream();
+        try {
+            // Root writes through the permission bits; the restart would then reach Docker.
+            assumeFalse(Files.isWritable(readOnly), "permissions do not bind this user (root)");
+            System.setOut(new PrintStream(outBuf));
+            System.setErr(new PrintStream(errBuf));
+            assertEquals(1, restart.call());
+        } finally {
+            System.setOut(out);
+            System.setErr(err);
+            readOnly.toFile().setWritable(true);
+        }
+        assertTrue(errBuf.toString().contains("Could not create the persist directory"), errBuf.toString());
+        assertFalse(outBuf.toString().contains("Stopping"), "nothing was stopped: " + outBuf);
+    }
+
+    /**
      * One snapshot: restart applies the profile the parse read, not a second read of the file, so
      * an edit or delete in between cannot mix two versions into one restart.
      */
@@ -214,8 +248,20 @@ class RestartCommandTest {
         RestartCommand restart = new RestartCommand(ProductProfile.AWS, docker) {
             @Override
             public StartCommand buildStartCommand() throws DockerException {
-                super.buildStartCommand(); // the real one first, so its docker failure still surfaces
+                // The real one first, so its docker failure still surfaces; it also answers the
+                // checks restart runs before the stop, as only it carries the resolved settings.
+                StartCommand real = super.buildStartCommand();
                 return new StartCommand(ProductProfile.AWS) {
+                    @Override
+                    public String validationError() {
+                        return real.validationError();
+                    }
+
+                    @Override
+                    public String preparePersistDir() {
+                        return real.preparePersistDir();
+                    }
+
                     @Override
                     public Integer call() {
                         ran.add("start");

@@ -3,8 +3,13 @@ package io.floci.cli.unit;
 import io.floci.cli.FlociCli;
 import io.floci.cli.commands.StartCommand;
 import io.floci.cli.config.ProfileStore;
+import io.floci.cli.docker.DockerClient;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.DisabledOnOs;
+import org.junit.jupiter.api.condition.OS;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import picocli.CommandLine.ParseResult;
 
 import java.io.ByteArrayOutputStream;
@@ -13,6 +18,7 @@ import java.io.PrintStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Locale;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -189,6 +195,152 @@ class StartCommandArgsTest {
     void theBaseUrlKeepsTheEndpointsHost() {
         assertTrue(parse("start", "--endpoint", "http://floci.internal:4566", "--port", "14566")
                 .dockerRunArgs(SOCKET).contains("FLOCI_BASE_URL=http://floci.internal:14566"));
+    }
+
+    /** BL-034: Docker reads "./data:/app/data" as a named volume, so the path goes in absolute. */
+    @Test
+    void aRelativePersistDirIsMountedAsAnAbsoluteBindPath() {
+        String expected = Path.of("data").toAbsolutePath().normalize() + ":/app/data";
+
+        List<String> args = parse("start", "--persist", "./data").dockerRunArgs(SOCKET);
+
+        assertTrue(args.contains(expected), args.toString());
+        assertFalse(args.contains("./data:/app/data"), args.toString());
+    }
+
+    /** BL-035: an out-of-range port or an unknown pull policy is refused before docker runs. */
+    @Test
+    void portAndPullPolicyAreValidated() {
+        assertNull(parse("start").validationError());
+        assertNull(parse("start", "--pull", "ALWAYS").validationError());
+        assertTrue(parse("start", "--port", "0").validationError().contains("--port must be between 1 and 65535"));
+        assertTrue(parse("start", "--port", "70000").validationError().contains("--port must be between 1 and 65535"));
+        assertTrue(parse("start", "--pull", "alwayz").validationError().contains("Invalid --pull 'alwayz'"));
+    }
+
+    /** Pull policies are plain ASCII words: a Turkish default locale lowercases "MISSING" with a dotless i. */
+    @Test
+    void pullPolicyDoesNotDependOnTheDefaultLocale() {
+        Locale before = Locale.getDefault();
+        Locale.setDefault(Locale.forLanguageTag("tr-TR"));
+        try {
+            assertNull(parse("start", "--pull", "MISSING").validationError());
+        } finally {
+            Locale.setDefault(before);
+        }
+    }
+
+    private static final DockerClient.DockerHost LOCAL =
+            new DockerClient.DockerHost(DockerClient.Kind.UNIX, "/var/run/docker.sock", null);
+    private static final DockerClient.DockerHost REMOTE =
+            new DockerClient.DockerHost(DockerClient.Kind.TCP, null, "tcp://build-host:2375");
+
+    @Test
+    void aLocalDaemonGetsItsPersistDirCreated() {
+        Path state = tempDir.resolve("made").resolve("state");
+
+        assertNull(parse("start", "--persist", state.toString()).preparePersistDir(LOCAL));
+
+        assertTrue(Files.isDirectory(state));
+    }
+
+    /** A remote daemon reads the bind source on its own machine: nothing is created or refused here. */
+    @Test
+    void aRemoteDaemonsPersistDirIsNotCreatedLocally() throws Exception {
+        Path blocker = Files.writeString(Files.createDirectories(tempDir).resolve("a-file"), "x");
+        Path state = blocker.resolve("state"); // cannot exist locally: its parent is a file
+
+        assertNull(parse("start", "--persist", state.toString()).preparePersistDir(REMOTE));
+        assertFalse(Files.exists(state));
+        assertNotNull(parse("start", "--persist", state.toString()).preparePersistDir(LOCAL));
+    }
+
+    /** A path that is not valid on this platform gets the same hint, not an exception from building the message. */
+    @Test
+    void anInvalidPersistPathIsReportedNotThrown() {
+        String invalid = "data\u0000dir"; // NUL is rejected by every platform's Path
+
+        String error = parse("start", "--persist", invalid).preparePersistDir(LOCAL);
+
+        assertNotNull(error);
+        assertTrue(error.startsWith("Invalid persist directory"), error);
+        assertTrue(error.contains("Pass a --persist path"), error);
+    }
+
+    /**
+     * A remote daemon's path is its own: an absolute one is passed on as given, never resolved by
+     * this machine's rules (a Windows CLI would turn /srv/floci-data into a drive path).
+     */
+    @Test
+    void aRemoteDaemonGetsThePersistPathExactlyAsGiven() {
+        StartCommand start = parse("start", "--persist", "/srv/floci-data/../state");
+
+        assertNull(start.preparePersistDir(REMOTE));
+        assertEquals("/srv/floci-data/../state", start.bindSource(REMOTE));
+        assertTrue(start.dockerRunArgs(SOCKET, REMOTE).contains("/srv/floci-data/../state:/app/data"));
+    }
+
+    /** Only a local daemon has relative paths resolved against this machine's working directory. */
+    @Test
+    void onlyALocalDaemonHasItsPersistPathResolved() {
+        StartCommand start = parse("start", "--persist", "./data");
+        String resolved = Path.of("data").toAbsolutePath().normalize().toString();
+
+        assertEquals(resolved, start.bindSource(LOCAL));
+        assertTrue(start.dockerRunArgs(SOCKET, LOCAL).contains(resolved + ":/app/data"));
+    }
+
+    /**
+     * A remote daemon has no working directory of ours to resolve against, and docker reads a bare
+     * name as a named volume: a relative path is refused before anything is started or stopped.
+     */
+    @ParameterizedTest
+    @ValueSource(strings = {"data", "./data", "../state", "C:data"})
+    void aRemoteDaemonRefusesARelativePersistPath(String relative) {
+        String error = parse("start", "--persist", relative).preparePersistDir(REMOTE);
+
+        assertNotNull(error);
+        assertTrue(error.contains("must be an absolute path on the daemon's machine"), error);
+        assertTrue(error.contains("'" + relative + "'"), error);
+    }
+
+    /** Absolute for the daemon's system, whichever it is; this machine's path rules do not decide. */
+    @ParameterizedTest
+    @ValueSource(strings = {"/srv/floci-data", "C:\\floci\\data", "c:/floci/data", "\\\\nas\\share\\floci"})
+    void aRemoteDaemonAcceptsAnAbsolutePathOfEitherSystem(String absolute) {
+        StartCommand start = parse("start", "--persist", absolute);
+
+        assertNull(start.preparePersistDir(REMOTE));
+        assertEquals(absolute, start.bindSource(REMOTE));
+    }
+
+    /**
+     * What preparePersistDir accepts, dockerRunArgs can build. Restart runs the check before the
+     * stop, so a path this machine cannot even parse must not throw afterwards for a remote daemon.
+     */
+    @Test
+    void aPathThisMachineCannotParseStillBuildsForARemoteDaemon() {
+        StartCommand start = parse("start", "--persist", "/srv/data\u0000dir");
+
+        assertNull(start.preparePersistDir(REMOTE));
+        assertDoesNotThrow(() -> start.dockerRunArgs(SOCKET, REMOTE));
+        assertNotNull(start.preparePersistDir(LOCAL));
+    }
+
+    /**
+     * An existing directory this user cannot write to is left to the emulator, which runs as its
+     * own user and reports an unwritable data directory itself.
+     */
+    @Test
+    @DisabledOnOs(OS.WINDOWS)
+    void anExistingDirectoryIsAcceptedWithoutAWriteCheck() throws Exception {
+        Path readOnly = Files.createDirectories(tempDir.resolve("read-only"));
+        assertTrue(readOnly.toFile().setWritable(false));
+        try {
+            assertNull(parse("start", "--persist", readOnly.toString()).preparePersistDir(LOCAL));
+        } finally {
+            readOnly.toFile().setWritable(true);
+        }
     }
 
     @Test
