@@ -18,7 +18,9 @@ final class AtomicFiles {
     static void write(Path target, byte[] bytes) throws IOException {
         Path dir = target.toAbsolutePath().getParent();
         Files.createDirectories(dir);
-        Path temp = Files.createTempFile(dir, "." + target.getFileName(), ".tmp");
+        // A short fixed prefix: one built from the target's name would push a name already near
+        // the file system's length limit over it.
+        Path temp = Files.createTempFile(dir, ".floci-", ".tmp");
         try {
             Files.write(temp, bytes);
             try {

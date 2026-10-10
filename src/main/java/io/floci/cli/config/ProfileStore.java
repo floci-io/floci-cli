@@ -72,9 +72,11 @@ public class ProfileStore {
                             profiles.add(read(p));
                         } catch (IOException e) {
                             // Skipped, but not silently: --profile on the same name would fail.
-                            System.err.println(Ansi.yellow("Warning: ") + "Skipping profile file " + p
-                                    + ", which is not valid YAML: " + firstLine(e.getMessage())
-                                    + "\nFix the file, or delete it.");
+                            // The cause is quoted, not guessed: this is a parse error or a
+                            // file that could not be opened.
+                            System.err.println(Ansi.yellow("Warning: ") + "Could not read profile file " + p
+                                    + ": " + firstLine(e.getMessage())
+                                    + "\nCheck the file and its permissions, or delete it.");
                         }
                     });
         }
