@@ -6,6 +6,7 @@ import io.floci.cli.docker.DockerClient;
 import io.floci.cli.docker.DockerClient.DockerHost;
 import io.floci.cli.docker.DockerClient.Kind;
 import io.floci.cli.docker.DockerException;
+import io.floci.cli.doctor.checks.PortAvailableCheck;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.DisabledOnOs;
 import org.junit.jupiter.api.condition.OS;
@@ -168,6 +169,32 @@ class StartPreflightTest {
         assertEquals(1, relative.exit());
         assertTrue(relative.err().contains("must be an absolute path on the daemon's machine"), relative.err());
         assertEquals(List.of(), refused.calls);
+    }
+
+    /**
+     * A user who may not bind a privileged port (Linux below 1024) cannot tell "taken" from "not
+     * allowed" by binding, while the Docker daemon can publish it: only an answering listener
+     * makes such a port taken. Above that range a failed bind is the answer.
+     */
+    @Test
+    void aFailedBindOnAPrivilegedPortIsNotProofItIsTaken() {
+        assertFalse(PortAvailableCheck.takenAfterFailedBind(80, () -> false));
+        assertFalse(PortAvailableCheck.takenAfterFailedBind(443, () -> false));
+        assertTrue(PortAvailableCheck.takenAfterFailedBind(80, () -> true));
+        assertTrue(PortAvailableCheck.takenAfterFailedBind(1024, () -> false));
+        assertTrue(PortAvailableCheck.takenAfterFailedBind(4566, () -> false));
+    }
+
+    @Test
+    void aListenerIsFoundOnLoopbackAndAClosedPortIsNot() throws Exception {
+        int port;
+        try (ServerSocket listening = new ServerSocket(0)) {
+            port = listening.getLocalPort();
+            assertTrue(PortAvailableCheck.listensOnLoopback(port));
+            assertFalse(PortAvailableCheck.isPortFree(port));
+        }
+        assertFalse(PortAvailableCheck.listensOnLoopback(port));
+        assertTrue(PortAvailableCheck.isPortFree(port));
     }
 
     @Test
