@@ -3,9 +3,12 @@ package io.floci.cli.unit;
 import io.floci.cli.FlociCli;
 import io.floci.cli.ProductProfile;
 import io.floci.cli.commands.RestartCommand;
+import io.floci.cli.commands.StartCommand;
+import io.floci.cli.commands.StopCommand;
 import io.floci.cli.config.ProfileDefaultValueProvider;
 import io.floci.cli.config.ProfileStore;
 import io.floci.cli.docker.DockerClient;
+import io.floci.cli.docker.DockerException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import picocli.CommandLine;
@@ -117,7 +120,7 @@ class RestartCommandTest {
     }
 
     @Test
-    void withoutAProfileItStillUsesTheProductDefaults() {
+    void withoutAProfileItStillUsesTheProductDefaults() throws Exception {
         List<String> args = restartWith(ProductProfile.GCP, null).buildStartCommand().dockerRunArgs(SOCKET);
 
         assertEquals(List.of("-d", "--name", "floci-gcp", "-p", "4588:4588",
@@ -172,7 +175,7 @@ class RestartCommandTest {
 
     /** BL-029: the stop removes the container, so start needs no pause and no second removal. */
     @Test
-    void theStopItRunsRemovesTheContainer() {
+    void theStopItRunsRemovesTheContainer() throws Exception {
         var stop = parse(ProductProfile.AWS).buildStopCommand();
 
         assertEquals(Boolean.TRUE, new CommandLine(stop).getCommandSpec().findOption("--remove").getValue());
@@ -180,7 +183,7 @@ class RestartCommandTest {
 
     /** BL-033: without a profile, the running container is the record of how it was started. */
     @Test
-    void withoutAProfileTheRunningContainersSettingsCarryOver() {
+    void withoutAProfileTheRunningContainersSettingsCarryOver() throws Exception {
         var running = new DockerClient.RunSettings("floci/floci-gcp:0.9", 14588, "/data/gcp",
                 Map.of("FLOCI_GCP_SERVICES", "storage", "FLOCI_GCP_DOCKER_RESOURCE_NAMESPACE", "team"));
 
@@ -204,5 +207,125 @@ class RestartCommandTest {
 
         assertTrue(args.contains("15000:4566"), args.toString());
         assertFalse(args.contains("/data/x:/app/data"), args.toString());
+    }
+
+    /** What a restart did, in order: "stop" and "start" as it ran them. */
+    private RestartCommand recordingRestart(DockerClient docker, List<String> ran) {
+        RestartCommand restart = new RestartCommand(ProductProfile.AWS, docker) {
+            @Override
+            public StartCommand buildStartCommand() throws DockerException {
+                super.buildStartCommand(); // the real one first, so its docker failure still surfaces
+                return new StartCommand(ProductProfile.AWS) {
+                    @Override
+                    public Integer call() {
+                        ran.add("start");
+                        return 0;
+                    }
+                };
+            }
+
+            @Override
+            public StopCommand buildStopCommand() {
+                return new StopCommand(ProductProfile.AWS) {
+                    @Override
+                    public Integer call() {
+                        ran.add("stop");
+                        return 0;
+                    }
+                };
+            }
+        };
+        new CommandLine(restart)
+                .setDefaultValueProvider(new ProfileDefaultValueProvider(new ProfileStore(tempDir)))
+                .parseArgs();
+        return restart;
+    }
+
+    private record Ran(int exit, String out, String err) {}
+
+    private static Ran run(RestartCommand restart) {
+        PrintStream out = System.out;
+        PrintStream err = System.err;
+        ByteArrayOutputStream outBuf = new ByteArrayOutputStream();
+        ByteArrayOutputStream errBuf = new ByteArrayOutputStream();
+        System.setOut(new PrintStream(outBuf));
+        System.setErr(new PrintStream(errBuf));
+        try {
+            return new Ran(restart.call(), outBuf.toString(), errBuf.toString());
+        } finally {
+            System.setOut(out);
+            System.setErr(err);
+        }
+    }
+
+    /** BL-033: with no container there is nothing to stop, so restart only starts. */
+    @Test
+    void aMissingContainerIsStartedWithoutAStop() {
+        DockerClient absent = new DockerClient() {
+            @Override
+            public Optional<RunSettings> inspectRunSettings(String name, int containerPort) {
+                return Optional.empty();
+            }
+
+            @Override
+            public Optional<ContainerInfo> inspectContainer(String name) {
+                return Optional.empty();
+            }
+        };
+        List<String> ran = new ArrayList<>();
+
+        Ran r = run(recordingRestart(absent, ran));
+
+        assertEquals(0, r.exit());
+        assertEquals(List.of("start"), ran);
+        assertTrue(r.out().contains("not found; starting it"), r.out());
+    }
+
+    @Test
+    void anExistingContainerIsStoppedThenStarted() {
+        DockerClient present = new DockerClient() {
+            @Override
+            public Optional<RunSettings> inspectRunSettings(String name, int containerPort) {
+                return Optional.of(new RunSettings("floci/floci:0.9", 14566, null, Map.of()));
+            }
+
+            @Override
+            public Optional<ContainerInfo> inspectContainer(String name) {
+                return Optional.of(new ContainerInfo("abc", name, "floci/floci:0.9", "running", ""));
+            }
+        };
+        List<String> ran = new ArrayList<>();
+
+        Ran r = run(recordingRestart(present, ran));
+
+        assertEquals(0, r.exit());
+        assertEquals(List.of("stop", "start"), ran);
+    }
+
+    /**
+     * A failed read of the running container's settings is not "no container": restart must stop
+     * there, or it would remove the instance and bring it back on the default port without its data.
+     */
+    @Test
+    void settingsThatCannotBeReadFailTheRestartBeforeTheStop() {
+        DockerClient stalled = new DockerClient() {
+            @Override
+            public Optional<RunSettings> inspectRunSettings(String name, int containerPort) throws DockerException {
+                throw new DockerException("'docker container inspect' did not finish within 30s.");
+            }
+
+            @Override
+            public Optional<ContainerInfo> inspectContainer(String name) {
+                return Optional.of(new ContainerInfo("abc", name, "floci/floci:0.9", "running", ""));
+            }
+        };
+        List<String> ran = new ArrayList<>();
+
+        Ran r = run(recordingRestart(stalled, ran));
+
+        assertEquals(1, r.exit());
+        assertEquals(List.of(), ran);
+        assertTrue(r.err().contains("did not finish within 30s"), r.err());
+        assertTrue(r.err().contains("floci restart"), r.err());
     }
 }

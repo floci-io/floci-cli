@@ -59,6 +59,14 @@ public class RestartCommand implements Callable<Integer> {
             // exit code matches a bad --profile at parse time.
             printer.error(e.getMessage());
             return ExitCode.USAGE;
+        } catch (DockerException e) {
+            // The container may well be there with settings this restart could not read. Going
+            // on would remove it and bring it back on the defaults, so stop here instead.
+            printer.error("Could not read how container '" + global.container + "' was started, so it was left as it is: "
+                    + e.getMessage()
+                    + "\nCheck that Docker is responsive ('docker info'), then re-run '"
+                    + profile.commandPrefix() + " restart" + global.instanceSelector() + "'.");
+            return 1;
         }
         String invalid = start.validationError();
         if (invalid != null) {
@@ -99,7 +107,7 @@ public class RestartCommand implements Callable<Integer> {
      * provider, the same precedence and the same interpolation, so one profile cannot mean one
      * directory on {@code start} and a different one on {@code restart}.
      */
-    public StartCommand buildStartCommand() {
+    public StartCommand buildStartCommand() throws DockerException {
         // The outer parse's provider: its memoized profile is the snapshot the globals below were
         // resolved from, so the start settings cannot come from a newer version of the file.
         StartCommand start = StartCommand.resolvedFor(profile, ProfileDefaultValueProvider.of(spec), global.profile);
@@ -116,21 +124,18 @@ public class RestartCommand implements Callable<Integer> {
     // Without a profile, the running container is the only record of how it was started: its
     // port, image, data directory and services come back from it, or a restart would quietly
     // move the instance to the default port and drop its state. Read before the stop, which
-    // removes the container.
-    private void carryOver(StartCommand start) {
-        try {
-            docker.inspectRunSettings(global.container, profile.defaultPort()).ifPresent(run -> {
-                if (run.hostPort() != null) start.port = run.hostPort();
-                if (run.image() != null) start.image = run.image();
-                if (run.persistSource() != null) start.persistDir = run.persistSource();
-                String services = run.env().get(profile.envVar("SERVICES"));
-                if (services != null) start.services = services;
-                String namespace = run.env().get(profile.envVar("DOCKER_RESOURCE_NAMESPACE"));
-                if (namespace != null) start.namespace = namespace;
-            });
-        } catch (DockerException e) {
-            // Unreadable settings: the restart falls back to the defaults, as it did before.
-        }
+    // removes the container. Only a container that does not exist (an empty result) means
+    // "start with the defaults"; a failed read is thrown, so the caller can stop before the stop.
+    private void carryOver(StartCommand start) throws DockerException {
+        docker.inspectRunSettings(global.container, profile.defaultPort()).ifPresent(run -> {
+            if (run.hostPort() != null) start.port = run.hostPort();
+            if (run.image() != null) start.image = run.image();
+            if (run.persistSource() != null) start.persistDir = run.persistSource();
+            String services = run.env().get(profile.envVar("SERVICES"));
+            if (services != null) start.services = services;
+            String namespace = run.env().get(profile.envVar("DOCKER_RESOURCE_NAMESPACE"));
+            if (namespace != null) start.namespace = namespace;
+        });
     }
 
     private boolean containerExists() {
