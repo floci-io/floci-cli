@@ -11,6 +11,7 @@ import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.URI;
+import java.util.Locale;
 import java.util.function.BooleanSupplier;
 
 public class PortAvailableCheck implements Check {
@@ -59,16 +60,22 @@ public class PortAvailableCheck implements Check {
         try (ServerSocket s = new ServerSocket(port)) {
             return true;
         } catch (IOException e) {
-            return !takenAfterFailedBind(port, () -> listensOnLoopback(port));
+            return !takenAfterFailedBind(port, e.getMessage(), () -> listensOnLoopback(port));
         }
     }
 
     /** The ports a user may be refused for lack of privilege rather than because they are taken. */
     static final int FIRST_UNPRIVILEGED_PORT = 1024;
 
-    /** What a failed bind of {@code port} means; {@code listening} is asked only when the bind alone cannot tell. */
-    public static boolean takenAfterFailedBind(int port, BooleanSupplier listening) {
-        return port >= FIRST_UNPRIVILEGED_PORT || listening.getAsBoolean();
+    /**
+     * What a failed bind of {@code port} means, given the bind's error {@code message}. An
+     * "address already in use" error is the answer on any port; {@code listening} is asked only
+     * for a privileged port whose error says something else (permission denied).
+     */
+    public static boolean takenAfterFailedBind(int port, String message, BooleanSupplier listening) {
+        if (port >= FIRST_UNPRIVILEGED_PORT) return true;
+        if (message != null && message.toLowerCase(Locale.ROOT).contains("in use")) return true;
+        return listening.getAsBoolean();
     }
 
     /** Whether something accepts a connection on {@code port} on this machine. */

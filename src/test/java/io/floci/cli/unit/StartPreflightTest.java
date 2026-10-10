@@ -178,11 +178,18 @@ class StartPreflightTest {
      */
     @Test
     void aFailedBindOnAPrivilegedPortIsNotProofItIsTaken() {
-        assertFalse(PortAvailableCheck.takenAfterFailedBind(80, () -> false));
-        assertFalse(PortAvailableCheck.takenAfterFailedBind(443, () -> false));
-        assertTrue(PortAvailableCheck.takenAfterFailedBind(80, () -> true));
-        assertTrue(PortAvailableCheck.takenAfterFailedBind(1024, () -> false));
-        assertTrue(PortAvailableCheck.takenAfterFailedBind(4566, () -> false));
+        assertFalse(PortAvailableCheck.takenAfterFailedBind(80, "Permission denied", () -> false));
+        assertFalse(PortAvailableCheck.takenAfterFailedBind(443, null, () -> false));
+        assertTrue(PortAvailableCheck.takenAfterFailedBind(80, "Permission denied", () -> true));
+        assertTrue(PortAvailableCheck.takenAfterFailedBind(1024, "Permission denied", () -> false));
+        assertTrue(PortAvailableCheck.takenAfterFailedBind(4566, null, () -> false));
+    }
+
+    /** "Address already in use" is the answer on its own, also for a listener loopback cannot reach. */
+    @Test
+    void anAddressInUseErrorMeansTakenOnAnyPort() {
+        assertTrue(PortAvailableCheck.takenAfterFailedBind(80, "Address already in use", () -> false));
+        assertTrue(PortAvailableCheck.takenAfterFailedBind(443, "Address already in use: bind", () -> false));
     }
 
     @Test
