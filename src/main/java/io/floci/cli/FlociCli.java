@@ -68,7 +68,7 @@ public class FlociCli implements Runnable {
         @Override
         public int handleExecutionException(Exception ex, CommandLine cmd, ParseResult parseResult) {
             System.err.println(Ansi.red("Error: ") + ex.getMessage());
-            if (Boolean.getBoolean("floci.verbose")) {
+            if (Boolean.getBoolean(GlobalOptions.VERBOSE_PROPERTY)) {
                 ex.printStackTrace(System.err);
             }
             return 1;

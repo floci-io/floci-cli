@@ -1,5 +1,9 @@
 package io.floci.cli.docker;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import io.floci.cli.GlobalOptions;
+
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
@@ -7,7 +11,9 @@ import java.io.InputStreamReader;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
@@ -47,6 +53,62 @@ public class DockerClient {
             String ports) {}
 
     public record ImageInfo(String id, String repository, String tag, String digest) {}
+
+    /**
+     * What a container was started with, as {@code restart} needs it back: the image, the host
+     * port bound to {@code containerPort}, the host directory bind-mounted at {@code /app/data}
+     * (null for a docker volume), and the environment. Any of them may be absent (null, or an empty map).
+     */
+    public record RunSettings(String image, Integer hostPort, String persistSource, Map<String, String> env) {}
+
+    private static final ObjectMapper JSON = new ObjectMapper();
+
+    public Optional<RunSettings> inspectRunSettings(String name, int containerPort) throws DockerException {
+        String out;
+        try {
+            out = run("docker", "container", "inspect", "--format", "{{json .}}", "--", name);
+        } catch (DockerException e) {
+            if (e.getMessage() != null && e.getMessage().toLowerCase().contains("no such")) {
+                return Optional.empty();
+            }
+            throw e;
+        }
+        if (out.isBlank()) return Optional.empty();
+        try {
+            JsonNode c = JSON.readTree(out);
+            String image = textOrNull(c.path("Config").path("Image"));
+            Integer hostPort = null;
+            JsonNode binding = c.path("HostConfig").path("PortBindings").path(containerPort + "/tcp");
+            if (binding.isArray() && !binding.isEmpty()) {
+                String text = binding.get(0).path("HostPort").asText("");
+                if (!text.isBlank()) hostPort = Integer.valueOf(text);
+            }
+            String persist = null;
+            for (JsonNode mount : c.path("Mounts")) {
+                // Only a host directory is a --persist. The images declare /app/data as a volume,
+                // so without --persist docker mounts an anonymous volume there; its Source is a
+                // path inside the docker VM, not something start can mount again.
+                if ("/app/data".equals(mount.path("Destination").asText())
+                        && "bind".equals(mount.path("Type").asText())) {
+                    persist = textOrNull(mount.path("Source"));
+                }
+            }
+            Map<String, String> env = new LinkedHashMap<>();
+            for (JsonNode entry : c.path("Config").path("Env")) {
+                String kv = entry.asText();
+                int eq = kv.indexOf('=');
+                if (eq > 0) env.put(kv.substring(0, eq), kv.substring(eq + 1));
+            }
+            return Optional.of(new RunSettings(image, hostPort, persist, Map.copyOf(env)));
+        } catch (Exception e) {
+            throw new DockerException("Could not read the settings of container '" + name + "': " + e.getMessage());
+        }
+    }
+
+    private static String textOrNull(JsonNode node) {
+        String text = node.asText("");
+        return text.isBlank() ? null : text;
+    }
 
     public String dockerVersion() throws DockerException {
         return run("docker", "version", "--format", "{{.Server.Version}}").trim();
@@ -266,6 +328,9 @@ public class DockerClient {
     }
 
     private Process runProcess(String... cmd) throws IOException {
+        if (Boolean.getBoolean(GlobalOptions.VERBOSE_PROPERTY)) {
+            System.err.println("+ " + String.join(" ", cmd));
+        }
         if (cmd.length > 0 && "docker".equals(cmd[0])) {
             cmd = cmd.clone();
             cmd[0] = binary;
