@@ -15,6 +15,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.TreeMap;
 import java.util.concurrent.Callable;
 import java.util.regex.Pattern;
@@ -120,7 +121,7 @@ public class StartCommand implements Callable<Integer> {
             return "--port must be between 1 and 65535, but was " + port + ".\nPick a free port, for example "
                     + (profile.defaultPort() + 10000) + ".";
         }
-        if (pull == null || !PULL_POLICIES.contains(pull.toLowerCase())) {
+        if (pull == null || !PULL_POLICIES.contains(pull.toLowerCase(Locale.ROOT))) {
             // Anything else used to fall through to a pull, so a typo silently meant "always".
             return "Invalid --pull '" + pull + "'.\nUse always, missing or never.";
         }
@@ -143,14 +144,28 @@ public class StartCommand implements Callable<Integer> {
      * the CLI rather than docker: a bind source docker creates is owned by root on Linux, and the
      * emulator then cannot write to it. Restart calls this before it stops anything, so a
      * directory that cannot be created leaves the running instance alone.
+     *
+     * <p>An existing directory is accepted as it is, with no write check: the emulator runs as its
+     * own user (uid 1001) and the AWS image re-owns its data directory at startup, so whether the
+     * CLI's user can write there says nothing about whether the emulator can. The emulator reports
+     * a directory it cannot write to itself.
      */
     public String preparePersistDir() {
+        return preparePersistDir(DockerClient.dockerHost());
+    }
+
+    /** {@link #preparePersistDir()} for a daemon reached through {@code daemon}; the test seam. */
+    public String preparePersistDir(DockerClient.DockerHost daemon) {
         if (persistDir == null || persistDir.isBlank()) return null;
+        // A remote daemon reads the bind source on its own machine, where this CLI can neither
+        // create nor check it.
+        if (daemon.kind() == DockerClient.Kind.TCP) return null;
         try {
             Files.createDirectories(Path.of(persistPath()));
             return null;
         } catch (Exception e) {
-            return "Could not create the persist directory " + persistPath() + ": " + e.getMessage()
+            // Names persistDir as given: persistPath() is what threw for a path that is not valid here.
+            return "Could not create the persist directory " + persistDir + ": " + e.getMessage()
                     + "\nPass a --persist directory you can write to.";
         }
     }

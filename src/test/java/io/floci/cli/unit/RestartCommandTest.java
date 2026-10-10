@@ -20,6 +20,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assumptions.assumeFalse;
 
 /**
  * Restart builds its StartCommand programmatically, so picocli never applies the profile to it.
@@ -152,9 +153,11 @@ class RestartCommandTest {
         PrintStream err = System.err;
         ByteArrayOutputStream outBuf = new ByteArrayOutputStream();
         ByteArrayOutputStream errBuf = new ByteArrayOutputStream();
-        System.setOut(new PrintStream(outBuf));
-        System.setErr(new PrintStream(errBuf));
         try {
+            // Root writes through the permission bits; the restart would then reach Docker.
+            assumeFalse(Files.isWritable(readOnly), "permissions do not bind this user (root)");
+            System.setOut(new PrintStream(outBuf));
+            System.setErr(new PrintStream(errBuf));
             assertEquals(1, restart.call());
         } finally {
             System.setOut(out);
