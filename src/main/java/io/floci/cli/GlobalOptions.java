@@ -27,6 +27,9 @@ import java.util.regex.Pattern;
  */
 public class GlobalOptions {
 
+    /** System property that {@code --verbose} sets; read where no GlobalOptions is at hand. */
+    public static final String VERBOSE_PROPERTY = "floci.verbose";
+
     // The command this mixin belongs to, so hints can tell which flags were actually typed.
     // Null for commands built by hand (restart's start), which were never parsed.
     @Spec(Spec.Target.MIXEE)
@@ -121,6 +124,10 @@ public class GlobalOptions {
     public Printer printer() {
         if (noColor || !isStdoutTty()) {
             Ansi.disable();
+        }
+        // Read by the exception handler (stack traces) and DockerClient (the commands it runs).
+        if (verbose) {
+            System.setProperty(VERBOSE_PROPERTY, "true");
         }
         return new Printer(System.out, System.err, output, quiet);
     }
