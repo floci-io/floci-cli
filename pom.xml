@@ -27,6 +27,8 @@
         <jackson.version>2.18.3</jackson.version>
         <junit.version>5.11.4</junit.version>
         <main.class>io.floci.cli.FlociCli</main.class>
+        <floci.test.groups></floci.test.groups>
+        <floci.test.excludedGroups>integration</floci.test.excludedGroups>
     </properties>
 
     <dependencies>
@@ -96,6 +98,12 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>3.5.5</version>
+                <configuration>
+                    <!-- Tests tagged "integration" need Docker and the emulator images; they run
+                         only with -Pintegration. -->
+                    <groups>${floci.test.groups}</groups>
+                    <excludedGroups>${floci.test.excludedGroups}</excludedGroups>
+                </configuration>
             </plugin>
 
             <!-- Fat JAR — JVM fallback when native binary is unavailable -->
@@ -126,6 +134,13 @@
     </build>
 
     <profiles>
+        <profile>
+            <id>integration</id>
+            <properties>
+                <floci.test.groups>integration</floci.test.groups>
+                <floci.test.excludedGroups>none</floci.test.excludedGroups>
+            </properties>
+        </profile>
         <profile>
             <id>native</id>
             <activation>
