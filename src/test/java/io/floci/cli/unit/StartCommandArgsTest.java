@@ -261,8 +261,31 @@ class StartCommandArgsTest {
         String error = parse("start", "--persist", invalid).preparePersistDir(LOCAL);
 
         assertNotNull(error);
-        assertTrue(error.startsWith("Could not create the persist directory"), error);
-        assertTrue(error.contains("Pass a --persist directory"), error);
+        assertTrue(error.startsWith("Invalid persist directory"), error);
+        assertTrue(error.contains("Pass a --persist path"), error);
+    }
+
+    /**
+     * A remote daemon skips the local directory, not the path check: restart runs this before the
+     * stop, and dockerRunArgs() would otherwise be the first to throw, after the container is gone.
+     */
+    @Test
+    void anInvalidPersistPathIsReportedForARemoteDaemonToo() {
+        StartCommand start = parse("start", "--persist", "data\u0000dir");
+
+        String error = start.preparePersistDir(REMOTE);
+
+        assertNotNull(error);
+        assertTrue(error.startsWith("Invalid persist directory"), error);
+    }
+
+    /** What preparePersistDir accepts, dockerRunArgs can build: nothing is left to fail after a stop. */
+    @Test
+    void aPathARemoteDaemonAcceptsBuildsItsRunArguments() {
+        StartCommand start = parse("start", "--persist", "/srv/floci-data");
+
+        assertNull(start.preparePersistDir(REMOTE));
+        assertTrue(start.dockerRunArgs(SOCKET).stream().anyMatch(a -> a.endsWith(":/app/data")));
     }
 
     /**

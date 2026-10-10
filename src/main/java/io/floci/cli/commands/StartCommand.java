@@ -12,6 +12,7 @@ import picocli.CommandLine.*;
 
 import java.net.URI;
 import java.nio.file.Files;
+import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -157,15 +158,24 @@ public class StartCommand implements Callable<Integer> {
     /** {@link #preparePersistDir()} for a daemon reached through {@code daemon}; the test seam. */
     public String preparePersistDir(DockerClient.DockerHost daemon) {
         if (persistDir == null || persistDir.isBlank()) return null;
+        Path path;
+        try {
+            // Resolved for every daemon: dockerRunArgs() resolves it again after restart has
+            // stopped the container, and must not be the first to find the path unusable.
+            path = Path.of(persistPath());
+        } catch (InvalidPathException e) {
+            // Names persistDir as given: resolving it is what failed.
+            return "Invalid persist directory '" + persistDir + "': " + e.getReason()
+                    + ".\nPass a --persist path that is valid on this system.";
+        }
         // A remote daemon reads the bind source on its own machine, where this CLI can neither
         // create nor check it.
         if (daemon.kind() == DockerClient.Kind.TCP) return null;
         try {
-            Files.createDirectories(Path.of(persistPath()));
+            Files.createDirectories(path);
             return null;
         } catch (Exception e) {
-            // Names persistDir as given: persistPath() is what threw for a path that is not valid here.
-            return "Could not create the persist directory " + persistDir + ": " + e.getMessage()
+            return "Could not create the persist directory " + path + ": " + e.getMessage()
                     + "\nPass a --persist directory you can write to.";
         }
     }
