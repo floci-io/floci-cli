@@ -1,7 +1,8 @@
 name: Release
 
 # Triggered when a SemVer tag (e.g. 0.1.0) is pushed.
-# Builds native binaries for 4 platform targets and creates a GitHub Release.
+# Builds native binaries for 5 platform targets, runs each one (.github/scripts/smoke.sh) and
+# creates a GitHub Release. A binary that does not start fails its job before anything is published.
 
 on:
   push:
@@ -30,6 +31,8 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
       - run: mvn clean package -Pnative -DskipTests -B
       - run: mv target/floci target/floci-linux-amd64
+      - name: Smoke test
+        run: .github/scripts/smoke.sh target/floci-linux-amd64 "$GITHUB_REF_NAME"
       - uses: actions/upload-artifact@v4
         with:
           name: floci-linux-amd64
@@ -49,6 +52,8 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
       - run: mvn clean package -Pnative -DskipTests -B
       - run: mv target/floci target/floci-linux-arm64
+      - name: Smoke test
+        run: .github/scripts/smoke.sh target/floci-linux-arm64 "$GITHUB_REF_NAME"
       - uses: actions/upload-artifact@v4
         with:
           name: floci-linux-arm64
@@ -68,6 +73,8 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
       - run: mvn clean package -Pnative -DskipTests -B
       - run: mv target/floci target/floci-darwin-arm64
+      - name: Smoke test
+        run: .github/scripts/smoke.sh target/floci-darwin-arm64 "$GITHUB_REF_NAME"
       - uses: actions/upload-artifact@v4
         with:
           name: floci-darwin-arm64
@@ -107,6 +114,8 @@ jobs:
         run: file target/floci | grep -q x86_64
 
       - run: mv target/floci target/floci-darwin-amd64
+      - name: Smoke test
+        run: .github/scripts/smoke.sh target/floci-darwin-amd64 "$GITHUB_REF_NAME"
       - uses: actions/upload-artifact@v4
         with:
           name: floci-darwin-amd64
@@ -126,6 +135,9 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
       - run: mvn clean package -Pnative -DskipTests -B
       - run: mv target/floci.exe target/floci-windows-amd64.exe
+      - name: Smoke test
+        shell: bash
+        run: .github/scripts/smoke.sh target/floci-windows-amd64.exe "$GITHUB_REF_NAME"
       - uses: actions/upload-artifact@v4
         with:
           name: floci-windows-amd64
