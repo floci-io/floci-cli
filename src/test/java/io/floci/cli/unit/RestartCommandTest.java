@@ -248,8 +248,20 @@ class RestartCommandTest {
         RestartCommand restart = new RestartCommand(ProductProfile.AWS, docker) {
             @Override
             public StartCommand buildStartCommand() throws DockerException {
-                super.buildStartCommand(); // the real one first, so its docker failure still surfaces
+                // The real one first, so its docker failure still surfaces; it also answers the
+                // checks restart runs before the stop, as only it carries the resolved settings.
+                StartCommand real = super.buildStartCommand();
                 return new StartCommand(ProductProfile.AWS) {
+                    @Override
+                    public String validationError() {
+                        return real.validationError();
+                    }
+
+                    @Override
+                    public String preparePersistDir() {
+                        return real.preparePersistDir();
+                    }
+
                     @Override
                     public Integer call() {
                         ran.add("start");
