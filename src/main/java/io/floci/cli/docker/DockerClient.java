@@ -57,14 +57,12 @@ public class DockerClient {
             // Probe connectivity by exit code only. `docker info` / `podman info`
             // exit 0 when the daemon (or DOCKER_HOST socket) is reachable. Avoid a
             // Docker-only template field like {{.ServerVersion}}, which errors under
-            // Podman and yields a false "daemon not reachable". Output is discarded
-            // so the unread pipe can't fill and deadlock waitFor().
-            Process p = new ProcessBuilder("docker", "info")
-                    .redirectOutput(ProcessBuilder.Redirect.DISCARD)
-                    .redirectError(ProcessBuilder.Redirect.DISCARD)
-                    .start();
-            return p.waitFor() == 0;
-        } catch (Exception e) {
+            // Podman and yields a false "daemon not reachable". Going through run() gives
+            // the probe the same time limit and cleanup as every other call, so a daemon
+            // that accepts the connection and then stalls reads as unreachable.
+            run("docker", "info");
+            return true;
+        } catch (DockerException e) {
             return false;
         }
     }
@@ -138,8 +136,19 @@ public class DockerClient {
         return run(Duration.ofMinutes(10), cmd.toArray(String[]::new)).trim();
     }
 
+    /**
+     * Stops {@code name}, giving it {@code timeout} seconds before docker kills it. A negative
+     * {@code timeout} is docker's "wait indefinitely", so that call gets no time limit either.
+     */
     public void stopContainer(String name, int timeout) throws DockerException {
-        run(Duration.ofSeconds(timeout).plus(DEFAULT_TIMEOUT), "docker", "stop", "--time", String.valueOf(timeout), "--", name);
+        // -t is the one spelling every docker and podman accepts (--time is deprecated for --timeout).
+        run(stopLimit(timeout), "docker", "stop", "-t", String.valueOf(timeout), "--", name);
+    }
+
+    // The container's grace period plus this client's own limit for docker to answer; null (no
+    // limit) when the grace period is itself unlimited.
+    private Duration stopLimit(int timeout) {
+        return timeout < 0 ? null : Duration.ofSeconds(timeout).plus(this.timeout);
     }
 
     public void removeContainer(String name) throws DockerException {
@@ -160,6 +169,7 @@ public class DockerClient {
         return run(timeout, cmd);
     }
 
+    /** Runs {@code cmd} for at most {@code limit}; a null {@code limit} waits as long as it takes. */
     private String run(Duration limit, String... cmd) throws DockerException {
         Process proc = null;
         boolean finished = false;
@@ -170,7 +180,9 @@ public class DockerClient {
             // process, so no docker call outlives the CLI.
             CompletableFuture<String> stdout = drain(proc.getInputStream());
             CompletableFuture<String> stderr = drain(proc.getErrorStream());
-            if (!proc.waitFor(limit.toMillis(), TimeUnit.MILLISECONDS)) {
+            if (limit == null) {
+                proc.waitFor();
+            } else if (!proc.waitFor(limit.toMillis(), TimeUnit.MILLISECONDS)) {
                 throw new DockerException("'" + describe(cmd) + "' did not finish within " + limit.toSeconds()
                         + "s.\nCheck that the Docker daemon is responsive ('docker info') and re-run the command.");
             }
@@ -265,8 +277,15 @@ public class DockerClient {
 
     public static boolean isInstalled() {
         try {
-            Process p = new ProcessBuilder("docker", "--version").start();
-            return p.waitFor() == 0;
+            Process p = new ProcessBuilder("docker", "--version")
+                    .redirectOutput(ProcessBuilder.Redirect.DISCARD)
+                    .redirectError(ProcessBuilder.Redirect.DISCARD)
+                    .start();
+            if (p.waitFor(DEFAULT_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS)) {
+                return p.exitValue() == 0;
+            }
+            p.destroyForcibly();
+            return false;
         } catch (Exception e) {
             return false;
         }

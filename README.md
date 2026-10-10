@@ -453,6 +453,7 @@ instead. Run `floci doctor` to see which endpoint was resolved.
 ```sh
 floci stop                    # graceful stop (10s timeout)
 floci stop --timeout 30       # wait up to 30s before force-kill
+floci stop --timeout -1       # never force-kill: wait for the container to exit
 floci stop --remove           # also remove the container after stopping
 ```
 

@@ -34,7 +34,7 @@ public class StopCommand implements Callable<Integer> {
     @Option(names = {"--remove", "-r"}, description = "Remove the container after stopping")
     boolean remove;
 
-    @Option(names = {"--timeout"}, description = "Seconds to wait before forcefully killing (default: 10)", defaultValue = "10", paramLabel = "<seconds>")
+    @Option(names = {"--timeout"}, description = "Seconds to wait before forcefully killing; -1 waits indefinitely (default: 10)", defaultValue = "10", paramLabel = "<seconds>")
     int timeout;
 
     @Override
