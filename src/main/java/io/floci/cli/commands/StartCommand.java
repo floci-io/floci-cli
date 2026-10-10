@@ -11,6 +11,8 @@ import picocli.CommandLine;
 import picocli.CommandLine.*;
 
 import java.net.URI;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.TreeMap;
@@ -114,7 +116,43 @@ public class StartCommand implements Callable<Integer> {
         if (namespace != null && !namespace.isBlank() && !NAMESPACE.matcher(namespace).matches()) {
             return "Invalid namespace '" + namespace + "'.\nUse letters, digits, '_', '.' and '-', starting with a letter or digit.";
         }
+        if (port < 1 || port > 65535) {
+            return "--port must be between 1 and 65535, but was " + port + ".\nPick a free port, for example "
+                    + (profile.defaultPort() + 10000) + ".";
+        }
+        if (pull == null || !PULL_POLICIES.contains(pull.toLowerCase())) {
+            // Anything else used to fall through to a pull, so a typo silently meant "always".
+            return "Invalid --pull '" + pull + "'.\nUse always, missing or never.";
+        }
         return null;
+    }
+
+    private static final List<String> PULL_POLICIES = List.of("always", "missing", "never");
+
+    /**
+     * {@code persistDir} as an absolute, normalized path. Docker reads a bind source without a
+     * leading slash as a named volume, so {@code --persist ./data} would otherwise keep the state
+     * in an anonymous Docker volume instead of the directory the user named.
+     */
+    public String persistPath() {
+        return Path.of(persistDir).toAbsolutePath().normalize().toString();
+    }
+
+    /**
+     * Creates the state directory, returning why it could not be created, or {@code null}. Done by
+     * the CLI rather than docker: a bind source docker creates is owned by root on Linux, and the
+     * emulator then cannot write to it. Restart calls this before it stops anything, so a
+     * directory that cannot be created leaves the running instance alone.
+     */
+    public String preparePersistDir() {
+        if (persistDir == null || persistDir.isBlank()) return null;
+        try {
+            Files.createDirectories(Path.of(persistPath()));
+            return null;
+        } catch (Exception e) {
+            return "Could not create the persist directory " + persistPath() + ": " + e.getMessage()
+                    + "\nPass a --persist directory you can write to.";
+        }
     }
 
     public String resourceNamespace() {
@@ -139,7 +177,7 @@ public class StartCommand implements Callable<Integer> {
         args.addAll(List.of("-p", port + ":" + profile.defaultPort()));
         args.addAll(socketArgs);
         if (persistDir != null && !persistDir.isBlank()) {
-            args.addAll(List.of("-v", persistDir + ":/app/data"));
+            args.addAll(List.of("-v", persistPath() + ":/app/data"));
             // The server defaults to in-memory storage; enable persistent mode so
             // state is actually written to the mounted directory and survives restarts.
             args.addAll(List.of("-e", profile.envVar("STORAGE_MODE") + "=persistent"));
@@ -198,6 +236,12 @@ public class StartCommand implements Callable<Integer> {
         if (invalid != null) {
             printer.error(invalid);
             return 2;
+        }
+
+        String unwritable = preparePersistDir();
+        if (unwritable != null) {
+            printer.error(unwritable);
+            return 1;
         }
 
         // Check if container already exists. This is also the first docker call, so a missing

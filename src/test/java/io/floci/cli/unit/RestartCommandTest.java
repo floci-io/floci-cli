@@ -5,6 +5,8 @@ import io.floci.cli.ProductProfile;
 import io.floci.cli.commands.RestartCommand;
 import io.floci.cli.config.ProfileStore;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.DisabledOnOs;
+import org.junit.jupiter.api.condition.OS;
 import org.junit.jupiter.api.io.TempDir;
 import picocli.CommandLine;
 import picocli.CommandLine.ParseResult;
@@ -132,6 +134,35 @@ class RestartCommandTest {
         } finally {
             System.setErr(err);
         }
+    }
+
+    /**
+     * A persist directory that cannot be created fails the restart before the stop, so the running
+     * instance is left alone instead of being removed and never started again.
+     */
+    @Test
+    @DisabledOnOs(OS.WINDOWS)
+    void anUnwritablePersistDirFailsBeforeTheStop() throws Exception {
+        Path readOnly = Files.createDirectories(tempDir.resolve("read-only"));
+        assertTrue(readOnly.toFile().setWritable(false));
+        writeProfile("ro", "container: floci-ro-none\npersistDir: " + readOnly.resolve("state") + "\n");
+        RestartCommand restart = parse(ProductProfile.AWS, "--profile", "ro");
+
+        PrintStream out = System.out;
+        PrintStream err = System.err;
+        ByteArrayOutputStream outBuf = new ByteArrayOutputStream();
+        ByteArrayOutputStream errBuf = new ByteArrayOutputStream();
+        System.setOut(new PrintStream(outBuf));
+        System.setErr(new PrintStream(errBuf));
+        try {
+            assertEquals(1, restart.call());
+        } finally {
+            System.setOut(out);
+            System.setErr(err);
+            readOnly.toFile().setWritable(true);
+        }
+        assertTrue(errBuf.toString().contains("Could not create the persist directory"), errBuf.toString());
+        assertFalse(outBuf.toString().contains("Stopping"), "nothing was stopped: " + outBuf);
     }
 
     /**

@@ -191,6 +191,27 @@ class StartCommandArgsTest {
                 .dockerRunArgs(SOCKET).contains("FLOCI_BASE_URL=http://floci.internal:14566"));
     }
 
+    /** BL-034: Docker reads "./data:/app/data" as a named volume, so the path goes in absolute. */
+    @Test
+    void aRelativePersistDirIsMountedAsAnAbsoluteBindPath() {
+        String expected = Path.of("data").toAbsolutePath().normalize() + ":/app/data";
+
+        List<String> args = parse("start", "--persist", "./data").dockerRunArgs(SOCKET);
+
+        assertTrue(args.contains(expected), args.toString());
+        assertFalse(args.contains("./data:/app/data"), args.toString());
+    }
+
+    /** BL-035: an out-of-range port or an unknown pull policy is refused before docker runs. */
+    @Test
+    void portAndPullPolicyAreValidated() {
+        assertNull(parse("start").validationError());
+        assertNull(parse("start", "--pull", "ALWAYS").validationError());
+        assertTrue(parse("start", "--port", "0").validationError().contains("--port must be between 1 and 65535"));
+        assertTrue(parse("start", "--port", "70000").validationError().contains("--port must be between 1 and 65535"));
+        assertTrue(parse("start", "--pull", "alwayz").validationError().contains("Invalid --pull 'alwayz'"));
+    }
+
     @Test
     void readinessPollKeepsTheHostFromTheEndpointWhenSwappingThePort() {
         assertEquals("http://floci.internal:4599", StartCommand.withPort("http://floci.internal:4566", 4599));

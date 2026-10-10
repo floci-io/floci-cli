@@ -55,6 +55,11 @@ public class RestartCommand implements Callable<Integer> {
             printer.error(invalid);
             return 2;
         }
+        String unwritable = start.preparePersistDir();
+        if (unwritable != null) {
+            printer.error(unwritable);
+            return 1;
+        }
 
         int stopResult = buildStopCommand().call();
         if (stopResult != 0) return stopResult;
