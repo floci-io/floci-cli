@@ -2,12 +2,14 @@ package io.floci.cli.http;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.floci.cli.ProductProfile;
 
 import java.net.ConnectException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.net.http.HttpTimeoutException;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
@@ -28,6 +30,7 @@ public class FlociHttpClient {
     private final String endpoint;
     private final String query;
     private final String controlPrefix;
+    private final String commandPrefix;
     private final HttpClient http;
 
     public FlociHttpClient(String endpoint) {
@@ -39,6 +42,16 @@ public class FlociHttpClient {
      *                      (e.g. {@code /_floci} for AWS/Azure, {@code /_floci-gcp} for GCP).
      */
     public FlociHttpClient(String endpoint, String controlPrefix) {
+        this(endpoint, controlPrefix, "floci");
+    }
+
+    /** A client for {@code product}'s emulator: its control prefix, and hints that name its tree. */
+    public FlociHttpClient(String endpoint, ProductProfile product) {
+        this(endpoint, product.controlPrefix(), product.commandPrefix());
+    }
+
+    private FlociHttpClient(String endpoint, String controlPrefix, String commandPrefix) {
+        this.commandPrefix = commandPrefix;
         // Request paths go before an endpoint's query: http://h:1/?x=1 + /health is http://h:1/health?x=1.
         // A fragment is never sent, so it is dropped.
         int fragment = endpoint.indexOf('#');
@@ -152,7 +165,7 @@ public class FlociHttpClient {
         } catch (FlociException e) {
             throw e;
         } catch (ConnectException e) {
-            throw new FlociException("Connection refused at " + endpoint + ". Is Floci running? Try 'floci status' or 'floci start'.");
+            throw new FlociException("Connection refused at " + endpoint + ". Is Floci running? Try '" + commandPrefix + " status' or '" + commandPrefix + " start'.");
         } catch (Exception e) {
             throw new FlociException("Request failed: " + e.getMessage());
         }
@@ -194,10 +207,12 @@ public class FlociHttpClient {
                 resp = pending.get(timeout.toMillis(), TimeUnit.MILLISECONDS);
             } catch (TimeoutException e) {
                 pending.cancel(true);
-                throw new FlociException("No complete response from " + endpoint + path + " within "
-                        + timeout.toMillis() + " ms. Is Floci running? Try 'floci status'.");
+                throw timedOut(path, timeout);
             } catch (ExecutionException e) {
                 if (e.getCause() instanceof ConnectException) throw (ConnectException) e.getCause();
+                // The request's own timeout (no headers yet) can fire just before the one above:
+                // the same event, so the same message.
+                if (e.getCause() instanceof HttpTimeoutException) throw timedOut(path, timeout);
                 throw new FlociException("Request failed: " + e.getCause().getMessage());
             }
             if (resp.statusCode() >= 400) {
@@ -210,10 +225,15 @@ public class FlociHttpClient {
             Thread.currentThread().interrupt();
             throw new FlociException("Request interrupted.\nRe-run the command.");
         } catch (ConnectException e) {
-            throw new FlociException("Connection refused at " + endpoint + ". Is Floci running? Try 'floci status' or 'floci start'.");
+            throw new FlociException("Connection refused at " + endpoint + ". Is Floci running? Try '" + commandPrefix + " status' or '" + commandPrefix + " start'.");
         } catch (Exception e) {
             throw new FlociException("Request failed: " + e.getMessage());
         }
+    }
+
+    private FlociException timedOut(String path, Duration timeout) {
+        return new FlociException("No complete response from " + endpoint + path + " within "
+                + timeout.toMillis() + " ms. Is Floci running? Try '" + commandPrefix + " status'.");
     }
 
     @SuppressWarnings("unchecked")
@@ -234,7 +254,7 @@ public class FlociHttpClient {
         } catch (FlociException e) {
             throw e;
         } catch (ConnectException e) {
-            throw new FlociException("Connection refused at " + endpoint + ". Is Floci running? Try 'floci start'.");
+            throw new FlociException("Connection refused at " + endpoint + ". Is Floci running? Try '" + commandPrefix + " start'.");
         } catch (Exception e) {
             throw new FlociException("Request failed: " + e.getMessage());
         }

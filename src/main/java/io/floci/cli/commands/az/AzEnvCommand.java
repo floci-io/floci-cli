@@ -73,7 +73,7 @@ public class AzEnvCommand implements Callable<Integer> {
 
     public AzEnvCommand() {
         this(InstanceState.defaultRoot(),
-                endpoint -> new FlociHttpClient(endpoint, ProductProfile.AZ.controlPrefix()).tlsCert());
+                endpoint -> new FlociHttpClient(endpoint, ProductProfile.AZ).tlsCert());
     }
 
     /**

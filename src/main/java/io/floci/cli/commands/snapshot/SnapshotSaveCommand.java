@@ -44,7 +44,7 @@ public class SnapshotSaveCommand implements Callable<Integer> {
         // Resolve the endpoint from the container's port mapping, like status/services/wait do,
         // so a container started with --port <n> is still found without --endpoint.
         String effectiveEndpoint = global.resolvedEndpoint(new DockerClient());
-        FlociHttpClient client = new FlociHttpClient(effectiveEndpoint, profile.controlPrefix());
+        FlociHttpClient client = new FlociHttpClient(effectiveEndpoint, profile);
         try {
             client.postSnapshot(name);
             printer.println(Ansi.green("Snapshot saved:") + " " + name);

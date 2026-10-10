@@ -46,7 +46,7 @@ public class VersionCommand implements Callable<Integer> {
         var docker = new io.floci.cli.docker.DockerClient();
         String effectiveEndpoint = global.resolvedEndpoint(docker);
 
-        FlociHttpClient client = new FlociHttpClient(effectiveEndpoint, profile.controlPrefix());
+        FlociHttpClient client = new FlociHttpClient(effectiveEndpoint, profile);
         try {
             var info = client.info();
             serverVersion = info.version();

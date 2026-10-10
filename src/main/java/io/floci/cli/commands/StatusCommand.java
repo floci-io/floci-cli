@@ -62,7 +62,7 @@ public class StatusCommand implements Callable<Integer> {
         String serverVersion = "unavailable";
         String serverEdition = "";
         boolean reachable = false;
-        FlociHttpClient client = new FlociHttpClient(effectiveEndpoint, profile.controlPrefix());
+        FlociHttpClient client = new FlociHttpClient(effectiveEndpoint, profile);
         try {
             var health = client.health();
             serverVersion = health.version();

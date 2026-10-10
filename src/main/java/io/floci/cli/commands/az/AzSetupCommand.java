@@ -96,7 +96,7 @@ public class AzSetupCommand implements Callable<Integer> {
 
     public AzSetupCommand() {
         this(InstanceState.defaultRoot(), new ProcessAzCli(),
-                endpoint -> new FlociHttpClient(endpoint, ProductProfile.AZ.controlPrefix()).tlsCert(),
+                endpoint -> new FlociHttpClient(endpoint, ProductProfile.AZ).tlsCert(),
                 new DockerClient(), Duration.ofSeconds(2));
     }
 

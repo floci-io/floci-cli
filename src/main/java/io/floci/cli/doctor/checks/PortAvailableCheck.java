@@ -1,5 +1,6 @@
 package io.floci.cli.doctor.checks;
 
+import io.floci.cli.ProductProfile;
 import io.floci.cli.docker.DockerClient;
 import io.floci.cli.docker.DockerException;
 import io.floci.cli.doctor.Check;
@@ -24,8 +25,18 @@ public class PortAvailableCheck implements Check {
 
     /** {@code docker} is shared across one doctor run so each docker fact is fetched once. */
     public PortAvailableCheck(DockerClient docker) {
-        this.docker = docker;
+        this(docker, ProductProfile.AWS);
     }
+
+    /** Falls back to {@code product}'s default port and names its tree in the hint. */
+    public PortAvailableCheck(DockerClient docker, ProductProfile product) {
+        this.docker = docker;
+        this.defaultPort = product.defaultPort();
+        this.startCommand = product.commandPrefix() + " start";
+    }
+
+    private final int defaultPort;
+    private final String startCommand;
 
     @Override
     public String name() {
@@ -34,7 +45,7 @@ public class PortAvailableCheck implements Check {
 
     @Override
     public CheckResult run(String endpoint, String container) {
-        int port = extractPort(endpoint);
+        int port = extractPort(endpoint, defaultPort);
         // If a Floci container is already listening on the port, that's fine
         try {
             var info = docker.inspectContainer(container);
@@ -48,7 +59,7 @@ public class PortAvailableCheck implements Check {
         }
         return CheckResult.fail("port.available",
                 "Port " + port + " is occupied by another process",
-                "Run 'lsof -i :" + port + "' to identify the process, or start Floci with --port <other>");
+                "Run 'lsof -i :" + port + "' to identify the process, or '" + startCommand + " --port <other>'.");
     }
 
     /**
@@ -89,11 +100,16 @@ public class PortAvailableCheck implements Check {
     }
 
     public static int extractPort(String endpoint) {
+        return extractPort(endpoint, ProductProfile.AWS.defaultPort());
+    }
+
+    /** The endpoint's port, or {@code fallback} when it names none or cannot be parsed. */
+    public static int extractPort(String endpoint, int fallback) {
         try {
             int port = URI.create(endpoint).getPort();
-            return port > 0 ? port : 4566;
+            return port > 0 ? port : fallback;
         } catch (Exception e) {
-            return 4566;
+            return fallback;
         }
     }
 }

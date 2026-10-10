@@ -44,7 +44,7 @@ public class ServicesCommand implements Callable<Integer> {
         // Resolve the endpoint from the container's port mapping, like status/wait/env do,
         // so a container started with --port <n> is still found without --endpoint.
         String effectiveEndpoint = global.resolvedEndpoint(new DockerClient());
-        FlociHttpClient client = new FlociHttpClient(effectiveEndpoint, profile.controlPrefix());
+        FlociHttpClient client = new FlociHttpClient(effectiveEndpoint, profile);
 
         List<String> services;
         try {

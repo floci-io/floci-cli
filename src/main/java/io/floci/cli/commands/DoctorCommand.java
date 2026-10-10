@@ -68,11 +68,11 @@ public class DoctorCommand implements Callable<Integer> {
                 new DockerDaemonCheck(docker),
                 new DockerSocketCheck(),
                 new DockerVersionCheck(docker),
-                new PortAvailableCheck(docker),
-                new ImagePresentCheck(profile.image(), docker),
-                new ImageVersionCheck(profile.image(), docker),
-                new ContainerRunningCheck(docker),
-                new EndpointReachableCheck(profile.controlPrefix())
+                new PortAvailableCheck(docker, profile),
+                new ImagePresentCheck(profile, docker),
+                new ImageVersionCheck(profile, docker),
+                new ContainerRunningCheck(docker, profile),
+                new EndpointReachableCheck(profile)
         );
     }
 
@@ -167,7 +167,8 @@ public class DoctorCommand implements Callable<Integer> {
                 structured.add(m);
             }
             printer.structured(structured);
-            return 0;
+            // Same contract as text output: scripts read the exit code, whatever the format.
+            return results.stream().anyMatch(r -> r.status() == CheckStatus.fail) ? 1 : 0;
         }
 
         long fails = results.stream().filter(r -> r.status() == CheckStatus.fail).count();
@@ -176,6 +177,9 @@ public class DoctorCommand implements Callable<Integer> {
         printer.println("");
         if (fails == 0 && warns == 0) {
             printer.println(Ansi.green("All checks passed."));
+        } else if (fails == 0) {
+            // Nothing failed: say so, rather than "0 issue(s) found" next to the warnings.
+            printer.println(Ansi.green("No failures") + ", " + warns + " warning(s) to review.");
         } else {
             printer.println(fails + " issue(s) found (" + fails + " fail, " + warns + " warn)."
                     + (fix ? "" : " Run with --fix to auto-resolve fixable issues."));

@@ -1,5 +1,6 @@
 package io.floci.cli.doctor.checks;
 
+import io.floci.cli.ProductProfile;
 import io.floci.cli.docker.DockerClient;
 import io.floci.cli.docker.DockerException;
 import io.floci.cli.doctor.Check;
@@ -15,8 +16,18 @@ public class ContainerRunningCheck implements Check {
 
     /** {@code docker} is shared across one doctor run so each docker fact is fetched once. */
     public ContainerRunningCheck(DockerClient docker) {
-        this.docker = docker;
+        this(docker, ProductProfile.AWS);
     }
+
+    /** Hints name {@code product}'s tree ({@code floci gcp start}, ...). */
+    public ContainerRunningCheck(DockerClient docker, ProductProfile product) {
+        this.docker = docker;
+        this.start = product.commandPrefix() + " start";
+        this.stop = product.commandPrefix() + " stop";
+    }
+
+    private final String start;
+    private final String stop;
 
     @Override
     public String name() {
@@ -30,7 +41,7 @@ public class ContainerRunningCheck implements Check {
             if (info.isEmpty()) {
                 return CheckResult.warn("container.running",
                         "Container '" + container + "' not found",
-                        "floci start");
+                        start);
             }
             String state = info.get().state();
             if ("running".equals(state)) {
@@ -38,7 +49,7 @@ public class ContainerRunningCheck implements Check {
             }
             return CheckResult.fail("container.running",
                     "Container '" + container + "' exists but state is '" + state + "'",
-                    "floci start  (or 'floci stop && floci start' to restart)");
+                    start + "  (or '" + stop + " && " + start + "' to restart)");
         } catch (DockerException e) {
             return CheckResult.warn("container.running", "Could not inspect container: " + e.getMessage(), null);
         }
