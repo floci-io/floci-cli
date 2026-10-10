@@ -127,6 +127,26 @@ class StartPreflightTest {
         }
     }
 
+    /** A daemon reached over SSH (DOCKER_HOST or a context) is remote too: its ports are not this machine's. */
+    @Test
+    void aDaemonReachedOverSshIsNotProbedLocally() throws Exception {
+        DockerHost ssh = DockerClient.parseDockerHost("ssh://deploy@build-host", null, "Linux");
+        assertEquals(Kind.TCP, ssh.kind());
+        assertEquals("ssh://deploy@build-host", ssh.raw());
+        assertFalse(StartCommand.probesPortLocally(ssh, 4588));
+
+        FakeDocker docker = new FakeDocker(ssh);
+        try (ServerSocket taken = new ServerSocket()) {
+            taken.bind(new InetSocketAddress(0));
+
+            Out r = start(docker, "--port", String.valueOf(taken.getLocalPort()),
+                    "--container", "floci-gcp-preflight", "--detach");
+
+            assertEquals(0, r.exit(), r.err());
+            assertEquals(List.of("pull", "run"), docker.calls);
+        }
+    }
+
     @Test
     void onlyARealPortOnALocalDaemonIsProbed() {
         assertTrue(StartCommand.probesPortLocally(LOCAL, 4588));
@@ -197,7 +217,7 @@ class StartPreflightTest {
         assumeTrue(DockerClient.dockerHost().raw() == null, "DOCKER_HOST or DOCKER_SOCK is set and wins");
         Path argsFile = tempDir.resolve("args");
         Path remoteContext = tempDir.resolve("docker-remote");
-        Files.writeString(remoteContext, "#!/bin/sh\necho \"$1 $2\" > '" + argsFile + "'\necho tcp://build-host:2376\n");
+        Files.writeString(remoteContext, "#!/bin/sh\necho \"$1 $2\" > '" + argsFile + "'\necho ssh://deploy@build-host\n");
         Path noContexts = tempDir.resolve("docker-plain");
         Files.writeString(noContexts, "#!/bin/sh\necho unknown command >&2\nexit 125\n");
         assertTrue(remoteContext.toFile().setExecutable(true));
@@ -206,7 +226,7 @@ class StartPreflightTest {
         DockerHost fromContext = new DockerClient(remoteContext.toString()).daemonHost();
 
         assertEquals(Kind.TCP, fromContext.kind());
-        assertEquals("tcp://build-host:2376", fromContext.raw());
+        assertEquals("ssh://deploy@build-host", fromContext.raw());
         assertEquals("context inspect", Files.readString(argsFile).trim());
         // No contexts (Podman, an old docker): the environment's answer stands.
         assertEquals(DockerClient.dockerHost(), new DockerClient(noContexts.toString()).daemonHost());

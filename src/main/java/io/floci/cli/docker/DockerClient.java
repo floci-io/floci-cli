@@ -291,7 +291,7 @@ public class DockerClient {
         }
     }
 
-    /** How the Docker daemon is reached, resolved from the environment. */
+    /** How the Docker daemon is reached. {@code TCP} is any remote daemon: tcp, http(s) or ssh. */
     public enum Kind { UNIX, TCP, NPIPE }
 
     /**
@@ -323,7 +323,10 @@ public class DockerClient {
             if (value.startsWith("unix://")) {
                 return new DockerHost(Kind.UNIX, value.substring("unix://".length()), value);
             }
-            if (value.startsWith("tcp://") || value.startsWith("http://") || value.startsWith("https://")) {
+            // ssh:// is as remote as tcp://: the daemon, its ports and its bind paths are on
+            // another machine. Read as a bare path it would have been taken for a local socket.
+            if (value.startsWith("tcp://") || value.startsWith("http://") || value.startsWith("https://")
+                    || value.startsWith("ssh://")) {
                 return new DockerHost(Kind.TCP, null, value);
             }
             if (value.startsWith("npipe://")) {
