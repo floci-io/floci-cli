@@ -2,8 +2,10 @@ package io.floci.cli.commands;
 
 import io.floci.cli.GlobalOptions;
 import io.floci.cli.ProductProfile;
-import io.floci.cli.config.ProfileNotFoundException;
 import io.floci.cli.config.ProfileDefaultValueProvider;
+import io.floci.cli.config.ProfileNotFoundException;
+import io.floci.cli.docker.DockerClient;
+import io.floci.cli.docker.DockerException;
 import io.floci.cli.output.Printer;
 import picocli.CommandLine.*;
 import picocli.CommandLine.Model.CommandSpec;
@@ -30,9 +32,17 @@ public class RestartCommand implements Callable<Integer> {
     }
 
     protected RestartCommand(ProductProfile profile) {
+        this(profile, new DockerClient());
+    }
+
+    /** Test seam: {@code docker} answers the inspect that recovers the running instance's settings. */
+    public RestartCommand(ProductProfile profile, DockerClient docker) {
         this.profile = profile;
         this.global = new GlobalOptions(profile);
+        this.docker = docker;
     }
+
+    private final DockerClient docker;
 
     @Override
     public Integer call() {
@@ -54,6 +64,12 @@ public class RestartCommand implements Callable<Integer> {
         if (invalid != null) {
             printer.error(invalid);
             return 2;
+        }
+
+        if (!containerExists()) {
+            // Nothing to stop: start it, rather than failing on the stop.
+            printer.println("Container '" + global.container + "' not found; starting it.");
+            return start.call();
         }
 
         int stopResult = buildStopCommand().call();
@@ -93,6 +109,35 @@ public class RestartCommand implements Callable<Integer> {
         start.global = global;
         start.pull = "missing";
         start.detach = false;
+        if (global.profile == null) carryOver(start);
         return start;
+    }
+
+    // Without a profile, the running container is the only record of how it was started: its
+    // port, image, data directory and services come back from it, or a restart would quietly
+    // move the instance to the default port and drop its state. Read before the stop, which
+    // removes the container.
+    private void carryOver(StartCommand start) {
+        try {
+            docker.inspectRunSettings(global.container, profile.defaultPort()).ifPresent(run -> {
+                if (run.hostPort() != null) start.port = run.hostPort();
+                if (run.image() != null) start.image = run.image();
+                if (run.persistSource() != null) start.persistDir = run.persistSource();
+                String services = run.env().get(profile.envVar("SERVICES"));
+                if (services != null) start.services = services;
+                String namespace = run.env().get(profile.envVar("DOCKER_RESOURCE_NAMESPACE"));
+                if (namespace != null) start.namespace = namespace;
+            });
+        } catch (DockerException e) {
+            // Unreadable settings: the restart falls back to the defaults, as it did before.
+        }
+    }
+
+    private boolean containerExists() {
+        try {
+            return docker.inspectContainer(global.container).isPresent();
+        } catch (DockerException e) {
+            return true; // let stop report the docker problem
+        }
     }
 }

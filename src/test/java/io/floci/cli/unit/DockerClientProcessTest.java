@@ -203,4 +203,47 @@ class DockerClientProcessTest {
 
         assertEquals(List.of("rm", "--", "--rm-everything"), args);
     }
+
+    /** BL-033: restart reads the image, host port, data mount and environment back from inspect. */
+    @Test
+    @DisabledOnOs(OS.WINDOWS)
+    void runSettingsAreReadFromTheContainersInspectDocument() throws Exception {
+        Path json = tempDir.resolve("inspect.json");
+        Files.writeString(json, """
+                {"Config":{"Image":"floci/floci-gcp:0.9","Env":["FLOCI_GCP_SERVICES=storage","PATH=/usr/bin"]},
+                 "HostConfig":{"PortBindings":{"4588/tcp":[{"HostIp":"","HostPort":"14588"}]}},
+                 "Mounts":[{"Type":"bind","Source":"/data/gcp","Destination":"/app/data"}]}
+                """);
+        Path fakeDocker = tempDir.resolve("docker");
+        Files.writeString(fakeDocker, "#!/bin/sh\ncat '" + json + "'\n");
+        assertTrue(fakeDocker.toFile().setExecutable(true));
+
+        DockerClient.RunSettings run = new DockerClient(fakeDocker.toString())
+                .inspectRunSettings("floci-gcp", 4588).orElseThrow();
+
+        assertEquals("floci/floci-gcp:0.9", run.image());
+        assertEquals(14588, run.hostPort());
+        assertEquals("/data/gcp", run.persistSource());
+        assertEquals("storage", run.env().get("FLOCI_GCP_SERVICES"));
+    }
+
+    /** Without --persist the image's /app/data volume is mounted; that is not a persist directory. */
+    @Test
+    @DisabledOnOs(OS.WINDOWS)
+    void anAnonymousDataVolumeIsNotAPersistDirectory() throws Exception {
+        Path json = tempDir.resolve("inspect.json");
+        Files.writeString(json, """
+                {"Config":{"Image":"floci/floci-oci:latest","Env":[]},
+                 "HostConfig":{"PortBindings":{"4599/tcp":[{"HostIp":"","HostPort":"4599"}]}},
+                 "Mounts":[{"Type":"volume","Name":"3c3aef44","Source":"/var/lib/docker/volumes/3c3aef44/_data","Destination":"/app/data"}]}
+                """);
+        Path fakeDocker = tempDir.resolve("docker");
+        Files.writeString(fakeDocker, "#!/bin/sh\ncat '" + json + "'\n");
+        assertTrue(fakeDocker.toFile().setExecutable(true));
+
+        DockerClient.RunSettings run = new DockerClient(fakeDocker.toString())
+                .inspectRunSettings("floci-oci", 4599).orElseThrow();
+
+        assertNull(run.persistSource());
+    }
 }

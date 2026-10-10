@@ -3,7 +3,9 @@ package io.floci.cli.unit;
 import io.floci.cli.FlociCli;
 import io.floci.cli.ProductProfile;
 import io.floci.cli.commands.RestartCommand;
+import io.floci.cli.config.ProfileDefaultValueProvider;
 import io.floci.cli.config.ProfileStore;
+import io.floci.cli.docker.DockerClient;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import picocli.CommandLine;
@@ -16,6 +18,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -32,6 +36,21 @@ class RestartCommandTest {
     Path tempDir;
 
     // Through the real wiring, so restart sees the provider the parse used.
+    /** A restart whose docker lookups answer from {@code settings} (none: no such container). */
+    private RestartCommand restartWith(ProductProfile product, DockerClient.RunSettings settings, String... args) {
+        DockerClient docker = new DockerClient() {
+            @Override
+            public Optional<RunSettings> inspectRunSettings(String name, int containerPort) {
+                return Optional.ofNullable(settings);
+            }
+        };
+        RestartCommand restart = new RestartCommand(product, docker);
+        new CommandLine(restart)
+                .setDefaultValueProvider(new ProfileDefaultValueProvider(new ProfileStore(tempDir)))
+                .parseArgs(args);
+        return restart;
+    }
+
     private RestartCommand parse(ProductProfile product, String... args) {
         List<String> all = new ArrayList<>();
         if (product != ProductProfile.AWS) all.add(product.name());
@@ -99,7 +118,7 @@ class RestartCommandTest {
 
     @Test
     void withoutAProfileItStillUsesTheProductDefaults() {
-        List<String> args = parse(ProductProfile.GCP).buildStartCommand().dockerRunArgs(SOCKET);
+        List<String> args = restartWith(ProductProfile.GCP, null).buildStartCommand().dockerRunArgs(SOCKET);
 
         assertEquals(List.of("-d", "--name", "floci-gcp", "-p", "4588:4588",
                 "-v", "/sock:/sock", "floci/floci-gcp:latest"), args);
@@ -157,5 +176,33 @@ class RestartCommandTest {
         var stop = parse(ProductProfile.AWS).buildStopCommand();
 
         assertEquals(Boolean.TRUE, new CommandLine(stop).getCommandSpec().findOption("--remove").getValue());
+    }
+
+    /** BL-033: without a profile, the running container is the record of how it was started. */
+    @Test
+    void withoutAProfileTheRunningContainersSettingsCarryOver() {
+        var running = new DockerClient.RunSettings("floci/floci-gcp:0.9", 14588, "/data/gcp",
+                Map.of("FLOCI_GCP_SERVICES", "storage", "FLOCI_GCP_DOCKER_RESOURCE_NAMESPACE", "team"));
+
+        List<String> args = restartWith(ProductProfile.GCP, running).buildStartCommand().dockerRunArgs(SOCKET);
+
+        assertTrue(args.contains("14588:4588"), args.toString());
+        assertTrue(args.contains("/data/gcp:/app/data"), args.toString());
+        assertTrue(args.contains("FLOCI_GCP_SERVICES=storage"), args.toString());
+        assertTrue(args.contains("FLOCI_GCP_DOCKER_RESOURCE_NAMESPACE=team"), args.toString());
+        assertEquals("floci/floci-gcp:0.9", args.get(args.size() - 1));
+    }
+
+    /** A profile still decides: carry-over only fills in for a restart without one. */
+    @Test
+    void aProfileWinsOverTheRunningContainersSettings() throws Exception {
+        writeProfile("pinned", "port: 15000\n");
+        var running = new DockerClient.RunSettings("floci/floci:0.9", 14566, "/data/x", Map.of());
+
+        List<String> args = restartWith(ProductProfile.AWS, running, "--profile", "pinned")
+                .buildStartCommand().dockerRunArgs(SOCKET);
+
+        assertTrue(args.contains("15000:4566"), args.toString());
+        assertFalse(args.contains("/data/x:/app/data"), args.toString());
     }
 }
