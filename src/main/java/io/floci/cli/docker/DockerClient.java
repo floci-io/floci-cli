@@ -356,7 +356,7 @@ public class DockerClient {
         }
     }
 
-    /** How the Docker daemon is reached, resolved from the environment. */
+    /** How the Docker daemon is reached. {@code TCP} is any remote daemon: tcp, http(s) or ssh. */
     public enum Kind { UNIX, TCP, NPIPE }
 
     /**
@@ -388,7 +388,10 @@ public class DockerClient {
             if (value.startsWith("unix://")) {
                 return new DockerHost(Kind.UNIX, value.substring("unix://".length()), value);
             }
-            if (value.startsWith("tcp://") || value.startsWith("http://") || value.startsWith("https://")) {
+            // ssh:// is as remote as tcp://: the daemon, its ports and its bind paths are on
+            // another machine. Read as a bare path it would have been taken for a local socket.
+            if (value.startsWith("tcp://") || value.startsWith("http://") || value.startsWith("https://")
+                    || value.startsWith("ssh://")) {
                 return new DockerHost(Kind.TCP, null, value);
             }
             if (value.startsWith("npipe://")) {
@@ -406,6 +409,26 @@ public class DockerClient {
             return new DockerHost(Kind.NPIPE, DEFAULT_WINDOWS_PIPE, null);
         }
         return new DockerHost(Kind.UNIX, DEFAULT_UNIX_SOCKET, null);
+    }
+
+    /**
+     * The daemon the docker CLI will actually talk to. {@link #dockerHost()} only reads the
+     * environment, which does not show a context selected with {@code DOCKER_CONTEXT} or
+     * {@code docker context use}; docker itself reports the endpoint it resolved. An explicit
+     * {@code DOCKER_HOST} wins over any context, so it is answered without asking.
+     */
+    public DockerHost daemonHost() {
+        DockerHost fromEnvironment = dockerHost();
+        if (fromEnvironment.raw() != null) return fromEnvironment;
+        try {
+            String endpoint = run("docker", "context", "inspect", "--format", "{{.Endpoints.docker.Host}}").trim();
+            if (!endpoint.isBlank()) {
+                return parseDockerHost(endpoint, null, System.getProperty("os.name", ""));
+            }
+        } catch (DockerException e) {
+            // Podman, or a docker without contexts: the environment is all there is.
+        }
+        return fromEnvironment;
     }
 
     /** Back-compat accessor for the resolved local socket/pipe path (null for TCP). */
