@@ -230,14 +230,14 @@ public class StartCommand implements Callable<Integer> {
                 printer.error("docker binary not found in PATH.\nInstall Docker Desktop from https://docs.docker.com/get-docker/");
                 return 1;
             }
-            printer.error("Failed to inspect container: " + e.getMessage() + socketGuidance());
+            printer.error("Failed to inspect container: " + e.getMessage() + socketGuidance(docker.daemonHost()));
             return 1;
         }
 
         // Checked here rather than left to 'docker run', whose bind error names neither the port
         // flag nor how to find what holds the port. A remote daemon publishes on another machine,
         // so a local probe would say nothing about it.
-        if (DockerClient.dockerHost().kind() != DockerClient.Kind.TCP && !PortAvailableCheck.isPortFree(port)) {
+        if (probesPortLocally(docker.daemonHost(), port) && !PortAvailableCheck.isPortFree(port)) {
             printer.error("Port " + port + " is already in use by another process.\n"
                     + "Run 'lsof -i :" + port + "' to find it, or pass --port <other> to use a different port.");
             return 1;
@@ -281,10 +281,21 @@ public class StartCommand implements Callable<Integer> {
         return wait.call();
     }
 
-    // When the daemon is unreachable because its local socket is missing, say so: docker's own
-    // error ("Cannot connect to the Docker daemon") does not say what to do about it.
-    private static String socketGuidance() {
-        CheckResult socket = new DockerSocketCheck().run(null, null);
+    /**
+     * Whether a busy local {@code port} would stop this start. Not for a remote daemon, which
+     * publishes the port on its own machine, and not for a number that is no port at all:
+     * docker reports that one, and a socket cannot be opened on it to probe.
+     */
+    public static boolean probesPortLocally(DockerClient.DockerHost daemon, int port) {
+        return daemon.kind() != DockerClient.Kind.TCP && port >= 1 && port <= 65535;
+    }
+
+    /**
+     * What to do when {@code daemon} is unreachable because its local socket is missing, or
+     * nothing: docker's own error ("Cannot connect to the Docker daemon") does not say.
+     */
+    public static String socketGuidance(DockerClient.DockerHost daemon) {
+        CheckResult socket = DockerSocketCheck.check(daemon);
         return socket.status() == CheckStatus.fail
                 ? "\n" + socket.message() + ".\n" + socket.fix() + ", then re-run the command."
                 : "";
