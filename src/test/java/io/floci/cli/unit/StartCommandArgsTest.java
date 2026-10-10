@@ -8,6 +8,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.DisabledOnOs;
 import org.junit.jupiter.api.condition.OS;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import picocli.CommandLine.ParseResult;
 
 import java.io.ByteArrayOutputStream;
@@ -286,7 +288,30 @@ class StartCommandArgsTest {
 
         assertEquals(resolved, start.bindSource(LOCAL));
         assertTrue(start.dockerRunArgs(SOCKET, LOCAL).contains(resolved + ":/app/data"));
-        assertEquals("./data", start.bindSource(REMOTE));
+    }
+
+    /**
+     * A remote daemon has no working directory of ours to resolve against, and docker reads a bare
+     * name as a named volume: a relative path is refused before anything is started or stopped.
+     */
+    @ParameterizedTest
+    @ValueSource(strings = {"data", "./data", "../state", "C:data"})
+    void aRemoteDaemonRefusesARelativePersistPath(String relative) {
+        String error = parse("start", "--persist", relative).preparePersistDir(REMOTE);
+
+        assertNotNull(error);
+        assertTrue(error.contains("must be an absolute path on the daemon's machine"), error);
+        assertTrue(error.contains("'" + relative + "'"), error);
+    }
+
+    /** Absolute for the daemon's system, whichever it is; this machine's path rules do not decide. */
+    @ParameterizedTest
+    @ValueSource(strings = {"/srv/floci-data", "C:\\floci\\data", "c:/floci/data", "\\\\nas\\share\\floci"})
+    void aRemoteDaemonAcceptsAnAbsolutePathOfEitherSystem(String absolute) {
+        StartCommand start = parse("start", "--persist", absolute);
+
+        assertNull(start.preparePersistDir(REMOTE));
+        assertEquals(absolute, start.bindSource(REMOTE));
     }
 
     /**
@@ -295,7 +320,7 @@ class StartCommandArgsTest {
      */
     @Test
     void aPathThisMachineCannotParseStillBuildsForARemoteDaemon() {
-        StartCommand start = parse("start", "--persist", "data\u0000dir");
+        StartCommand start = parse("start", "--persist", "/srv/data\u0000dir");
 
         assertNull(start.preparePersistDir(REMOTE));
         assertDoesNotThrow(() -> start.dockerRunArgs(SOCKET, REMOTE));

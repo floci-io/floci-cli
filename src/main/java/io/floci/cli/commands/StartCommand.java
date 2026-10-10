@@ -146,6 +146,11 @@ public class StartCommand implements Callable<Integer> {
      * resolving it here would apply this machine's rules to it (a Windows CLI turns
      * {@code /srv/data} into a drive path). Only a local daemon gets {@link #persistPath()}.
      */
+    // Absolute on the daemon's machine, whichever system that is: a leading slash, a drive
+    // letter with a separator, or a UNC share.
+    // Not decided by this machine's Path rules, which know only its own file system.
+    private static final Pattern REMOTE_ABSOLUTE = Pattern.compile("^(/|[A-Za-z]:[\\\\/]|\\\\\\\\)");
+
     public String bindSource(DockerClient.DockerHost daemon) {
         return daemon.kind() == DockerClient.Kind.TCP ? persistDir : persistPath();
     }
@@ -170,8 +175,13 @@ public class StartCommand implements Callable<Integer> {
         if (persistDir == null || persistDir.isBlank()) return null;
         // A remote daemon reads the bind source on its own machine, where this CLI can neither
         // create nor check it; it is passed on untouched (bindSource), so nothing here can fail
-        // on it later either.
-        if (daemon.kind() == DockerClient.Kind.TCP) return null;
+        // on it later either. It does have to be absolute: there is no working directory to
+        // resolve it against over there, and docker reads a bare name as a named volume.
+        if (daemon.kind() == DockerClient.Kind.TCP) {
+            return REMOTE_ABSOLUTE.matcher(persistDir).find() ? null
+                    : "With a remote Docker daemon, --persist must be an absolute path on the daemon's machine, but was '"
+                            + persistDir + "'.\nPass an absolute path, for example /srv/floci-data.";
+        }
         Path path;
         try {
             path = Path.of(persistPath());
