@@ -1,5 +1,7 @@
 package io.floci.cli.docker;
 
+import io.floci.cli.GlobalOptions;
+
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
@@ -266,6 +268,9 @@ public class DockerClient {
     }
 
     private Process runProcess(String... cmd) throws IOException {
+        if (Boolean.getBoolean(GlobalOptions.VERBOSE_PROPERTY)) {
+            System.err.println("+ " + String.join(" ", cmd));
+        }
         if (cmd.length > 0 && "docker".equals(cmd[0])) {
             cmd = cmd.clone();
             cmd[0] = binary;

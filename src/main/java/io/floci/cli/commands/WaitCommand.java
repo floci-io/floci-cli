@@ -12,6 +12,7 @@ import io.floci.cli.output.Printer;
 import java.util.Map;
 import picocli.CommandLine.*;
 
+import java.io.Console;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.concurrent.Callable;
@@ -19,6 +20,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.function.BooleanSupplier;
 
 @Command(
         name = "wait",
@@ -42,12 +44,19 @@ public class WaitCommand implements Callable<Integer> {
 
     /** Test seam: {@code docker} answers the container lookup that finds the endpoint. */
     public WaitCommand(ProductProfile profile, DockerClient docker) {
+        this(profile, docker, WaitCommand::interactive);
+    }
+
+    /** Test seam: {@code terminal} stands in for "stdout is a terminal", which a test run is not. */
+    public WaitCommand(ProductProfile profile, DockerClient docker, BooleanSupplier terminal) {
         this.profile = profile;
         this.global = new GlobalOptions(profile);
         this.docker = docker;
+        this.terminal = terminal;
     }
 
     private final DockerClient docker;
+    private final BooleanSupplier terminal;
 
     @Option(names = {"--timeout"}, description = "Maximum time to wait (e.g. 30s, 2m)", defaultValue = "30s", paramLabel = "<duration>")
     String timeout;
@@ -68,7 +77,16 @@ public class WaitCommand implements Callable<Integer> {
     @Override
     public Integer call() {
         Printer printer = global.printer();
-        long timeoutMillis = Durations.parseDuration(timeout);
+        long timeoutMillis;
+        try {
+            timeoutMillis = Durations.parseDuration(timeout);
+        } catch (IllegalArgumentException e) {
+            printer.error(e.getMessage());
+            return 2;
+        }
+        // Only a person at a terminal watching text output gets the spinner: in -o json/yaml or
+        // in a pipe its frames would land in the data.
+        boolean spinner = printer.format() == OutputFormat.text && terminal.getAsBoolean();
         // The deadline starts now, so the container lookup below counts against --timeout too.
         Instant deadline = Instant.now().plusMillis(timeoutMillis);
         String effectiveEndpoint = knownEndpoint != null ? knownEndpoint : endpointWithin(deadline);
@@ -79,6 +97,7 @@ public class WaitCommand implements Callable<Integer> {
         long delay = FIRST_DELAY_MS;
         while (Instant.now().isBefore(deadline)) {
             if (isReady(client, service, requestTimeout(Duration.between(Instant.now(), deadline)))) {
+                if (spinner) clearSpinner(printer);
                 if (printer.format() != OutputFormat.text) {
                     printer.structured(Map.of("ready", true, "endpoint", effectiveEndpoint));
                 } else {
@@ -86,7 +105,7 @@ public class WaitCommand implements Callable<Integer> {
                 }
                 return 0;
             }
-            printSpinner(printer, deadline);
+            if (spinner) printSpinner(printer, deadline);
             long remaining = Duration.between(Instant.now(), deadline).toMillis();
             if (remaining <= 0) break;
             try { Thread.sleep(Math.min(delay, remaining)); } catch (InterruptedException e) {
@@ -96,6 +115,7 @@ public class WaitCommand implements Callable<Integer> {
             delay = nextDelay(delay);
         }
 
+        if (spinner) clearSpinner(printer);
         printer.error("Timed out waiting for " + profile.displayName() + " after " + timeout
                 + ".\nIs the container running? Try '" + profile.commandPrefix() + " status'.");
         return 1;
@@ -151,6 +171,15 @@ public class WaitCommand implements Callable<Integer> {
         } catch (Exception e) {
             return false;
         }
+    }
+
+    private static boolean interactive() {
+        Console console = System.console();
+        return console != null && console.isTerminal();
+    }
+
+    private static void clearSpinner(Printer printer) {
+        printer.print("\r" + " ".repeat(40) + "\r");
     }
 
     private void printSpinner(Printer printer, Instant deadline) {
