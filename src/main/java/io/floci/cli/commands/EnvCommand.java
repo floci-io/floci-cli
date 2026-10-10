@@ -36,14 +36,18 @@ public class EnvCommand implements Callable<Integer> {
     String region;
 
     @Option(names = {"--shell"},
-            description = "Shell format: bash, fish, powershell (default: bash)",
+            description = "Shell format: bash, zsh, sh, fish, powershell (default: bash)",
             defaultValue = "bash",
-            paramLabel = "bash|fish|powershell")
+            paramLabel = "<shell>")
     String shell;
 
     @Override
     public Integer call() {
         Printer printer = global.printer();
+        if (!ShellExport.isSupported(shell)) {
+            printer.error(ShellExport.unsupported(shell));
+            return 2;
+        }
         String effectiveEndpoint = global.resolvedEndpoint(new DockerClient());
         int port = extractPort(effectiveEndpoint);
         String endpointUrl = "http://" + host + ":" + port;
@@ -63,7 +67,7 @@ public class EnvCommand implements Callable<Integer> {
             printer.println(ShellExport.formatExport(shell, entry.getKey(), entry.getValue()));
         }
         printer.println("");
-        printer.println(Ansi.gray("# Run: eval $(floci env)"));
+        printer.println(Ansi.gray("# Run: " + ShellExport.loadHint(shell, "floci env")));
         return 0;
     }
 

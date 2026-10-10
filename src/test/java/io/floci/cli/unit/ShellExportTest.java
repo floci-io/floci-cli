@@ -46,4 +46,23 @@ class ShellExportTest {
         assertEquals("$env:K = 'it''s $x'",
                 ShellExport.formatExport("powershell", "K", "it's $x"));
     }
+
+    /** BL-050: the hint says how to load the lines in the shell they were written for. */
+    @Test
+    void theLoadHintMatchesTheShell() {
+        assertEquals("eval \"$(floci env)\"", ShellExport.loadHint("bash", "floci env"));
+        assertEquals("eval \"$(floci gcp env)\"", ShellExport.loadHint("zsh", "floci gcp env"));
+        assertEquals("floci oci env --shell fish | source", ShellExport.loadHint("fish", "floci oci env"));
+        assertEquals("floci az env --shell powershell | Invoke-Expression",
+                ShellExport.loadHint("PowerShell", "floci az env"));
+    }
+
+    @Test
+    void onlyKnownShellsAreSupported() {
+        assertTrue(ShellExport.isSupported("bash"));
+        assertTrue(ShellExport.isSupported("Fish"));
+        assertTrue(ShellExport.isSupported("pwsh"));
+        assertFalse(ShellExport.isSupported("tcsh"));
+        assertFalse(ShellExport.isSupported(null));
+    }
 }

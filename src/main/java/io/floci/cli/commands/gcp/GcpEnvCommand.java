@@ -36,14 +36,18 @@ public class GcpEnvCommand implements Callable<Integer> {
     String serviceFilter;
 
     @Option(names = {"--shell"},
-            description = "Shell format: bash, fish, powershell (default: bash)",
+            description = "Shell format: bash, zsh, sh, fish, powershell (default: bash)",
             defaultValue = "bash",
-            paramLabel = "bash|fish|powershell")
+            paramLabel = "<shell>")
     String shell;
 
     @Override
     public Integer call() {
         Printer printer = global.printer();
+        if (!ShellExport.isSupported(shell)) {
+            printer.error(ShellExport.unsupported(shell));
+            return 2;
+        }
         String effectiveEndpoint = global.resolvedEndpoint(new DockerClient());
         String host = extractHost(effectiveEndpoint);
         int port = extractPort(effectiveEndpoint);
@@ -67,7 +71,7 @@ public class GcpEnvCommand implements Callable<Integer> {
             printer.println(ShellExport.formatExport(shell, entry.getKey(), entry.getValue()));
         }
         printer.println("");
-        printer.println(Ansi.gray("# Run: eval $(floci gcp env)"));
+        printer.println(Ansi.gray("# Run: " + ShellExport.loadHint(shell, "floci gcp env")));
 
         return 0;
     }
