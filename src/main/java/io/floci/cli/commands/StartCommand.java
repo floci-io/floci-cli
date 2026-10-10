@@ -179,7 +179,8 @@ public class StartCommand implements Callable<Integer> {
      * a directory it cannot write to itself.
      */
     public String preparePersistDir() {
-        return preparePersistDir(DockerClient.dockerHost());
+        // The daemon docker resolved, so a remote context counts as remote here too.
+        return preparePersistDir(docker.daemonHost());
     }
 
     /** {@link #preparePersistDir()} for a daemon reached through {@code daemon}; the test seam. */
@@ -301,7 +302,11 @@ public class StartCommand implements Callable<Integer> {
             return 2;
         }
 
-        String unwritable = preparePersistDir();
+        // Asked once: the persist directory, the port probe and the bind source all turn on
+        // whether the daemon docker will talk to is on this machine.
+        DockerClient.DockerHost daemon = docker.daemonHost();
+
+        String unwritable = preparePersistDir(daemon);
         if (unwritable != null) {
             printer.error(unwritable);
             return 1;
@@ -326,14 +331,14 @@ public class StartCommand implements Callable<Integer> {
                 printer.error("docker binary not found in PATH.\nInstall Docker Desktop from https://docs.docker.com/get-docker/");
                 return 1;
             }
-            printer.error("Failed to inspect container: " + e.getMessage() + socketGuidance(docker.daemonHost()));
+            printer.error("Failed to inspect container: " + e.getMessage() + socketGuidance(daemon));
             return 1;
         }
 
         // Checked here rather than left to 'docker run', whose bind error names neither the port
         // flag nor how to find what holds the port. A remote daemon publishes on another machine,
         // so a local probe would say nothing about it.
-        if (probesPortLocally(docker.daemonHost(), port) && !PortAvailableCheck.isPortFree(port)) {
+        if (probesPortLocally(daemon, port) && !PortAvailableCheck.isPortFree(port)) {
             printer.error("Port " + port + " is already in use by another process.\n"
                     + "Run 'lsof -i :" + port + "' to find it, or pass --port <other> to use a different port.");
             return 1;
@@ -348,7 +353,7 @@ public class StartCommand implements Callable<Integer> {
             return 1;
         }
 
-        List<String> args = dockerRunArgs(DockerClient.dockerSocketRunArgs(), DockerClient.dockerHost());
+        List<String> args = dockerRunArgs(DockerClient.dockerSocketRunArgs(), daemon);
 
         try {
             printer.println("Starting " + Ansi.gold(profile.displayName()) + " container...");

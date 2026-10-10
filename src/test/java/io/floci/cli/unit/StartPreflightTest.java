@@ -38,6 +38,7 @@ class StartPreflightTest {
     private static class FakeDocker extends DockerClient {
         final DockerHost daemon;
         final List<String> calls = new ArrayList<>();
+        final List<String> runArgs = new ArrayList<>();
 
         FakeDocker(DockerHost daemon) {
             this.daemon = daemon;
@@ -60,6 +61,7 @@ class StartPreflightTest {
 
         @Override
         public String startContainer(List<String> args) {
+            runArgs.addAll(args);
             calls.add("run");
             return "0123456789abcdef";
         }
@@ -145,6 +147,27 @@ class StartPreflightTest {
             assertEquals(0, r.exit(), r.err());
             assertEquals(List.of("pull", "run"), docker.calls);
         }
+    }
+
+    /**
+     * One answer for the whole start: a daemon that is remote only through its context also gets
+     * its persist path passed on as given, and a relative one refused, as with DOCKER_HOST=tcp://.
+     */
+    @Test
+    void aRemoteContextDecidesThePersistPathToo() {
+        FakeDocker docker = new FakeDocker(REMOTE);
+
+        Out ok = start(docker, "--persist", "/srv/floci-data", "--container", "floci-gcp-preflight", "--detach");
+
+        assertEquals(0, ok.exit(), ok.err());
+        assertTrue(docker.runArgs.contains("/srv/floci-data:/app/data"), docker.runArgs.toString());
+
+        FakeDocker refused = new FakeDocker(REMOTE);
+        Out relative = start(refused, "--persist", "data", "--container", "floci-gcp-preflight", "--detach");
+
+        assertEquals(1, relative.exit());
+        assertTrue(relative.err().contains("must be an absolute path on the daemon's machine"), relative.err());
+        assertEquals(List.of(), refused.calls);
     }
 
     @Test
