@@ -141,6 +141,16 @@ public class StartCommand implements Callable<Integer> {
     }
 
     /**
+     * The bind source handed to a daemon reached through {@code daemon}. A remote daemon gets
+     * {@code persistDir} exactly as given: the path names a directory on its machine, and
+     * resolving it here would apply this machine's rules to it (a Windows CLI turns
+     * {@code /srv/data} into a drive path). Only a local daemon gets {@link #persistPath()}.
+     */
+    public String bindSource(DockerClient.DockerHost daemon) {
+        return daemon.kind() == DockerClient.Kind.TCP ? persistDir : persistPath();
+    }
+
+    /**
      * Creates the state directory, returning why it could not be created, or {@code null}. Done by
      * the CLI rather than docker: a bind source docker creates is owned by root on Linux, and the
      * emulator then cannot write to it. Restart calls this before it stops anything, so a
@@ -158,19 +168,18 @@ public class StartCommand implements Callable<Integer> {
     /** {@link #preparePersistDir()} for a daemon reached through {@code daemon}; the test seam. */
     public String preparePersistDir(DockerClient.DockerHost daemon) {
         if (persistDir == null || persistDir.isBlank()) return null;
+        // A remote daemon reads the bind source on its own machine, where this CLI can neither
+        // create nor check it; it is passed on untouched (bindSource), so nothing here can fail
+        // on it later either.
+        if (daemon.kind() == DockerClient.Kind.TCP) return null;
         Path path;
         try {
-            // Resolved for every daemon: dockerRunArgs() resolves it again after restart has
-            // stopped the container, and must not be the first to find the path unusable.
             path = Path.of(persistPath());
         } catch (InvalidPathException e) {
             // Names persistDir as given: resolving it is what failed.
             return "Invalid persist directory '" + persistDir + "': " + e.getReason()
                     + ".\nPass a --persist path that is valid on this system.";
         }
-        // A remote daemon reads the bind source on its own machine, where this CLI can neither
-        // create nor check it.
-        if (daemon.kind() == DockerClient.Kind.TCP) return null;
         try {
             Files.createDirectories(path);
             return null;
@@ -197,12 +206,20 @@ public class StartCommand implements Callable<Integer> {
      * the ambient {@code DOCKER_HOST} and so differs per machine.
      */
     public List<String> dockerRunArgs(List<String> socketArgs) {
+        return dockerRunArgs(socketArgs, LOCAL_DAEMON);
+    }
+
+    private static final DockerClient.DockerHost LOCAL_DAEMON =
+            new DockerClient.DockerHost(DockerClient.Kind.UNIX, null, null);
+
+    /** {@link #dockerRunArgs(List)} for a daemon reached through {@code daemon}, which decides the bind source. */
+    public List<String> dockerRunArgs(List<String> socketArgs, DockerClient.DockerHost daemon) {
         List<String> args = new ArrayList<>();
         args.addAll(List.of("-d", "--name", global.container));
         args.addAll(List.of("-p", port + ":" + profile.defaultPort()));
         args.addAll(socketArgs);
         if (persistDir != null && !persistDir.isBlank()) {
-            args.addAll(List.of("-v", persistPath() + ":/app/data"));
+            args.addAll(List.of("-v", bindSource(daemon) + ":/app/data"));
             // The server defaults to in-memory storage; enable persistent mode so
             // state is actually written to the mounted directory and survives restarts.
             args.addAll(List.of("-e", profile.envVar("STORAGE_MODE") + "=persistent"));
@@ -301,7 +318,7 @@ public class StartCommand implements Callable<Integer> {
             return 1;
         }
 
-        List<String> args = dockerRunArgs(DockerClient.dockerSocketRunArgs());
+        List<String> args = dockerRunArgs(DockerClient.dockerSocketRunArgs(), DockerClient.dockerHost());
 
         try {
             printer.println("Starting " + Ansi.gold(profile.displayName()) + " container...");

@@ -266,26 +266,40 @@ class StartCommandArgsTest {
     }
 
     /**
-     * A remote daemon skips the local directory, not the path check: restart runs this before the
-     * stop, and dockerRunArgs() would otherwise be the first to throw, after the container is gone.
+     * A remote daemon's path is its own: an absolute one is passed on as given, never resolved by
+     * this machine's rules (a Windows CLI would turn /srv/floci-data into a drive path).
      */
     @Test
-    void anInvalidPersistPathIsReportedForARemoteDaemonToo() {
-        StartCommand start = parse("start", "--persist", "data\u0000dir");
-
-        String error = start.preparePersistDir(REMOTE);
-
-        assertNotNull(error);
-        assertTrue(error.startsWith("Invalid persist directory"), error);
-    }
-
-    /** What preparePersistDir accepts, dockerRunArgs can build: nothing is left to fail after a stop. */
-    @Test
-    void aPathARemoteDaemonAcceptsBuildsItsRunArguments() {
-        StartCommand start = parse("start", "--persist", "/srv/floci-data");
+    void aRemoteDaemonGetsThePersistPathExactlyAsGiven() {
+        StartCommand start = parse("start", "--persist", "/srv/floci-data/../state");
 
         assertNull(start.preparePersistDir(REMOTE));
-        assertTrue(start.dockerRunArgs(SOCKET).stream().anyMatch(a -> a.endsWith(":/app/data")));
+        assertEquals("/srv/floci-data/../state", start.bindSource(REMOTE));
+        assertTrue(start.dockerRunArgs(SOCKET, REMOTE).contains("/srv/floci-data/../state:/app/data"));
+    }
+
+    /** Only a local daemon has relative paths resolved against this machine's working directory. */
+    @Test
+    void onlyALocalDaemonHasItsPersistPathResolved() {
+        StartCommand start = parse("start", "--persist", "./data");
+        String resolved = Path.of("data").toAbsolutePath().normalize().toString();
+
+        assertEquals(resolved, start.bindSource(LOCAL));
+        assertTrue(start.dockerRunArgs(SOCKET, LOCAL).contains(resolved + ":/app/data"));
+        assertEquals("./data", start.bindSource(REMOTE));
+    }
+
+    /**
+     * What preparePersistDir accepts, dockerRunArgs can build. Restart runs the check before the
+     * stop, so a path this machine cannot even parse must not throw afterwards for a remote daemon.
+     */
+    @Test
+    void aPathThisMachineCannotParseStillBuildsForARemoteDaemon() {
+        StartCommand start = parse("start", "--persist", "data\u0000dir");
+
+        assertNull(start.preparePersistDir(REMOTE));
+        assertDoesNotThrow(() -> start.dockerRunArgs(SOCKET, REMOTE));
+        assertNotNull(start.preparePersistDir(LOCAL));
     }
 
     /**
