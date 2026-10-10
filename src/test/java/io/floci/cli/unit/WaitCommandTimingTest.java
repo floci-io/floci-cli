@@ -8,11 +8,15 @@ import io.floci.cli.config.ProfileStore;
 import io.floci.cli.docker.DockerClient;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import picocli.CommandLine;
 
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
+import java.net.InetAddress;
 import java.net.InetSocketAddress;
+import java.net.ServerSocket;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.Optional;
@@ -153,6 +157,10 @@ class WaitCommandTimingTest {
     private record Out(int exit, String out, String err) {}
 
     private static Out waitWith(String... args) {
+        return waitWith(false, args);
+    }
+
+    private static Out waitWith(boolean terminal, String... args) {
         DockerClient noContainer = new DockerClient() {
             @Override
             public Optional<ContainerInfo> inspectContainer(String name) {
@@ -166,7 +174,7 @@ class WaitCommandTimingTest {
         System.setOut(new PrintStream(outBuf));
         System.setErr(new PrintStream(errBuf));
         try {
-            int exit = new CommandLine(new WaitCommand(ProductProfile.AWS, noContainer)).execute(args);
+            int exit = new CommandLine(new WaitCommand(ProductProfile.AWS, noContainer, () -> terminal)).execute(args);
             return new Out(exit, outBuf.toString(), errBuf.toString());
         } finally {
             System.setErr(err);
@@ -174,13 +182,39 @@ class WaitCommandTimingTest {
         }
     }
 
-    /** BL-039: -o json output carries no spinner frames, whatever happens while waiting. */
-    @Test
-    void structuredOutputHasNoSpinner() {
-        Out r = waitWith("--timeout", "1s", "--endpoint", "http://127.0.0.1:9", "-o", "json");
+    /** BL-039: on a terminal, -o json and -o yaml still carry no spinner frames while polling. */
+    @ParameterizedTest
+    @ValueSource(strings = {"json", "yaml"})
+    void structuredOutputHasNoSpinnerEvenOnATerminal(String format) throws Exception {
+        Out r = waitWith(true, "--timeout", "300ms", "--endpoint", closedEndpoint(), "-o", format);
 
         assertEquals(1, r.exit());
         assertFalse(r.out().contains("Waiting"), r.out());
+        assertFalse(r.out().contains("\r"), r.out());
+    }
+
+    /** The other half: text output on a terminal does draw it, so the test above can fail. */
+    @Test
+    void textOutputOnATerminalShowsTheSpinner() throws Exception {
+        Out r = waitWith(true, "--timeout", "300ms", "--endpoint", closedEndpoint());
+
+        assertEquals(1, r.exit());
+        assertTrue(r.out().contains("Waiting"), r.out());
+    }
+
+    @Test
+    void textOutputInAPipeHasNoSpinner() throws Exception {
+        Out r = waitWith(false, "--timeout", "300ms", "--endpoint", closedEndpoint());
+
+        assertEquals(1, r.exit());
+        assertFalse(r.out().contains("Waiting"), r.out());
+    }
+
+    // A port that was just bound and released: nothing is listening, so polls are refused at once.
+    private static String closedEndpoint() throws Exception {
+        try (ServerSocket socket = new ServerSocket(0, 1, InetAddress.getLoopbackAddress())) {
+            return "http://127.0.0.1:" + socket.getLocalPort();
+        }
     }
 
     /** BL-040: a bad --timeout is a usage error with a hint, not a stack trace. */

@@ -20,6 +20,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.function.BooleanSupplier;
 
 @Command(
         name = "wait",
@@ -43,12 +44,19 @@ public class WaitCommand implements Callable<Integer> {
 
     /** Test seam: {@code docker} answers the container lookup that finds the endpoint. */
     public WaitCommand(ProductProfile profile, DockerClient docker) {
+        this(profile, docker, WaitCommand::interactive);
+    }
+
+    /** Test seam: {@code terminal} stands in for "stdout is a terminal", which a test run is not. */
+    public WaitCommand(ProductProfile profile, DockerClient docker, BooleanSupplier terminal) {
         this.profile = profile;
         this.global = new GlobalOptions(profile);
         this.docker = docker;
+        this.terminal = terminal;
     }
 
     private final DockerClient docker;
+    private final BooleanSupplier terminal;
 
     @Option(names = {"--timeout"}, description = "Maximum time to wait (e.g. 30s, 2m)", defaultValue = "30s", paramLabel = "<duration>")
     String timeout;
@@ -78,7 +86,7 @@ public class WaitCommand implements Callable<Integer> {
         }
         // Only a person at a terminal watching text output gets the spinner: in -o json/yaml or
         // in a pipe its frames would land in the data.
-        boolean spinner = printer.format() == OutputFormat.text && interactive();
+        boolean spinner = printer.format() == OutputFormat.text && terminal.getAsBoolean();
         // The deadline starts now, so the container lookup below counts against --timeout too.
         Instant deadline = Instant.now().plusMillis(timeoutMillis);
         String effectiveEndpoint = knownEndpoint != null ? knownEndpoint : endpointWithin(deadline);

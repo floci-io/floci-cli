@@ -28,9 +28,22 @@ class DurationsTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"0s", "0", "-1s", "-5"})
+    // The last one overflows to +1000 ms when multiplied before the check.
+    @ValueSource(strings = {"0s", "0", "-1s", "-5", "-9223372036854775807s"})
     void rejectsDurationsThatAreNotPositive(String value) {
         IllegalArgumentException e = assertThrows(IllegalArgumentException.class, () -> Durations.parseDuration(value));
         assertTrue(e.getMessage().contains("greater than zero"), e.getMessage());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"9223372036854775807s", "9223372036854775807", "9223372036854775m", "2562047788016h"})
+    void rejectsDurationsTooLongToRepresent(String value) {
+        IllegalArgumentException e = assertThrows(IllegalArgumentException.class, () -> Durations.parseDuration(value));
+        assertTrue(e.getMessage().contains("too long"), e.getMessage());
+    }
+
+    @Test
+    void theLargestMillisecondValueStillParses() {
+        assertEquals(Long.MAX_VALUE, Durations.parseDuration("9223372036854775807ms"));
     }
 }
