@@ -9,6 +9,7 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.net.http.HttpTimeoutException;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
@@ -206,10 +207,12 @@ public class FlociHttpClient {
                 resp = pending.get(timeout.toMillis(), TimeUnit.MILLISECONDS);
             } catch (TimeoutException e) {
                 pending.cancel(true);
-                throw new FlociException("No complete response from " + endpoint + path + " within "
-                        + timeout.toMillis() + " ms. Is Floci running? Try 'floci status'.");
+                throw timedOut(path, timeout);
             } catch (ExecutionException e) {
                 if (e.getCause() instanceof ConnectException) throw (ConnectException) e.getCause();
+                // The request's own timeout (no headers yet) can fire just before the one above:
+                // the same event, so the same message.
+                if (e.getCause() instanceof HttpTimeoutException) throw timedOut(path, timeout);
                 throw new FlociException("Request failed: " + e.getCause().getMessage());
             }
             if (resp.statusCode() >= 400) {
@@ -226,6 +229,11 @@ public class FlociHttpClient {
         } catch (Exception e) {
             throw new FlociException("Request failed: " + e.getMessage());
         }
+    }
+
+    private FlociException timedOut(String path, Duration timeout) {
+        return new FlociException("No complete response from " + endpoint + path + " within "
+                + timeout.toMillis() + " ms. Is Floci running? Try '" + commandPrefix + " status'.");
     }
 
     @SuppressWarnings("unchecked")

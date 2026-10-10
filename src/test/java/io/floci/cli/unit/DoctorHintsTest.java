@@ -1,5 +1,6 @@
 package io.floci.cli.unit;
 
+import com.sun.net.httpserver.HttpServer;
 import io.floci.cli.ProductProfile;
 import io.floci.cli.docker.DockerClient;
 import io.floci.cli.doctor.CheckResult;
@@ -11,7 +12,13 @@ import io.floci.cli.http.FlociException;
 import io.floci.cli.http.FlociHttpClient;
 import org.junit.jupiter.api.Test;
 
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
+import java.net.ServerSocket;
+import java.time.Duration;
 import java.util.Optional;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -33,11 +40,23 @@ class DoctorHintsTest {
     }
 
     @Test
-    void endpointHintNamesTheProductTree() {
-        // Port 9 refuses connections at once.
-        CheckResult r = new EndpointReachableCheck(ProductProfile.OCI).run("http://127.0.0.1:9", "floci-oci");
+    void endpointHintNamesTheProductTree() throws Exception {
+        // A server of our own that answers 500: the check fails without depending on what the
+        // machine happens to run on some port.
+        HttpServer server = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);
+        server.createContext("/", exchange -> {
+            exchange.sendResponseHeaders(500, -1);
+            exchange.close();
+        });
+        server.start();
+        try {
+            CheckResult r = new EndpointReachableCheck(ProductProfile.OCI)
+                    .run("http://127.0.0.1:" + server.getAddress().getPort(), "floci-oci");
 
-        assertTrue(r.fix().contains("floci oci start"), r.fix());
+            assertTrue(r.fix().contains("floci oci start"), r.fix());
+        } finally {
+            server.stop(0);
+        }
     }
 
     @Test
@@ -47,11 +66,45 @@ class DoctorHintsTest {
     }
 
     @Test
-    void httpClientErrorsNameTheProductTree() {
-        FlociException e = assertThrows(FlociException.class,
-                () -> new FlociHttpClient("http://127.0.0.1:9", ProductProfile.AZ).health());
+    void httpClientErrorsNameTheProductTree() throws Exception {
+        // A port that was just bound and released: nothing listens there, so the connection is refused.
+        int closed;
+        try (ServerSocket socket = new ServerSocket(0, 1, InetAddress.getLoopbackAddress())) {
+            closed = socket.getLocalPort();
+        }
 
+        FlociException e = assertThrows(FlociException.class,
+                () -> new FlociHttpClient("http://127.0.0.1:" + closed, ProductProfile.AZ).health());
+
+        assertTrue(e.getMessage().contains("Connection refused"), e.getMessage());
         assertTrue(e.getMessage().contains("floci az start"), e.getMessage());
+    }
+
+    /** A request that times out names the product's own status command, like the refused one. */
+    @Test
+    void httpClientTimeoutsNameTheProductTree() throws Exception {
+        CountDownLatch release = new CountDownLatch(1);
+        HttpServer server = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);
+        server.createContext("/", exchange -> {
+            try {
+                release.await(10, TimeUnit.SECONDS); // held until the client has given up
+            } catch (InterruptedException ex) {
+                Thread.currentThread().interrupt();
+            }
+            exchange.close();
+        });
+        server.start();
+        try {
+            FlociHttpClient client = new FlociHttpClient("http://127.0.0.1:" + server.getAddress().getPort(), ProductProfile.GCP);
+
+            FlociException e = assertThrows(FlociException.class, () -> client.health(Duration.ofMillis(200)));
+
+            assertTrue(e.getMessage().contains("floci gcp status"), e.getMessage());
+            assertFalse(e.getMessage().contains("'floci status'"), e.getMessage());
+        } finally {
+            release.countDown();
+            server.stop(0);
+        }
     }
 
     @Test
