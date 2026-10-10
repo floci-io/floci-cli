@@ -140,17 +140,17 @@ public class StartCommand implements Callable<Integer> {
         return Path.of(persistDir).toAbsolutePath().normalize().toString();
     }
 
+    // Absolute on the daemon's machine, whichever system that is: a leading slash, a drive
+    // letter with a separator, or a UNC share.
+    // Not decided by this machine's Path rules, which know only its own file system.
+    private static final Pattern REMOTE_ABSOLUTE = Pattern.compile("^(/|[A-Za-z]:[\\\\/]|\\\\\\\\)");
+
     /**
      * The bind source handed to a daemon reached through {@code daemon}. A remote daemon gets
      * {@code persistDir} exactly as given: the path names a directory on its machine, and
      * resolving it here would apply this machine's rules to it (a Windows CLI turns
      * {@code /srv/data} into a drive path). Only a local daemon gets {@link #persistPath()}.
      */
-    // Absolute on the daemon's machine, whichever system that is: a leading slash, a drive
-    // letter with a separator, or a UNC share.
-    // Not decided by this machine's Path rules, which know only its own file system.
-    private static final Pattern REMOTE_ABSOLUTE = Pattern.compile("^(/|[A-Za-z]:[\\\\/]|\\\\\\\\)");
-
     public String bindSource(DockerClient.DockerHost daemon) {
         return daemon.kind() == DockerClient.Kind.TCP ? persistDir : persistPath();
     }
