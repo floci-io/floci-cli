@@ -225,7 +225,7 @@ public class ConfigProfileCommand implements Callable<Integer> {
         command.add(file.toString());
         int exit;
         try {
-            exit = new ProcessBuilder(command).inheritIO().start().waitFor();
+            exit = editorProcess(command, printer.format() != OutputFormat.text).start().waitFor();
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             printer.error("Interrupted while " + editor.get(0) + " was open.\nRe-run '" + prefix + "edit " + name + "'.");
@@ -261,6 +261,24 @@ public class ConfigProfileCommand implements Callable<Integer> {
         }
         printer.println("Profile '" + name + "' saved " + Ansi.gray("(" + file + ")"));
         return 0;
+    }
+
+    /**
+     * How the editor is started. It shares this command's terminal, so an interactive editor
+     * works. With structured output its stdout goes to stderr instead: stdout carries the one
+     * result document, and anything an editor or its wrapper prints there would break it.
+     */
+    public static ProcessBuilder editorProcess(List<String> command, boolean structured) {
+        ProcessBuilder editor = new ProcessBuilder(command).inheritIO();
+        if (structured) {
+            // /dev/stderr is this process's own stderr, still the terminal when only stdout is
+            // captured. Where there is no such file (Windows), the editor's output is dropped.
+            Path stderr = Path.of("/dev/stderr");
+            editor.redirectOutput(Files.isWritable(stderr)
+                    ? ProcessBuilder.Redirect.appendTo(stderr.toFile())
+                    : ProcessBuilder.Redirect.DISCARD);
+        }
+        return editor;
     }
 
     /**
