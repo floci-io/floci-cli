@@ -724,12 +724,19 @@ It calls the emulator's `POST <prefix>/state/reset`. The AWS, GCP and OCI emulat
 server without it (currently floci-az) the command says reset is not available and exits 1. Without
 `--yes` and with no terminal to ask on, it exits 2.
 
-Reset never guesses which server to wipe. An `--endpoint` you type is used as given. An endpoint
-that a profile or `FLOCI_ENDPOINT` supplies is used too, and a container that happens to run
-locally under the default name never takes its place: if that container is a different server
-than the endpoint, nothing is reset and you are asked to pass `--endpoint` or `--container`. A container you
-select (`--container`, a profile, or `FLOCI_CONTAINER`) has to be running: if it is missing or
-stopped, nothing is reset and the command exits 1 instead of falling back to the default instance.
+Reset never guesses which server to wipe:
+
+- An `--endpoint` you type is used as given.
+- A container you select (`--container`, a profile's `container`, or `FLOCI_CONTAINER`) has to be
+  running. If it is missing or stopped, nothing is reset.
+- An endpoint a profile or `FLOCI_ENDPOINT` supplies is used when no container is selected. A
+  container that happens to run locally under the default name never takes its place.
+- When both a container and an endpoint are configured, they have to be the same server. If they
+  are not, nothing is reset and you are asked to pass `--endpoint` or `--container`.
+- A container on a remote Docker host (`DOCKER_HOST=tcp://...` or `ssh://...`) is only reset
+  through an endpoint, since its published port is not on this machine.
+
+In each of those cases the command exits 1 without sending anything.
 
 ### `floci config`
 
@@ -939,7 +946,7 @@ Where a command's codes carry a specific meaning a script can rely on:
 | `update` | updated, or already up to date | the update failed, or `--version` is not a release version; the binary is unchanged | bad flag |
 | `start`, `restart` | started (and ready, unless `--detach`) | Docker, the image, the port or readiness failed | `--port`, `--pull` or the namespace is not valid |
 | `stop` | stopped, or was not running | no such container, or Docker failed | bad flag or profile |
-| `reset` | state reset | declined, not available on this server, or no running instance to reset | no terminal to ask on and no `--yes` |
+| `reset` | state reset | declined, not available on this server, no running instance to reset, or the configuration names two different servers | no terminal to ask on and no `--yes` |
 | `config validate` | no errors (warnings allowed) | errors found, or the file cannot be read | bad flag |
 | `config profile ...` | done | not found, already exists, cannot be read, `--port` is out of range, or (for `edit`) no editor is set, the editor failed or the file no longer parses | the profile name is not valid |
 | `config default-product` | saved | not `aws`, `gcp`, `az` or `oci`, or the file cannot be written | bad flag |

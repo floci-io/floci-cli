@@ -7,6 +7,8 @@ import io.floci.cli.commands.ResetCommand;
 import io.floci.cli.config.ProfileDefaultValueProvider;
 import io.floci.cli.config.ProfileStore;
 import io.floci.cli.docker.DockerClient;
+import io.floci.cli.docker.DockerClient.DockerHost;
+import io.floci.cli.docker.DockerClient.Kind;
 import io.floci.cli.docker.DockerException;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -27,6 +29,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -129,13 +132,25 @@ class ResetCommandTest {
 
     // ---- which server a reset acts on -------------------------------------------------------
 
+    private static final DockerHost LOCAL = new DockerHost(Kind.UNIX, "/var/run/docker.sock", null);
+
     private static DockerClient dockerWith(String name, String state, String ports) {
+        return dockerWith(name, state, ports, LOCAL);
+    }
+
+    /** A docker reached through {@code daemon} that holds one container. */
+    private static DockerClient dockerWith(String name, String state, String ports, DockerHost daemon) {
         return new DockerClient() {
             @Override
             public Optional<ContainerInfo> inspectContainer(String asked) {
                 return asked.equals(name)
                         ? Optional.of(new ContainerInfo("abc", name, "floci/floci:latest", state, ports))
                         : Optional.empty();
+            }
+
+            @Override
+            public DockerHost daemonHost() {
+                return daemon;
             }
         };
     }
@@ -232,12 +247,91 @@ class ResetCommandTest {
     }
 
     @Test
-    void sameLocalServerComparesPortAndWhetherTheHostIsThisMachine() {
-        assertTrue(ResetCommand.sameLocalServer("http://localhost:4566", "http://127.0.0.1:4566"));
-        assertTrue(ResetCommand.sameLocalServer("http://localhost:4566", "https://localhost:4566/"));
-        assertFalse(ResetCommand.sameLocalServer("http://localhost:4566", "http://localhost:14566"));
-        assertFalse(ResetCommand.sameLocalServer("http://localhost:4566", "http://remote-host:4566"));
-        assertFalse(ResetCommand.sameLocalServer("http://localhost:4566", "not a url"));
+    void forALocalDaemonTheSameServerIsTheSamePortOnThisMachine() {
+        assertTrue(ResetCommand.sameServer("http://localhost:4566", "http://127.0.0.1:4566", LOCAL));
+        assertTrue(ResetCommand.sameServer("http://localhost:4566", "https://localhost:4566/", LOCAL));
+        assertFalse(ResetCommand.sameServer("http://localhost:4566", "http://localhost:14566", LOCAL));
+        assertFalse(ResetCommand.sameServer("http://localhost:4566", "http://remote-host:4566", LOCAL));
+        assertFalse(ResetCommand.sameServer("http://localhost:4566", "not a url", LOCAL));
+    }
+
+    /** A remote daemon publishes the port on its own machine: that host, not this one, is the server's. */
+    @ParameterizedTest
+    @CsvSource({
+            "ssh://deploy@remote-host,     http://remote-host:14566, true",
+            "tcp://remote-host:2375,       http://remote-host:14566, true",
+            "tcp://remote-host:2375,       http://REMOTE-HOST:14566/, true",
+            "ssh://deploy@remote-host,     http://localhost:14566,   false",
+            "ssh://deploy@remote-host,     http://other-host:14566,  false",
+            "ssh://deploy@remote-host,     http://remote-host:4566,  false"})
+    void forARemoteDaemonTheSameServerIsTheSamePortOnTheDaemonsHost(String dockerHost, String endpoint, boolean same) {
+        DockerHost remote = DockerClient.parseDockerHost(dockerHost, null, "Linux");
+
+        assertEquals(same, ResetCommand.sameServer("http://localhost:14566", endpoint, remote));
+    }
+
+    /** A profile for an instance on a remote Docker host: its endpoint and its container are one server. */
+    @Test
+    void aRemoteInstanceWhoseEndpointMatchesIsReset() throws Exception {
+        DockerHost remote = DockerClient.parseDockerHost("ssh://deploy@remote-host", null, "Linux");
+
+        ResetCommand.Target target = targetWithProfile(dockerWith("floci", "running", "14566->4566/tcp", remote),
+                "container: floci\nport: 14566\nendpoint: http://remote-host:14566\n");
+
+        assertNull(target.error(), target.error());
+        assertEquals("http://remote-host:14566", target.endpoint());
+    }
+
+    /** On a remote daemon 'localhost:<port>' is this machine, not the container: without an endpoint nothing is reset. */
+    @ParameterizedTest
+    @ValueSource(strings = {"floci", "floci-b"})
+    void aRemoteContainerWithoutAnEndpointResetsNothing(String container) {
+        DockerHost remote = DockerClient.parseDockerHost("tcp://remote-host:2375", null, "Linux");
+        List<String> args = container.equals("floci") ? List.of() : List.of("--container", container);
+
+        ResetCommand.Target target = targetOf(dockerWith(container, "running", "4566->4566/tcp", remote), args.toArray(String[]::new));
+
+        assertNull(target.endpoint());
+        assertTrue(target.error().contains("runs on the remote Docker host tcp://remote-host:2375"), target.error());
+        assertTrue(target.error().contains("Pass --endpoint <url>"), target.error());
+    }
+
+    /**
+     * A profile that names a container, even one with the default name, has selected it: when it is
+     * not running, the profile's endpoint is not a fallback and nothing is reset.
+     */
+    @ParameterizedTest
+    @CsvSource({"something-else, running, not found", "floci, exited, is not running"})
+    void aContainerFromAProfileMustBeRunningEvenWithTheDefaultName(String name, String state, String reason) throws Exception {
+        ResetCommand.Target target = targetWithProfile(dockerWith(name, state, ""),
+                "container: floci\nendpoint: http://remote-host:4566\n");
+
+        assertNull(target.endpoint());
+        assertTrue(target.error().contains("Container 'floci' " + reason), target.error());
+        assertTrue(target.error().contains("so nothing was reset."), target.error());
+    }
+
+    /** The environment selects a container the same way a profile does. */
+    @Test
+    void aContainerFromTheEnvironmentMustBeRunningToo() {
+        ResetCommand reset = new ResetCommand(ProductProfile.AWS, dockerWith("something-else", "running", ""), NOBODY,
+                Map.of("FLOCI_CONTAINER", "floci", "FLOCI_ENDPOINT", "http://remote-host:4566")::get);
+        new CommandLine(reset).parseArgs();
+
+        ResetCommand.Target target = reset.target();
+
+        assertNull(target.endpoint());
+        assertTrue(target.error().contains("Container 'floci' not found, so nothing was reset."), target.error());
+    }
+
+    /** FLOCI_ENDPOINT alone names a server, like an endpoint-only profile. */
+    @Test
+    void anEndpointFromTheEnvironmentIsUsedAsGiven() {
+        ResetCommand reset = new ResetCommand(ProductProfile.AWS, dockerWith("something-else", "running", ""), NOBODY,
+                Map.of("FLOCI_ENDPOINT", "http://remote-host:4566")::get);
+        new CommandLine(reset).parseArgs();
+
+        assertEquals("http://remote-host:4566", reset.target().endpoint());
     }
 
     /** When docker cannot be asked, nothing contradicts the endpoint the user configured. */
@@ -253,12 +347,24 @@ class ResetCommandTest {
         assertEquals("http://remote-host:4566", targetWithProfile(broken, "endpoint: http://remote-host:4566\n").endpoint());
     }
 
-    /** A profile that names a container is found through the container, endpoint or not. */
+    /** A profile's container and its endpoint have to be one server, whatever the container is called. */
     @Test
-    void aProfileContainerStillDecidesOverItsEndpoint() throws Exception {
+    void aProfileWhoseContainerAndEndpointDisagreeResetsNothing() throws Exception {
         ResetCommand.Target target = targetWithProfile(dockerWith("floci-b", "running", "24566->4566/tcp"),
                 "container: floci-b\nendpoint: http://localhost:14566\n");
 
+        assertNull(target.endpoint());
+        assertTrue(target.error().contains("container 'floci-b' is running at http://localhost:24566"), target.error());
+        assertTrue(target.error().contains("They are different servers, so nothing was reset."), target.error());
+    }
+
+    /** A profile made by 'config profile create --container --port' keeps the default endpoint: no conflict. */
+    @Test
+    void aProfileWithTheDefaultEndpointIsFoundThroughItsContainer() throws Exception {
+        ResetCommand.Target target = targetWithProfile(dockerWith("floci-b", "running", "24566->4566/tcp"),
+                "container: floci-b\nport: 24566\nendpoint: http://localhost:4566\n");
+
+        assertNull(target.error(), target.error());
         assertEquals("http://localhost:24566", target.endpoint());
     }
 
