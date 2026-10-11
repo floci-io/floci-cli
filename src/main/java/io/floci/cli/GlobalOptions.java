@@ -105,7 +105,8 @@ public class GlobalOptions {
         return "";
     }
 
-    private boolean typed(String option) {
+    /** Whether {@code option} was given on the command line, as opposed to coming from a profile, the environment or the default. */
+    public boolean typed(String option) {
         try {
             return mixee != null && mixee.commandLine() != null
                     && mixee.commandLine().getParseResult() != null

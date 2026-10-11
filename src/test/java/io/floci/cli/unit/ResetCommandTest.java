@@ -2,11 +2,18 @@ package io.floci.cli.unit;
 
 import com.sun.net.httpserver.HttpServer;
 import io.floci.cli.FlociCli;
+import io.floci.cli.ProductProfile;
+import io.floci.cli.commands.ResetCommand;
 import io.floci.cli.config.ProfileStore;
+import io.floci.cli.docker.DockerClient;
+import io.floci.cli.docker.DockerException;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
+import picocli.CommandLine;
 
 import java.io.ByteArrayOutputStream;
 import java.io.OutputStream;
@@ -16,6 +23,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -113,5 +121,203 @@ class ResetCommandTest {
         assertEquals(1, r.exit());
         assertTrue(r.err().contains("not available"), r.err());
         assertTrue(r.err().contains("floci-az"), r.err());
+    }
+
+    // ---- which server a reset acts on -------------------------------------------------------
+
+    private static DockerClient dockerWith(String name, String state, String ports) {
+        return new DockerClient() {
+            @Override
+            public Optional<ContainerInfo> inspectContainer(String asked) {
+                return asked.equals(name)
+                        ? Optional.of(new ContainerInfo("abc", name, "floci/floci:latest", state, ports))
+                        : Optional.empty();
+            }
+        };
+    }
+
+    private static final ResetCommand.Prompt NOBODY = new ResetCommand.Prompt() {
+        @Override
+        public boolean available() {
+            return false;
+        }
+
+        @Override
+        public String ask(String question) {
+            throw new AssertionError("nobody to ask");
+        }
+    };
+
+    private static ResetCommand.Target targetOf(DockerClient docker, String... args) {
+        ResetCommand reset = new ResetCommand(ProductProfile.AWS, docker, NOBODY);
+        new CommandLine(reset).parseArgs(args);
+        return reset.target();
+    }
+
+    /** A typed --endpoint is the server to reset, even with a local container of the same name running. */
+    @Test
+    void aTypedEndpointIsNeverReplacedByALocalContainer() {
+        DockerClient local = dockerWith("floci", "running", "14566->4566/tcp");
+
+        ResetCommand.Target target = targetOf(local, "--endpoint", "http://remote-host:4566");
+
+        assertEquals("http://remote-host:4566", target.endpoint());
+        assertNull(target.error());
+    }
+
+    @Test
+    void theDefaultContainerIsFoundThroughItsPortMapping() {
+        ResetCommand.Target target = targetOf(dockerWith("floci", "running", "14566->4566/tcp"));
+
+        assertEquals("http://localhost:14566", target.endpoint());
+    }
+
+    /** A container the user chose and that is not there must not fall back to the default instance. */
+    @Test
+    void aChosenContainerThatIsMissingResetsNothing() {
+        ResetCommand.Target target = targetOf(dockerWith("floci", "running", "4566->4566/tcp"),
+                "--container", "floci-team-b");
+
+        assertNull(target.endpoint());
+        assertTrue(target.error().contains("Container 'floci-team-b' not found, so nothing was reset."), target.error());
+        assertTrue(target.error().contains("floci status --container floci-team-b"), target.error());
+        assertTrue(target.error().contains("--endpoint <url>"), target.error());
+    }
+
+    /** A stopped container has no port mapping; the fallback would again be the default instance. */
+    @Test
+    void aChosenContainerThatIsStoppedResetsNothing() {
+        ResetCommand.Target target = targetOf(dockerWith("floci-team-b", "exited", ""), "--container", "floci-team-b");
+
+        assertNull(target.endpoint());
+        assertTrue(target.error().contains("is not running (state: exited)"), target.error());
+    }
+
+    @Test
+    void aChosenContainerDockerCannotLookUpResetsNothing() {
+        DockerClient broken = new DockerClient() {
+            @Override
+            public Optional<ContainerInfo> inspectContainer(String name) throws DockerException {
+                throw new DockerException("Cannot connect to the Docker daemon");
+            }
+        };
+
+        ResetCommand.Target target = targetOf(broken, "--container", "floci-team-b");
+
+        assertNull(target.endpoint());
+        assertTrue(target.error().contains("Cannot connect to the Docker daemon"), target.error());
+    }
+
+    @Test
+    void aChosenContainerWithATypedEndpointUsesTheEndpoint() {
+        ResetCommand.Target target = targetOf(dockerWith("floci", "running", "4566->4566/tcp"),
+                "--container", "floci-team-b", "--endpoint", "http://localhost:14577");
+
+        assertEquals("http://localhost:14577", target.endpoint());
+    }
+
+    /** Without any selection the default instance is meant, also when it runs outside a 'floci' container. */
+    @Test
+    void theDefaultInstanceFallsBackToItsConfiguredEndpoint() {
+        ResetCommand.Target target = targetOf(dockerWith("something-else", "running", ""));
+
+        assertEquals("http://localhost:4566", target.endpoint());
+    }
+
+    @Test
+    void aMissingChosenContainerSendsNoRequest() {
+        ResetCommand reset = new ResetCommand(ProductProfile.AWS, dockerWith("floci", "running", "4566->4566/tcp"), NOBODY);
+
+        Run r = execute(reset, "--yes", "--container", "floci-team-b");
+
+        assertEquals(1, r.exit());
+        assertTrue(r.err().contains("nothing was reset"), r.err());
+        assertEquals(List.of(), requests);
+    }
+
+    // ---- the confirmation --------------------------------------------------------------------
+
+    private static ResetCommand.Prompt answering(String answer, List<String> asked) {
+        return new ResetCommand.Prompt() {
+            @Override
+            public boolean available() {
+                return true;
+            }
+
+            @Override
+            public String ask(String question) {
+                asked.add(question);
+                return answer;
+            }
+        };
+    }
+
+    private Run execute(ResetCommand reset, String... args) {
+        PrintStream out = System.out;
+        PrintStream err = System.err;
+        ByteArrayOutputStream outBuf = new ByteArrayOutputStream();
+        ByteArrayOutputStream errBuf = new ByteArrayOutputStream();
+        System.setOut(new PrintStream(outBuf));
+        System.setErr(new PrintStream(errBuf));
+        try {
+            int exit = new CommandLine(reset).execute(args);
+            return new Run(exit, outBuf.toString(), errBuf.toString());
+        } finally {
+            System.setOut(out);
+            System.setErr(err);
+        }
+    }
+
+    private Run confirmWith(String answer, List<String> asked) {
+        ResetCommand reset = new ResetCommand(ProductProfile.AWS, dockerWith("none", "running", ""), answering(answer, asked));
+        return execute(reset, "--endpoint", "http://127.0.0.1:" + server.getAddress().getPort());
+    }
+
+    /** Anything but a yes deletes nothing: a no, a bare Enter, something else. */
+    @ParameterizedTest
+    @ValueSource(strings = {"n", "N", "no", "", "  ", "yep", "y es"})
+    void decliningSendsNoRequest(String answer) {
+        List<String> asked = new ArrayList<>();
+
+        Run r = confirmWith(answer, asked);
+
+        assertEquals(1, r.exit());
+        assertEquals(List.of(), requests, "nothing was reset");
+        assertTrue(r.out().contains("Reset cancelled."), r.out());
+        assertEquals(1, asked.size());
+    }
+
+    /** End of input (Ctrl-D) is not a yes. */
+    @Test
+    void endOfInputSendsNoRequest() {
+        Run r = confirmWith(null, new ArrayList<>());
+
+        assertEquals(1, r.exit());
+        assertEquals(List.of(), requests, "nothing was reset");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"y", "Y", "yes", "YES", " yes "})
+    void confirmingSendsExactlyOneRequest(String answer) {
+        List<String> asked = new ArrayList<>();
+
+        Run r = confirmWith(answer, asked);
+
+        assertEquals(0, r.exit(), r.err());
+        assertEquals(List.of("POST /_floci/state/reset"), requests);
+        assertTrue(asked.get(0).contains("http://127.0.0.1:" + server.getAddress().getPort()), asked.get(0));
+    }
+
+    /** --yes asks nobody. */
+    @Test
+    void yesDoesNotAsk() {
+        List<String> asked = new ArrayList<>();
+        ResetCommand reset = new ResetCommand(ProductProfile.AWS, dockerWith("none", "running", ""), answering("n", asked));
+
+        Run r = execute(reset, "--yes", "--endpoint", "http://127.0.0.1:" + server.getAddress().getPort());
+
+        assertEquals(0, r.exit(), r.err());
+        assertEquals(List.of(), asked);
+        assertEquals(List.of("POST /_floci/state/reset"), requests);
     }
 }
