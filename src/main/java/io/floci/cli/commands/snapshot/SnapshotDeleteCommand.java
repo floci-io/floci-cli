@@ -47,7 +47,7 @@ public class SnapshotDeleteCommand implements Callable<Integer> {
             printer.println(Ansi.green("Snapshot deleted:") + " " + name);
             return 0;
         } catch (FlociException e) {
-            if (e.getMessage().contains("404") || e.getMessage().contains("501")) {
+            if (e.endpointMissing()) {
                 printer.error("Snapshot API not available on this server version.\n" +
                         "Track progress: " + profile.serverRepo() + "/issues");
             } else {

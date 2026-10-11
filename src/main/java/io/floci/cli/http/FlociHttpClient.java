@@ -164,7 +164,7 @@ public class FlociHttpClient {
                         message.contains("not available yet"));
             }
             if (resp.statusCode() >= 400) {
-                throw new FlociException("Server returned HTTP " + resp.statusCode() + " for " + path);
+                throw new FlociException("Server returned HTTP " + resp.statusCode() + " for " + path, resp.statusCode());
             }
             return resp.body();
         } catch (FlociException e) {
@@ -295,7 +295,7 @@ public class FlociHttpClient {
                     + "Point --endpoint at the address Floci listens on.");
         }
         if (status >= 400) {
-            throw new FlociException("Server returned HTTP " + status + " for " + path);
+            throw new FlociException("Server returned HTTP " + status + " for " + path, status);
         }
     }
 

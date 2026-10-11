@@ -7,6 +7,8 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
@@ -22,12 +24,13 @@ class SnapshotCommandsTest {
     Path tempDir;
 
     private HttpServer server;
+    private volatile int status = 404;
 
     @BeforeEach
     void start() throws Exception {
         server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         server.createContext("/", exchange -> {
-            exchange.sendResponseHeaders(404, -1);
+            exchange.sendResponseHeaders(status, -1);
             exchange.close();
         });
         server.start();
@@ -73,5 +76,31 @@ class SnapshotCommandsTest {
         String[] r = run("snapshot", "save", "nightly", "-m", "before upgrade");
 
         assertTrue(r[2].contains("--message is not sent"), r[2]);
+    }
+
+    /**
+     * Only the status says the API is missing. A name that happens to contain "404" or "501" must
+     * not turn a real server error into "not available".
+     */
+    @ParameterizedTest
+    @CsvSource({"delete, nightly404", "save, build-501", "load, 404"})
+    void aStatusLookingNameDoesNotHideARealError(String command, String name) {
+        status = 500;
+
+        String[] r = run("snapshot", command, name);
+
+        assertEquals("1", r[0]);
+        assertFalse(r[2].contains("Snapshot API not available"), r[2]);
+        assertTrue(r[2].contains("HTTP 500"), r[2]);
+    }
+
+    @ParameterizedTest
+    @CsvSource({"404", "501"})
+    void bothMissingEndpointStatusesReadAsNotAvailable(int missing) {
+        status = missing;
+
+        String[] r = run("snapshot", "delete", "nightly");
+
+        assertTrue(r[2].contains("Snapshot API not available"), r[2]);
     }
 }
