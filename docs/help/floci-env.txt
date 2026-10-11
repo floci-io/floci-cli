@@ -1,0 +1,16 @@
+Usage: floci env [-hqvV] [--no-color] [--container=<name>] [--endpoint=<url>] [--host=<host>]
+                 [-o=text|json|yaml] [--profile=<name>] [--region=<region>] [--shell=<shell>]
+Print AWS environment variables to connect to Floci AWS
+      --container=<name>   Floci container name (default: floci)
+      --endpoint=<url>     Floci server endpoint URL (default: http://localhost:4566)
+  -h, --help               Show this help message and exit.
+      --host=<host>        Hostname for the AWS endpoint URL (default: localhost.floci.io)
+      --no-color           Disable ANSI colors
+  -o, --output=text|json|yaml
+                           Output format: text, json, yaml
+      --profile=<name>     Config profile from ~/.floci/profiles/
+  -q, --quiet              Suppress non-error output
+      --region=<region>    AWS region (default: us-east-1)
+      --shell=<shell>      Shell format: bash, zsh, sh, fish, powershell (default: bash)
+  -v, --verbose            Debug logging to stderr
+  -V, --version            Print version information and exit.

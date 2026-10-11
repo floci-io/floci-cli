@@ -1,0 +1,12 @@
+Usage: floci oci snapshot [-hV] [COMMAND]
+Manage Floci OCI state snapshots
+  -h, --help      Show this help message and exit.
+  -V, --version   Print version information and exit.
+Commands:
+  save    Save the current Floci OCI state as a named snapshot
+  load    Load a Floci OCI snapshot
+  list    List available Floci OCI snapshots
+  delete  Delete a Floci OCI snapshot
+  export  Export a Floci OCI snapshot to a tarball file
+  import  Import a Floci OCI snapshot from a tarball file
+  help    Display help information about the specified command.

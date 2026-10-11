@@ -1,0 +1,19 @@
+Usage: floci aws logs [-fhqvV] [--no-color] [--container=<name>] [--endpoint=<url>]
+                      [-o=text|json|yaml] [--profile=<name>] [--service=<name>]
+                      [--since=<duration>] [--tail=<n>]
+Fetch logs from the Floci AWS container
+      --container=<name>   Floci container name (default: floci)
+      --endpoint=<url>     Floci server endpoint URL (default: http://localhost:4566)
+  -f, --follow             Follow log output
+  -h, --help               Show this help message and exit.
+      --no-color           Disable ANSI colors
+  -o, --output=text|json|yaml
+                           Output format: text, json, yaml
+      --profile=<name>     Config profile from ~/.floci/profiles/
+  -q, --quiet              Suppress non-error output
+      --service=<name>     Filter to a specific service (not yet supported; requires server-side
+                             filtering)
+      --since=<duration>   Show logs since duration (e.g. 5m, 1h) or timestamp
+      --tail=<n>           Number of lines from the end (0 = all)
+  -v, --verbose            Debug logging to stderr
+  -V, --version            Print version information and exit.

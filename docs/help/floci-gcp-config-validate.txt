@@ -1,0 +1,14 @@
+Usage: floci gcp config validate [-hqvV] [--no-color] [--container=<name>] [--endpoint=<url>]
+                                 [-f=<path>] [-o=text|json|yaml] [--profile=<name>]
+Validate a docker-compose.yml file for Floci GCP compatibility
+      --container=<name>   Floci container name (default: floci-gcp)
+      --endpoint=<url>     Floci server endpoint URL (default: http://localhost:4588)
+  -f, --file=<path>        Path to docker-compose file
+  -h, --help               Show this help message and exit.
+      --no-color           Disable ANSI colors
+  -o, --output=text|json|yaml
+                           Output format: text, json, yaml
+      --profile=<name>     Config profile from ~/.floci/profiles/
+  -q, --quiet              Suppress non-error output
+  -v, --verbose            Debug logging to stderr
+  -V, --version            Print version information and exit.

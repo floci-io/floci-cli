@@ -865,6 +865,41 @@ opt out; the check is automatically disabled in CI and for piped output.
 
 ---
 
+## Exit Codes
+
+Every command in every tree (`floci`, `floci aws`, `floci gcp`, `floci az`, `floci oci`) follows
+the same three codes:
+
+| Code | Meaning |
+|---|---|
+| `0` | The command did what it was asked. |
+| `1` | It ran and failed, or the answer to the question it asks is "no". |
+| `2` | It was not run: an unknown flag or command, a value that cannot be used, or a `--profile` that does not exist or cannot be read. |
+
+Where a command's codes carry a specific meaning a script can rely on:
+
+| Command | `0` | `1` | `2` |
+|---|---|---|---|
+| `status` | the instance is up | it is not: the server does not answer, or its container is stopped | bad flag or profile |
+| `wait` | ready before `--timeout` | timed out | `--timeout` is not a positive duration |
+| `doctor` | every check passed (warnings allowed) | at least one check failed | `--check` names no known check |
+| `update --check` | up to date | an update is available | the check itself failed |
+| `update` | updated, or already up to date | the update failed; the binary is unchanged | bad flag |
+| `start`, `restart` | started (and ready, unless `--detach`) | Docker, the image, the port or readiness failed | `--port`, `--pull` or the namespace is not valid |
+| `stop` | stopped, or was not running | no such container, or Docker failed | bad flag or profile |
+| `reset` | state reset | declined, not available on this server, or no running instance to reset | no terminal to ask on and no `--yes` |
+| `config validate` | no errors (warnings allowed) | errors found, or the file cannot be read | bad flag |
+| `config profile ...` | done | not found, already exists, or cannot be read | the profile name is not valid |
+| `env` | variables printed | | `--shell` is not supported |
+| `completion` | script printed | | the shell is not `bash` or `zsh` |
+| `snapshot ...` | done | failed, or the server has no snapshot API yet | bad flag or profile |
+
+`docs/help/` holds the `--help` text of every command, generated from the code. A test fails when
+the files and the commands drift apart; regenerate them with
+`mvn test -Dtest=HelpSnapshotTest -Dfloci.help.update=true`.
+
+---
+
 ## CI Usage
 
 ### AWS CI

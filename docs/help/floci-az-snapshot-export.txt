@@ -1,0 +1,15 @@
+Usage: floci az snapshot export [-hqvV] [--no-color] [--container=<name>] [--endpoint=<url>]
+                                -f=<path> [-o=text|json|yaml] [--profile=<name>] <name>
+Export a Floci Azure snapshot to a tarball file
+      <name>               Snapshot name
+      --container=<name>   Floci container name (default: floci-az)
+      --endpoint=<url>     Floci server endpoint URL (default: http://localhost:4577)
+  -f, --file=<path>        Destination file path
+  -h, --help               Show this help message and exit.
+      --no-color           Disable ANSI colors
+  -o, --output=text|json|yaml
+                           Output format: text, json, yaml
+      --profile=<name>     Config profile from ~/.floci/profiles/
+  -q, --quiet              Suppress non-error output
+  -v, --verbose            Debug logging to stderr
+  -V, --version            Print version information and exit.

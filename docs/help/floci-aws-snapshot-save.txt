@@ -1,0 +1,15 @@
+Usage: floci aws snapshot save [-hqvV] [--no-color] [--container=<name>] [--endpoint=<url>]
+                               [-m=<text>] [-o=text|json|yaml] [--profile=<name>] <name>
+Save the current Floci AWS state as a named snapshot
+      <name>               Snapshot name
+      --container=<name>   Floci container name (default: floci)
+      --endpoint=<url>     Floci server endpoint URL (default: http://localhost:4566)
+  -h, --help               Show this help message and exit.
+  -m, --message=<text>     Optional description
+      --no-color           Disable ANSI colors
+  -o, --output=text|json|yaml
+                           Output format: text, json, yaml
+      --profile=<name>     Config profile from ~/.floci/profiles/
+  -q, --quiet              Suppress non-error output
+  -v, --verbose            Debug logging to stderr
+  -V, --version            Print version information and exit.

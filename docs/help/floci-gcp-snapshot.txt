@@ -1,0 +1,12 @@
+Usage: floci gcp snapshot [-hV] [COMMAND]
+Manage Floci GCP state snapshots
+  -h, --help      Show this help message and exit.
+  -V, --version   Print version information and exit.
+Commands:
+  save    Save the current Floci GCP state as a named snapshot
+  load    Load a Floci GCP snapshot
+  list    List available Floci GCP snapshots
+  delete  Delete a Floci GCP snapshot
+  export  Export a Floci GCP snapshot to a tarball file
+  import  Import a Floci GCP snapshot from a tarball file
+  help    Display help information about the specified command.

@@ -1,0 +1,10 @@
+Usage: floci config [-hV] [COMMAND]
+Manage Floci configuration
+  -h, --help      Show this help message and exit.
+  -V, --version   Print version information and exit.
+Commands:
+  show             Show the active Floci AWS configuration
+  validate         Validate a docker-compose.yml file for Floci AWS compatibility
+  profile          Manage Floci AWS configuration profiles
+  default-product  Set the default product for bare commands like 'floci start'
+  help             Display help information about the specified command.

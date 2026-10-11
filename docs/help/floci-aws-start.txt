@@ -1,0 +1,24 @@
+Usage: floci aws start [-hqvV] [--detach] [--no-color] [--container=<name>] [--endpoint=<url>]
+                       [--image=<ref>] [--namespace=<name>] [-o=text|json|yaml] [--persist=<dir>]
+                       [--port=<port>] [--profile=<name>] [--pull=always|missing|never]
+                       [--services=<csv>]
+Start the Floci AWS emulator container
+      --container=<name>   Floci container name (default: floci)
+      --detach             Return immediately without waiting for readiness
+      --endpoint=<url>     Floci server endpoint URL (default: http://localhost:4566)
+  -h, --help               Show this help message and exit.
+      --image=<ref>        Image reference to use (default: floci/floci:latest)
+      --namespace=<name>   Docker resource namespace for the containers this instance launches
+                             (default: derived from --container; none for the default container)
+      --no-color           Disable ANSI colors
+  -o, --output=text|json|yaml
+                           Output format: text, json, yaml
+      --persist=<dir>      Host directory for persistent state
+      --port=<port>        Host port to bind (default: 4566)
+      --profile=<name>     Config profile from ~/.floci/profiles/
+      --pull=always|missing|never
+                           Image pull policy: always, missing, never
+  -q, --quiet              Suppress non-error output
+      --services=<csv>     Comma-separated list of services to enable
+  -v, --verbose            Debug logging to stderr
+  -V, --version            Print version information and exit.

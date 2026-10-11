@@ -1,0 +1,6 @@
+Usage: floci update [-h] [--check] [--version=<version>]
+Update floci to the latest release
+      --check               Only report whether an update is available (exit 0: up to date, 1:
+                              update available, 2: the check failed)
+  -h, --help                Show this help message and exit
+      --version=<version>   Target version (default: latest release)

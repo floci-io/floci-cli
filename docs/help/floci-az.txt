@@ -1,0 +1,29 @@
+Usage: floci az [-hV] [COMMAND]
+Manage the Floci Azure emulator (floci-az)
+
+  floci az start   — launch the container
+  floci az stop    — stop the container
+  floci az status  — show health and version
+  floci az doctor  — diagnose environment issues
+  floci az env     — print Azure environment variables
+  floci az setup   — point the az CLI at the emulator (cert, cloud, login)
+
+  -h, --help      Show this help message and exit.
+  -V, --version   Print version information and exit.
+Commands:
+  start       Start the Floci Azure emulator container
+  stop        Stop the Floci Azure container
+  restart     Stop and restart the Floci Azure container
+  status      Show Floci Azure container and server status
+  logs        Fetch logs from the Floci Azure container
+  wait        Wait until Floci Azure is ready to accept requests
+  version     Show CLI version, connected Floci Azure server version, and image digest
+  services    List services available in the running Floci Azure instance
+  reset       Delete every resource in the running Floci Azure instance, keeping it running
+  doctor      Run environment diagnostics for Floci Azure
+  env         Print Azure environment variables to connect to Floci Azure
+  setup       Point the az CLI at Floci Azure: trust its certificate, register the cloud and log in
+  config      Manage Floci Azure configuration
+  snapshot    Manage Floci Azure state snapshots
+  completion  Generate shell completion scripts
+  help        Display help information about the specified command.

@@ -1,0 +1,15 @@
+Usage: floci oci setup [-hqvV] [--no-color] [--container=<name>] [--endpoint=<url>]
+                       [-o=text|json|yaml] [--profile=<name>] [--profile-name=<name>]
+Create a local OCI CLI profile (API key + ~/.oci/config) for the emulator
+      --container=<name>   Floci container name (default: floci-oci)
+      --endpoint=<url>     Floci server endpoint URL (default: http://localhost:4599)
+  -h, --help               Show this help message and exit.
+      --no-color           Disable ANSI colors
+  -o, --output=text|json|yaml
+                           Output format: text, json, yaml
+      --profile=<name>     Config profile from ~/.floci/profiles/
+      --profile-name=<name>
+                           Profile section name to write in ~/.oci/config (default: FLOCI)
+  -q, --quiet              Suppress non-error output
+  -v, --verbose            Debug logging to stderr
+  -V, --version            Print version information and exit.

@@ -1,0 +1,13 @@
+Usage: floci oci version [-hqvV] [--no-color] [--container=<name>] [--endpoint=<url>]
+                         [-o=text|json|yaml] [--profile=<name>]
+Show CLI version, connected Floci OCI server version, and image digest
+      --container=<name>   Floci container name (default: floci-oci)
+      --endpoint=<url>     Floci server endpoint URL (default: http://localhost:4599)
+  -h, --help               Show this help message and exit.
+      --no-color           Disable ANSI colors
+  -o, --output=text|json|yaml
+                           Output format: text, json, yaml
+      --profile=<name>     Config profile from ~/.floci/profiles/
+  -q, --quiet              Suppress non-error output
+  -v, --verbose            Debug logging to stderr
+  -V, --version            Print version information and exit.

@@ -1,0 +1,16 @@
+Usage: floci stop [-hqrvV] [--no-color] [--container=<name>] [--endpoint=<url>] [-o=text|json|yaml]
+                  [--profile=<name>] [--timeout=<seconds>]
+Stop the Floci AWS container
+      --container=<name>    Floci container name (default: floci)
+      --endpoint=<url>      Floci server endpoint URL (default: http://localhost:4566)
+  -h, --help                Show this help message and exit.
+      --no-color            Disable ANSI colors
+  -o, --output=text|json|yaml
+                            Output format: text, json, yaml
+      --profile=<name>      Config profile from ~/.floci/profiles/
+  -q, --quiet               Suppress non-error output
+  -r, --remove              Remove the container after stopping
+      --timeout=<seconds>   Seconds to wait before forcefully killing; -1 waits indefinitely
+                              (default: 10)
+  -v, --verbose             Debug logging to stderr
+  -V, --version             Print version information and exit.

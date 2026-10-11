@@ -1,0 +1,9 @@
+Usage: floci az config [-hV] [COMMAND]
+Manage Floci Azure configuration
+  -h, --help      Show this help message and exit.
+  -V, --version   Print version information and exit.
+Commands:
+  show      Show the active Floci Azure configuration
+  validate  Validate a docker-compose.yml file for Floci Azure compatibility
+  profile   Manage Floci Azure configuration profiles
+  help      Display help information about the specified command.
