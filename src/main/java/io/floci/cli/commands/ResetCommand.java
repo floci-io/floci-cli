@@ -190,14 +190,18 @@ public class ResetCommand implements Callable<Integer> {
     }
 
     /**
-     * Whether the daemon runs on another machine. Docker reached over TCP or SSH usually does,
-     * but {@code tcp://127.0.0.1:2375} is this machine's daemon on a socket of another kind, and
-     * its published ports are local like any other's.
+     * Whether the daemon runs on another machine. Docker reached over TCP usually does, but
+     * {@code tcp://127.0.0.1:2375} is this machine's daemon on a socket of another kind, and its
+     * published ports are local like any other's. SSH is always remote: a loopback address there
+     * ({@code ssh://user@127.0.0.1:2222}) is a forwarded port to a VM or another machine, not a
+     * daemon on this one.
      */
     public static boolean isRemote(DockerClient.DockerHost daemon) {
         if (daemon.kind() != DockerClient.Kind.TCP) return false;
         try {
-            String host = URI.create(daemon.raw()).getHost();
+            URI address = URI.create(daemon.raw());
+            if ("ssh".equalsIgnoreCase(address.getScheme())) return true;
+            String host = address.getHost();
             return host == null || !thisMachine(host);
         } catch (IllegalArgumentException | NullPointerException e) {
             return true; // cannot tell: the careful answer

@@ -279,6 +279,8 @@ class ResetCommandTest {
             "unix:///var/run/docker.sock, false",
             "tcp://remote-host:2375, true",
             "ssh://deploy@remote-host, true",
+            "ssh://user@127.0.0.1:2222, true",
+            "ssh://localhost, true",
             "tcp://192.168.1.20:2375, true"})
     void onlyADaemonOnAnotherMachineIsRemote(String dockerHost, boolean remote) {
         assertEquals(remote, ResetCommand.isRemote(DockerClient.parseDockerHost(dockerHost, null, "Linux")));
@@ -296,6 +298,17 @@ class ResetCommandTest {
         assertNull(withProfile.error(), withProfile.error());
         assertEquals("http://localhost:14566", withProfile.endpoint());
         assertTrue(ResetCommand.sameServer("http://localhost:14566", "http://localhost:14566", localTcp));
+    }
+
+    /** SSH to a loopback address is a forwarded port to somewhere else: never reset through localhost. */
+    @Test
+    void anSshDaemonOnALoopbackAddressIsStillRemote() {
+        DockerHost forwarded = DockerClient.parseDockerHost("ssh://user@127.0.0.1:2222", null, "Linux");
+
+        ResetCommand.Target target = targetOf(dockerWith("floci", "running", "4566->4566/tcp", forwarded));
+
+        assertNull(target.endpoint());
+        assertTrue(target.error().contains("runs on the remote Docker host ssh://user@127.0.0.1:2222"), target.error());
     }
 
     /** A profile for an instance on a remote Docker host: its endpoint and its container are one server. */
