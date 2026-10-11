@@ -164,7 +164,7 @@ public class UpdateCommand implements Callable<Integer> {
 
     private Path resolveSelf() {
         if (selfPath != null) {
-            return selfPath;
+            return realExecutable(selfPath);
         }
         String cmd = ProcessHandle.current().info().command()
                 .orElseThrow(() -> new UpdateException("cannot locate the running executable"));
@@ -174,9 +174,16 @@ public class UpdateCommand implements Callable<Integer> {
             throw new UpdateException("running from a jar (java -jar), not the native binary — "
                     + "nothing to self-update. Reinstall instead: curl -fsSL https://floci.io/install.sh | sh");
         }
+        return realExecutable(path);
+    }
+
+    /**
+     * The file an update of {@code path} has to replace. A symlinked install
+     * (~/bin/floci -> /opt/floci/floci) must replace the real file, not the link; this also
+     * resolves a relative argv[0] against the working directory.
+     */
+    public static Path realExecutable(Path path) {
         try {
-            // A symlinked install (~/bin/floci -> /opt/floci/floci) must replace the real file,
-            // not the link; this also resolves a relative argv[0] against the working directory.
             return path.toRealPath();
         } catch (IOException e) {
             throw new UpdateException("cannot locate the running executable (" + path + ").\n"
@@ -263,13 +270,29 @@ public class UpdateCommand implements Callable<Integer> {
 
     private static boolean appleSilicon() {
         try {
-            Process p = new ProcessBuilder("sysctl", "-n", "hw.optional.arm64")
-                    .redirectError(ProcessBuilder.Redirect.DISCARD)
-                    .start();
-            String out = new String(p.getInputStream().readAllBytes()).trim();
-            return p.waitFor(5, TimeUnit.SECONDS) && "1".equals(out);
+            return "1".equals(probe(Duration.ofSeconds(5), "sysctl", "-n", "hw.optional.arm64"));
         } catch (Exception e) {
             return false;
+        }
+    }
+
+    /**
+     * The trimmed output of a short command, or null when it does not finish within {@code limit}.
+     * The wait comes first and a late process is killed: reading first would block for as long as
+     * the process keeps its output open, and the limit would never apply. Only for commands that
+     * print a line or two, which fit the pipe without being drained.
+     */
+    public static String probe(Duration limit, String... command) throws IOException, InterruptedException {
+        Process p = new ProcessBuilder(command)
+                .redirectError(ProcessBuilder.Redirect.DISCARD)
+                .start();
+        try {
+            if (!p.waitFor(limit.toMillis(), TimeUnit.MILLISECONDS)) {
+                return null;
+            }
+            return new String(p.getInputStream().readAllBytes()).trim();
+        } finally {
+            p.destroyForcibly(); // a no-op once it has exited
         }
     }
 
@@ -330,7 +353,8 @@ public class UpdateCommand implements Callable<Integer> {
 
     // ── atomic replace ───────────────────────────────────────────────────────
 
-    private static void replaceAtomically(Path fresh, Path target) throws IOException {
+    /** Puts {@code fresh} in place of {@code target} in one step. Public as a test seam. */
+    public static void replaceAtomically(Path fresh, Path target) throws IOException {
         // Stage in the TARGET's directory (same filesystem), then atomically rename over it.
         // The running process keeps its old inode; the path now serves the new binary.
         Path staged = target.resolveSibling("." + target.getFileName() + ".new");
