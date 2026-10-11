@@ -1,0 +1,27 @@
+Usage: floci gcp [-hV] [COMMAND]
+Manage the Floci GCP emulator (floci-gcp)
+
+  floci gcp start   — launch the container
+  floci gcp stop    — stop the container
+  floci gcp status  — show health and version
+  floci gcp doctor  — diagnose environment issues
+  floci gcp env     — print GCP environment variables
+
+  -h, --help      Show this help message and exit.
+  -V, --version   Print version information and exit.
+Commands:
+  start       Start the Floci GCP emulator container
+  stop        Stop the Floci GCP container
+  restart     Stop and restart the Floci GCP container
+  status      Show Floci GCP container and server status
+  logs        Fetch logs from the Floci GCP container
+  wait        Wait until Floci GCP is ready to accept requests
+  version     Show CLI version, connected Floci GCP server version, and image digest
+  services    List services available in the running Floci GCP instance
+  reset       Delete every resource in the running Floci GCP instance, keeping it running
+  doctor      Run environment diagnostics for Floci GCP
+  env         Print GCP environment variables to connect to Floci GCP
+  config      Manage Floci GCP configuration
+  snapshot    Manage Floci GCP state snapshots
+  completion  Generate shell completion scripts
+  help        Display help information about the specified command.

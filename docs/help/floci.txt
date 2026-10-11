@@ -1,0 +1,66 @@
+Usage: floci [-hV] [COMMAND]
+Manage your local Floci emulators
+
+  floci start     — launch the container (default: aws)
+  floci stop      — stop the container
+  floci status    — show health and version
+  floci doctor    — diagnose environment issues
+  floci env       — print environment variables
+  floci aws       — explicit AWS emulator commands
+  floci az        — Azure emulator commands
+  floci gcp       — GCP emulator commands
+  floci oci       — OCI emulator commands
+  floci update    — Update the CLI to the latest release
+  -h, --help      Show this help message and exit.
+  -V, --version   Print version information and exit.
+Commands:
+  start       Start the Floci AWS emulator container
+  stop        Stop the Floci AWS container
+  restart     Stop and restart the Floci AWS container
+  status      Show Floci AWS container and server status
+  logs        Fetch logs from the Floci AWS container
+  wait        Wait until Floci AWS is ready to accept requests
+  version     Show CLI version, connected Floci AWS server version, and image digest
+  services    List services available in the running Floci AWS instance
+  reset       Delete every resource in the running Floci AWS instance, keeping it running
+  doctor      Run environment diagnostics for Floci AWS
+  env         Print AWS environment variables to connect to Floci AWS
+  config      Manage Floci configuration
+  snapshot    Manage Floci AWS state snapshots
+  completion  Generate shell completion scripts
+  aws         Manage the Floci AWS emulator
+
+                floci aws start   — launch the container
+                floci aws stop    — stop the container
+                floci aws status  — show health and version
+                floci aws doctor  — diagnose environment issues
+                floci aws env     — print AWS environment variables
+
+  az          Manage the Floci Azure emulator (floci-az)
+
+                floci az start   — launch the container
+                floci az stop    — stop the container
+                floci az status  — show health and version
+                floci az doctor  — diagnose environment issues
+                floci az env     — print Azure environment variables
+                floci az setup   — point the az CLI at the emulator (cert, cloud, login)
+
+  gcp         Manage the Floci GCP emulator (floci-gcp)
+
+                floci gcp start   — launch the container
+                floci gcp stop    — stop the container
+                floci gcp status  — show health and version
+                floci gcp doctor  — diagnose environment issues
+                floci gcp env     — print GCP environment variables
+
+  oci         Manage the Floci OCI emulator (floci-oci)
+
+                floci oci start   — launch the container
+                floci oci stop    — stop the container
+                floci oci status  — show health and version
+                floci oci doctor  — diagnose environment issues
+                floci oci env     — print OCI environment variables
+                floci oci setup   — create a local OCI CLI profile (key + ~/.oci/config)
+
+  help        Display help information about the specified command.
+  update      Update floci to the latest release

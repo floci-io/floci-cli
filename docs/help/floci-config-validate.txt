@@ -1,0 +1,17 @@
+Usage: floci config validate [-hqvV] [--json] [--no-color] [--no-emoji] [--container=<name>]
+                             [--endpoint=<url>] [-f=<path>] [-o=text|json|yaml] [--profile=<name>]
+Validate a docker-compose.yml file for Floci AWS compatibility
+      --container=<name>   Floci container name (default: floci)
+      --endpoint=<url>     Floci server endpoint URL (default: http://localhost:4566)
+  -f, --file=<path>        Path to docker-compose file
+  -h, --help               Show this help message and exit.
+      --json               Shorthand for --output json
+      --no-color           Disable ANSI colors
+      --no-emoji           Plain ASCII marks instead of Unicode ones (the default when output is
+                             piped)
+  -o, --output=text|json|yaml
+                           Output format: text, json, yaml
+      --profile=<name>     Config profile from ~/.floci/profiles/
+  -q, --quiet              Suppress non-error output
+  -v, --verbose            Debug logging to stderr
+  -V, --version            Print version information and exit.

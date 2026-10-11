@@ -1,0 +1,27 @@
+Usage: floci aws [-hV] [COMMAND]
+Manage the Floci AWS emulator
+
+  floci aws start   — launch the container
+  floci aws stop    — stop the container
+  floci aws status  — show health and version
+  floci aws doctor  — diagnose environment issues
+  floci aws env     — print AWS environment variables
+
+  -h, --help      Show this help message and exit.
+  -V, --version   Print version information and exit.
+Commands:
+  start       Start the Floci AWS emulator container
+  stop        Stop the Floci AWS container
+  restart     Stop and restart the Floci AWS container
+  status      Show Floci AWS container and server status
+  logs        Fetch logs from the Floci AWS container
+  wait        Wait until Floci AWS is ready to accept requests
+  version     Show CLI version, connected Floci AWS server version, and image digest
+  services    List services available in the running Floci AWS instance
+  reset       Delete every resource in the running Floci AWS instance, keeping it running
+  doctor      Run environment diagnostics for Floci AWS
+  env         Print AWS environment variables to connect to Floci AWS
+  config      Manage Floci configuration
+  snapshot    Manage Floci AWS state snapshots
+  completion  Generate shell completion scripts
+  help        Display help information about the specified command.

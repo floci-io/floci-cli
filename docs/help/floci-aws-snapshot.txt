@@ -1,0 +1,12 @@
+Usage: floci aws snapshot [-hV] [COMMAND]
+Manage Floci AWS state snapshots
+  -h, --help      Show this help message and exit.
+  -V, --version   Print version information and exit.
+Commands:
+  save    Save the current Floci AWS state as a named snapshot
+  load    Load a Floci AWS snapshot
+  list    List available Floci AWS snapshots
+  delete  Delete a Floci AWS snapshot
+  export  Export a Floci AWS snapshot to a tarball file
+  import  Import a Floci AWS snapshot from a tarball file
+  help    Display help information about the specified command.

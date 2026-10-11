@@ -1,0 +1,20 @@
+Usage: floci gcp stop [-hqrvV] [--json] [--no-color] [--no-emoji] [--container=<name>]
+                      [--endpoint=<url>] [-o=text|json|yaml] [--profile=<name>]
+                      [--timeout=<seconds>]
+Stop the Floci GCP container
+      --container=<name>    Floci container name (default: floci-gcp)
+      --endpoint=<url>      Floci server endpoint URL (default: http://localhost:4588)
+  -h, --help                Show this help message and exit.
+      --json                Shorthand for --output json
+      --no-color            Disable ANSI colors
+      --no-emoji            Plain ASCII marks instead of Unicode ones (the default when output is
+                              piped)
+  -o, --output=text|json|yaml
+                            Output format: text, json, yaml
+      --profile=<name>      Config profile from ~/.floci/profiles/
+  -q, --quiet               Suppress non-error output
+  -r, --remove              Remove the container after stopping
+      --timeout=<seconds>   Seconds to wait before forcefully killing; -1 waits indefinitely
+                              (default: 10)
+  -v, --verbose             Debug logging to stderr
+  -V, --version             Print version information and exit.

@@ -1,0 +1,9 @@
+Usage: floci gcp config [-hV] [COMMAND]
+Manage Floci GCP configuration
+  -h, --help      Show this help message and exit.
+  -V, --version   Print version information and exit.
+Commands:
+  show      Show the active Floci GCP configuration
+  validate  Validate a docker-compose.yml file for Floci GCP compatibility
+  profile   Manage Floci GCP configuration profiles
+  help      Display help information about the specified command.

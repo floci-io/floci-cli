@@ -1,0 +1,12 @@
+Usage: floci az snapshot [-hV] [COMMAND]
+Manage Floci Azure state snapshots
+  -h, --help      Show this help message and exit.
+  -V, --version   Print version information and exit.
+Commands:
+  save    Save the current Floci Azure state as a named snapshot
+  load    Load a Floci Azure snapshot
+  list    List available Floci Azure snapshots
+  delete  Delete a Floci Azure snapshot
+  export  Export a Floci Azure snapshot to a tarball file
+  import  Import a Floci Azure snapshot from a tarball file
+  help    Display help information about the specified command.

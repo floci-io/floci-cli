@@ -1,0 +1,29 @@
+Usage: floci oci [-hV] [COMMAND]
+Manage the Floci OCI emulator (floci-oci)
+
+  floci oci start   — launch the container
+  floci oci stop    — stop the container
+  floci oci status  — show health and version
+  floci oci doctor  — diagnose environment issues
+  floci oci env     — print OCI environment variables
+  floci oci setup   — create a local OCI CLI profile (key + ~/.oci/config)
+
+  -h, --help      Show this help message and exit.
+  -V, --version   Print version information and exit.
+Commands:
+  start       Start the Floci OCI emulator container
+  stop        Stop the Floci OCI container
+  restart     Stop and restart the Floci OCI container
+  status      Show Floci OCI container and server status
+  logs        Fetch logs from the Floci OCI container
+  wait        Wait until Floci OCI is ready to accept requests
+  version     Show CLI version, connected Floci OCI server version, and image digest
+  services    List services available in the running Floci OCI instance
+  reset       Delete every resource in the running Floci OCI instance, keeping it running
+  doctor      Run environment diagnostics for Floci OCI
+  env         Print OCI environment variables to connect to Floci OCI
+  setup       Create a local OCI CLI profile (API key + ~/.oci/config) for the emulator
+  config      Manage Floci OCI configuration
+  snapshot    Manage Floci OCI state snapshots
+  completion  Generate shell completion scripts
+  help        Display help information about the specified command.

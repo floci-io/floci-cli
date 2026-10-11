@@ -1,0 +1,9 @@
+Usage: floci oci config [-hV] [COMMAND]
+Manage Floci OCI configuration
+  -h, --help      Show this help message and exit.
+  -V, --version   Print version information and exit.
+Commands:
+  show      Show the active Floci OCI configuration
+  validate  Validate a docker-compose.yml file for Floci OCI compatibility
+  profile   Manage Floci OCI configuration profiles
+  help      Display help information about the specified command.

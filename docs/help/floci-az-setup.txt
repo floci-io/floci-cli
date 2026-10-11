@@ -1,0 +1,29 @@
+Usage: floci az setup [-hqvV] [--global] [--json] [--no-color] [--no-emoji] [--reset]
+                      [--client-id=<id>] [--client-secret=<secret>] [--container=<name>]
+                      [--endpoint=<url>] [-o=text|json|yaml] [--profile=<name>]
+                      [--subscription=<id>] [--tenant=<id>]
+Point the az CLI at Floci Azure: trust its certificate, register the cloud and log in
+      --client-id=<id>      Service principal client id (default:
+                              00000000-0000-0000-0000-000000000003)
+      --client-secret=<secret>
+                            Service principal secret; floci-az does not check it (default:
+                              fake-secret)
+      --container=<name>    Floci container name (default: floci-az)
+      --endpoint=<url>      Floci server endpoint URL (default: http://localhost:4577)
+      --global              Configure your default az config (~/.azure) instead of an isolated one
+                              under ~/.floci/az
+  -h, --help                Show this help message and exit.
+      --json                Shorthand for --output json
+      --no-color            Disable ANSI colors
+      --no-emoji            Plain ASCII marks instead of Unicode ones (the default when output is
+                              piped)
+  -o, --output=text|json|yaml
+                            Output format: text, json, yaml
+      --profile=<name>      Config profile from ~/.floci/profiles/
+  -q, --quiet               Suppress non-error output
+      --reset               Undo a previous setup: delete the isolated config, or with --global
+                              switch az back to AzureCloud
+      --subscription=<id>   Subscription to select (default: 00000000-0000-0000-0000-000000000001)
+      --tenant=<id>         Tenant id to log in to (default: 00000000-0000-0000-0000-000000000002)
+  -v, --verbose             Debug logging to stderr
+  -V, --version             Print version information and exit.
