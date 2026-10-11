@@ -19,7 +19,7 @@ class ProductTreesParsingTest {
 
     private static final Set<String> LIFECYCLE_COMMANDS = Set.of(
             "start", "stop", "restart", "status", "logs", "wait",
-            "version", "services", "doctor", "env", "config", "snapshot", "completion", "help");
+            "version", "services", "reset", "doctor", "env", "config", "snapshot", "completion", "help");
 
     private static CommandSpec leafSpec(String... args) {
         ParseResult r = new CommandLine(new FlociCli()).parseArgs(args);
@@ -43,6 +43,7 @@ class ProductTreesParsingTest {
     void awsTreeDefaults() {
         assertDefaults("http://localhost:4566", "floci", "status");
         assertDefaults("http://localhost:4566", "floci", "aws", "status");
+        assertDefaults("http://localhost:4566", "floci", "reset");
         assertStartDefaults("4566", "floci/floci:latest", "start");
         assertStartDefaults("4566", "floci/floci:latest", "aws", "start");
     }
@@ -50,18 +51,21 @@ class ProductTreesParsingTest {
     @Test
     void gcpTreeDefaults() {
         assertDefaults("http://localhost:4588", "floci-gcp", "gcp", "status");
+        assertDefaults("http://localhost:4588", "floci-gcp", "gcp", "reset");
         assertStartDefaults("4588", "floci/floci-gcp:latest", "gcp", "start");
     }
 
     @Test
     void azTreeDefaults() {
         assertDefaults("http://localhost:4577", "floci-az", "az", "status");
+        assertDefaults("http://localhost:4577", "floci-az", "az", "reset");
         assertStartDefaults("4577", "floci/floci-az:latest", "az", "start");
     }
 
     @Test
     void ociTreeDefaults() {
         assertDefaults("http://localhost:4599", "floci-oci", "oci", "status");
+        assertDefaults("http://localhost:4599", "floci-oci", "oci", "reset");
         assertStartDefaults("4599", "floci/floci-oci:latest", "oci", "start");
     }
 

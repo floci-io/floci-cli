@@ -42,6 +42,7 @@ import java.util.Arrays;
                 WaitCommand.class,
                 VersionCommand.class,
                 ServicesCommand.class,
+                ResetCommand.class,
                 DoctorCommand.class,
                 EnvCommand.class,
                 ConfigCommand.class,

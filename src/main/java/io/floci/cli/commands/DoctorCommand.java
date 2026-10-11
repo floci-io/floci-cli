@@ -50,9 +50,6 @@ public class DoctorCommand implements Callable<Integer> {
     @Option(names = {"--check"}, description = "Run only a specific check by name", paramLabel = "<name>")
     String checkName;
 
-    @Option(names = {"--fix"}, description = "Attempt to auto-fix fixable issues")
-    boolean fix;
-
     /** The base environment checks every product runs, in order: Docker first, then server. */
     public static List<Check> dockerChecks(ProductProfile profile) {
         return dockerChecks(profile, new CachingDockerClient());
@@ -182,7 +179,7 @@ public class DoctorCommand implements Callable<Integer> {
             printer.println(Ansi.green("No failures") + ", " + warns + " warning(s) to review.");
         } else {
             printer.println(fails + " issue(s) found (" + fails + " fail, " + warns + " warn)."
-                    + (fix ? "" : " Run with --fix to auto-resolve fixable issues."));
+                    + " Follow the Fix line under each one.");
         }
 
         return fails > 0 ? 1 : 0;

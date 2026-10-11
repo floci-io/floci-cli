@@ -29,6 +29,9 @@ public final class UpdateNotifier {
 
     static final Duration TTL = Duration.ofHours(24);
 
+    /** How soon a check that did not produce a result (still in flight, or failed) is tried again. */
+    static final Duration RETRY_AFTER = Duration.ofHours(1);
+
     private static final ObjectMapper JSON = new ObjectMapper();
 
     /** The in-flight refresh, if this run started one; lets main() grant it a short grace. */
@@ -74,20 +77,52 @@ public final class UpdateNotifier {
         if (cache.isPresent() && !isStale(cache.get())) {
             return;
         }
-        // Virtual threads do not keep the JVM alive: a quick exit just drops the check and it
-        // is retried next time; main() grants a short grace via awaitRefresh so commands that
-        // finish fast still get the cache populated eventually.
+        // Virtual threads do not keep the JVM alive: a quick exit just drops the check; main()
+        // grants a short grace via awaitRefresh so commands that finish fast still get the cache
+        // populated eventually.
         REFRESH.set(Thread.ofVirtual().name("floci-update-check").start(() -> {
+            // The attempt is recorded before the request, not after it fails: a request that is
+            // still waiting when the command exits never reaches a catch block, and every run
+            // would start it again and wait at exit.
+            if (!recordAttempt()) {
+                return; // another process got there first
+            }
             try {
                 String latest = fetchLatestVersion(latestReleaseUrl);
-                Path path = cachePath();
-                Files.createDirectories(path.getParent());
-                JSON.writeValue(path.toFile(),
-                        new UpdateCache(Instant.now().getEpochSecond(), latest));
+                write(new UpdateCache(Instant.now().getEpochSecond(), latest));
             } catch (Exception _) {
-                // Network/parse failure — never surfaced; the stale/absent cache stays as-is.
+                // Network/parse failure, never surfaced. The attempt is already on record.
             }
         }));
+    }
+
+    /**
+     * Marks the cache as "checked, try again in {@link #RETRY_AFTER}", keeping the last known
+     * version. The file is read again right before the write: another process may have finished
+     * a check since this one found the cache stale, and its result (or its own attempt) stands.
+     *
+     * @return false when the cache is no longer stale, so there is nothing left to check
+     */
+    static boolean recordAttempt() {
+        try {
+            Optional<UpdateCache> onDisk = readQuietly();
+            if (onDisk.isPresent() && !isStale(onDisk.get())) {
+                return false;
+            }
+            // Backdated so the entry turns stale again after RETRY_AFTER rather than a full TTL:
+            // an attempt is not a result.
+            long checkedAt = Instant.now().minus(TTL).plus(RETRY_AFTER).getEpochSecond();
+            write(new UpdateCache(checkedAt, onDisk.map(UpdateCache::latestVersion).orElse(null)));
+        } catch (Exception _) {
+            // An unwritable cache must not stop the check itself.
+        }
+        return true;
+    }
+
+    private static void write(UpdateCache cache) throws Exception {
+        Path path = cachePath();
+        Files.createDirectories(path.getParent());
+        JSON.writeValue(path.toFile(), cache);
     }
 
     /** Give an in-flight refresh a bounded chance to finish before the JVM exits. */

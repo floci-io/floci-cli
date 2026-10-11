@@ -6,10 +6,12 @@ import io.floci.cli.ProductProfile;
 
 import java.net.ConnectException;
 import java.net.URI;
+import java.net.URLEncoder;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.net.http.HttpTimeoutException;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
@@ -59,11 +61,14 @@ public class FlociHttpClient {
         int query = base.indexOf('?');
         this.query = query >= 0 ? base.substring(query) : "";
         base = query >= 0 ? base.substring(0, query) : base;
-        this.endpoint = base.endsWith("/") ? base.substring(0, base.length() - 1) : base;
+        this.endpoint = base.replaceAll("/+$", "");
         this.controlPrefix = controlPrefix.endsWith("/")
                 ? controlPrefix.substring(0, controlPrefix.length() - 1)
                 : controlPrefix;
+        // HTTP/1.1: the emulators speak it, and the default (HTTP/2) first tries an h2c upgrade on
+        // every plain-http request. Redirects are not followed; see checkStatus.
         this.http = HttpClient.newBuilder()
+                .version(HttpClient.Version.HTTP_1_1)
                 .connectTimeout(Duration.ofSeconds(5))
                 .build();
     }
@@ -159,7 +164,7 @@ public class FlociHttpClient {
                         message.contains("not available yet"));
             }
             if (resp.statusCode() >= 400) {
-                throw new FlociException("Server returned HTTP " + resp.statusCode() + " for " + path);
+                throw new FlociException("Server returned HTTP " + resp.statusCode() + " for " + path, resp.statusCode());
             }
             return resp.body();
         } catch (FlociException e) {
@@ -171,12 +176,17 @@ public class FlociHttpClient {
         }
     }
 
+    /** Deletes every resource the emulator holds ({@code POST <prefix>/state/reset}). */
+    public Map<String, Object> resetState() throws FlociException {
+        return postJson(controlPrefix + "/state/reset", "{}");
+    }
+
     public Map<String, Object> postSnapshot(String name) throws FlociException {
-        return postJson(controlPrefix + "/snapshots/" + name, "{}");
+        return postJson(controlPrefix + "/snapshots/" + snapshotSegment(name), "{}");
     }
 
     public Map<String, Object> loadSnapshot(String name) throws FlociException {
-        return postJson(controlPrefix + "/snapshots/" + name + "/load", "{}");
+        return postJson(controlPrefix + "/snapshots/" + snapshotSegment(name) + "/load", "{}");
     }
 
     public JsonNode listSnapshots() throws FlociException {
@@ -184,7 +194,7 @@ public class FlociHttpClient {
     }
 
     public void deleteSnapshot(String name) throws FlociException {
-        deleteRequest(controlPrefix + "/snapshots/" + name);
+        deleteRequest(controlPrefix + "/snapshots/" + snapshotSegment(name));
     }
 
     private JsonNode getJson(String path) throws FlociException {
@@ -215,10 +225,8 @@ public class FlociHttpClient {
                 if (e.getCause() instanceof HttpTimeoutException) throw timedOut(path, timeout);
                 throw new FlociException("Request failed: " + e.getCause().getMessage());
             }
-            if (resp.statusCode() >= 400) {
-                throw new FlociException("Server returned HTTP " + resp.statusCode() + " for " + path);
-            }
-            return MAPPER.readTree(resp.body());
+            checkStatus(resp, path);
+            return readJson(resp.body(), path);
         } catch (FlociException e) {
             throw e;
         } catch (InterruptedException e) {
@@ -246,11 +254,9 @@ public class FlociHttpClient {
                     .POST(HttpRequest.BodyPublishers.ofString(body))
                     .build();
             HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
-            if (resp.statusCode() >= 400) {
-                throw new FlociException("Server returned HTTP " + resp.statusCode() + " for " + path);
-            }
+            checkStatus(resp, path);
             if (resp.body() == null || resp.body().isBlank()) return Map.of();
-            return MAPPER.readValue(resp.body(), Map.class);
+            return MAPPER.convertValue(readJson(resp.body(), path), Map.class);
         } catch (FlociException e) {
             throw e;
         } catch (ConnectException e) {
@@ -268,9 +274,7 @@ public class FlociHttpClient {
                     .DELETE()
                     .build();
             HttpResponse<Void> resp = http.send(req, HttpResponse.BodyHandlers.discarding());
-            if (resp.statusCode() >= 400) {
-                throw new FlociException("Server returned HTTP " + resp.statusCode() + " for " + path);
-            }
+            checkStatus(resp, path);
         } catch (FlociException e) {
             throw e;
         } catch (Exception e) {
@@ -284,5 +288,37 @@ public class FlociHttpClient {
 
     private URI url(String path) {
         return URI.create(endpoint + path + query);
+    }
+
+    // A redirect usually means --endpoint names a proxy or the wrong address; following it
+    // silently could send requests elsewhere, so it is reported instead.
+    private void checkStatus(HttpResponse<?> resp, String path) throws FlociException {
+        int status = resp.statusCode();
+        if (status >= 300 && status < 400) {
+            String location = resp.headers().firstValue("Location").orElse("another address");
+            throw new FlociException("Server redirected " + path + " to " + location + ".\n"
+                    + "Point --endpoint at the address Floci listens on.");
+        }
+        if (status >= 400) {
+            throw new FlociException("Server returned HTTP " + status + " for " + path, status);
+        }
+    }
+
+    private JsonNode readJson(String body, String path) throws FlociException {
+        try {
+            return MAPPER.readTree(body);
+        } catch (Exception e) {
+            throw new FlociException("The response from " + endpoint + path + " is not JSON, so this may not be a Floci server.\n"
+                    + "Run '" + commandPrefix + " status' to see the endpoint the emulator answers on.");
+        }
+    }
+
+    /** A snapshot name as one URL path segment; names that could change the path are refused. */
+    static String snapshotSegment(String name) throws FlociException {
+        if (name == null || name.isBlank() || name.equals(".") || name.equals("..") || name.contains("/")) {
+            throw new FlociException("Invalid snapshot name '" + name + "'.\n"
+                    + "Use a name that is not '.' or '..' and has no '/'.");
+        }
+        return URLEncoder.encode(name, StandardCharsets.UTF_8).replace("+", "%20");
     }
 }

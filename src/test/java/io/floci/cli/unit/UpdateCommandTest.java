@@ -227,4 +227,33 @@ class UpdateCommandTest {
         assertEquals(1, downloads.size(), downloads.toString());
         assertTrue(downloads.get(0).startsWith("/download/98.0.0/floci-"), downloads.toString());
     }
+
+    /** --check tells "the check failed" (2) from "an update is available" (1). */
+    @Test
+    void aCheckThatCannotBeMadeExitsTwo() throws Exception {
+        Path binary = installed(tempDir.resolve("bin"));
+        latest.set("{}");
+
+        Run r = update(binary, "--check");
+
+        assertEquals(2, r.exit());
+        assertTrue(r.err().contains("cannot determine the latest version"), r.err());
+        assertEquals(List.of(), downloads);
+    }
+
+    /** The whole update through a symlinked install: the real file is replaced, the link stays a link. */
+    @Test
+    void anInstallBehindASymlinkIsUpdatedInPlace() throws Exception {
+        Path real = installed(tempDir.resolve("opt"));
+        Path link = Files.createSymbolicLink(Files.createDirectories(tempDir.resolve("bin")).resolve("floci"), real);
+
+        Run r = update(link);
+
+        assertEquals(0, r.exit(), r.err());
+        assertTrue(Files.isSymbolicLink(link), "the link is still a link");
+        assertArrayEquals(FRESH, Files.readAllBytes(real));
+        try (var left = Files.list(real.getParent())) {
+            assertEquals(List.of("floci"), left.map(p -> p.getFileName().toString()).toList(), "no staging file left behind");
+        }
+    }
 }

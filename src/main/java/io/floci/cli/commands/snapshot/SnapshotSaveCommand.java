@@ -45,12 +45,16 @@ public class SnapshotSaveCommand implements Callable<Integer> {
         // so a container started with --port <n> is still found without --endpoint.
         String effectiveEndpoint = global.resolvedEndpoint(new DockerClient());
         FlociHttpClient client = new FlociHttpClient(effectiveEndpoint, profile);
+        if (message != null && !message.isBlank()) {
+            // The snapshot API contract has no description field yet; say so rather than drop it.
+            printer.warn("--message is not sent: the snapshot API does not take a description yet.");
+        }
         try {
             client.postSnapshot(name);
             printer.println(Ansi.green("Snapshot saved:") + " " + name);
             return 0;
         } catch (FlociException e) {
-            if (e.getMessage().contains("404") || e.getMessage().contains("501")) {
+            if (e.endpointMissing()) {
                 printer.error("Snapshot API not available on this server version.\n" +
                         "Track progress: " + profile.serverRepo() + "/issues");
             } else {

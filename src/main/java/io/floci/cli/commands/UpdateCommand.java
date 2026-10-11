@@ -26,6 +26,8 @@ import java.security.MessageDigest;
 import java.time.Duration;
 import java.util.HexFormat;
 import java.util.concurrent.Callable;
+import java.util.concurrent.TimeUnit;
+import java.util.function.BooleanSupplier;
 
 /**
  * Self-update: downloads the target release binary from the public GitHub repository
@@ -46,7 +48,7 @@ import java.util.concurrent.Callable;
 public class UpdateCommand implements Callable<Integer> {
 
     @Option(names = "--check",
-            description = "Only report whether an update is available (exit 0: up to date, 1: update available)")
+            description = "Only report whether an update is available (exit 0: up to date, 1: update available, 2: the check failed)")
     boolean check;
 
     // No mixinStandardHelpOptions here: its -V/--version would collide with this option.
@@ -97,6 +99,10 @@ public class UpdateCommand implements Callable<Integer> {
         try {
             String current = CliVersion.CLI_VERSION;
             boolean pinned = to != null && !to.isBlank();
+            if (pinned && !Version.isValid(to.trim())) {
+                // It goes into the download URL; refuse anything that is not a release version.
+                throw new UpdateException("invalid --version '" + to + "'.\nPass a release version such as 0.3.0.");
+            }
             String target = pinned ? to.trim() : fetchLatestVersion();
 
             // Unpinned updates are semantic, not string-equal: a pre-release/snapshot build
@@ -109,7 +115,7 @@ public class UpdateCommand implements Callable<Integer> {
 
             printer.println("update available: " + current + " → " + Ansi.bold(target));
             if (check) {
-                printer.println(Ansi.gray("run 'floci update' to install it"));
+                printer.println(Ansi.gray(installHint()));
                 // Non-zero so scripts can gate on staleness: floci update --check || floci update
                 return 1;
             }
@@ -137,10 +143,10 @@ public class UpdateCommand implements Callable<Integer> {
             return 0;
         } catch (UpdateException e) {
             printer.error(e.getMessage());
-            return 1;
+            return check ? 2 : 1; // --check keeps 1 for "update available"
         } catch (Exception e) {
-            printer.error("update failed: " + e.getMessage());
-            return 1;
+            printer.error("update failed: " + e.getMessage() + "\nCheck your network connection and re-run 'floci update'.");
+            return check ? 2 : 1;
         }
     }
 
@@ -171,7 +177,7 @@ public class UpdateCommand implements Callable<Integer> {
 
     private Path resolveSelf() {
         if (selfPath != null) {
-            return selfPath;
+            return realExecutable(selfPath);
         }
         String cmd = ProcessHandle.current().info().command()
                 .orElseThrow(() -> new UpdateException("cannot locate the running executable"));
@@ -181,7 +187,31 @@ public class UpdateCommand implements Callable<Integer> {
             throw new UpdateException("running from a jar (java -jar), not the native binary — "
                     + "nothing to self-update. Reinstall instead: curl -fsSL https://floci.io/install.sh | sh");
         }
-        return path;
+        return realExecutable(path);
+    }
+
+    /**
+     * The file an update of {@code path} has to replace. A symlinked install
+     * (~/bin/floci -> /opt/floci/floci) must replace the real file, not the link; this also
+     * resolves a relative argv[0] against the working directory.
+     */
+    public static Path realExecutable(Path path) {
+        try {
+            return path.toRealPath();
+        } catch (IOException e) {
+            throw new UpdateException("cannot locate the running executable (" + path + ").\n"
+                    + "Reinstall instead: curl -fsSL https://floci.io/install.sh | sh");
+        }
+    }
+
+    // What --check suggests: 'floci update' where it can install, the installer where it cannot.
+    private static String installHint() {
+        try {
+            detectPlatform();
+            return "run 'floci update' to install it";
+        } catch (UpdateException e) {
+            return e.getMessage();
+        }
     }
 
     /**
@@ -217,15 +247,24 @@ public class UpdateCommand implements Callable<Integer> {
     // ── platform (mirrors installer/install.sh) ──────────────────────────────
 
     static String detectPlatform() {
-        String os = System.getProperty("os.name", "").toLowerCase();
-        String arch = System.getProperty("os.arch", "").toLowerCase();
+        return detectPlatform(System.getProperty("os.name", ""), System.getProperty("os.arch", ""),
+                UpdateCommand::appleSilicon);
+    }
+
+    /**
+     * The release asset suffix for this machine. An x86_64 build on a Mac may be running under
+     * Rosetta on Apple Silicon; it then updates to the arm64 build instead of staying x86 forever.
+     */
+    public static String detectPlatform(String osName, String osArch, BooleanSupplier appleSilicon) {
+        String os = osName.toLowerCase();
+        String arch = osArch.toLowerCase();
         String o = null;
         if (os.contains("mac")) {
             o = "darwin";
         } else if (os.contains("linux")) {
             o = "linux";
         } else if (os.contains("windows")) {
-            throw new UpdateException("self-update is not supported on Windows — "
+            throw new UpdateException("self-update is not supported on Windows; "
                     + "re-run the installer: irm https://floci.io/install.ps1 | iex");
         }
         String a = switch (arch) {
@@ -236,7 +275,38 @@ public class UpdateCommand implements Callable<Integer> {
         if (o == null || a == null) {
             throw new UpdateException("no published build for this platform (" + os + "/" + arch + ")");
         }
+        if (o.equals("darwin") && a.equals("amd64") && appleSilicon.getAsBoolean()) {
+            a = "arm64";
+        }
         return o + "-" + a;
+    }
+
+    private static boolean appleSilicon() {
+        try {
+            return "1".equals(probe(Duration.ofSeconds(5), "sysctl", "-n", "hw.optional.arm64"));
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    /**
+     * The trimmed output of a short command, or null when it does not finish within {@code limit}.
+     * The wait comes first and a late process is killed: reading first would block for as long as
+     * the process keeps its output open, and the limit would never apply. Only for commands that
+     * print a line or two, which fit the pipe without being drained.
+     */
+    public static String probe(Duration limit, String... command) throws IOException, InterruptedException {
+        Process p = new ProcessBuilder(command)
+                .redirectError(ProcessBuilder.Redirect.DISCARD)
+                .start();
+        try {
+            if (!p.waitFor(limit.toMillis(), TimeUnit.MILLISECONDS)) {
+                return null;
+            }
+            return new String(p.getInputStream().readAllBytes()).trim();
+        } finally {
+            p.destroyForcibly(); // a no-op once it has exited
+        }
     }
 
     // ── download + verify ────────────────────────────────────────────────────
@@ -288,7 +358,7 @@ public class UpdateCommand implements Callable<Integer> {
             in.transferTo(OutputStream.nullOutputStream());
         }
         String actual = HexFormat.of().formatHex(sha256.digest());
-        if (!actual.equals(expected)) {
+        if (!actual.equalsIgnoreCase(expected)) {
             throw new UpdateException("checksum mismatch for " + asset + "\n  expected: " + expected
                     + "\n  actual:   " + actual + "\nThe download may be corrupt or tampered with. Aborting.");
         }
@@ -296,7 +366,8 @@ public class UpdateCommand implements Callable<Integer> {
 
     // ── atomic replace ───────────────────────────────────────────────────────
 
-    private static void replaceAtomically(Path fresh, Path target) throws IOException {
+    /** Puts {@code fresh} in place of {@code target} in one step. Public as a test seam. */
+    public static void replaceAtomically(Path fresh, Path target) throws IOException {
         // Stage in the TARGET's directory (same filesystem), then atomically rename over it.
         // The running process keeps its old inode; the path now serves the new binary.
         Path staged = target.resolveSibling("." + target.getFileName() + ".new");

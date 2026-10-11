@@ -35,9 +35,6 @@ public class ServicesCommand implements Callable<Integer> {
         this.global = new GlobalOptions(profile);
     }
 
-    @Option(names = {"--mode"}, description = "Filter mode: docker, in-process, all (default: all)", defaultValue = "all", paramLabel = "docker|in-process|all")
-    String mode;
-
     @Override
     public Integer call() {
         Printer printer = global.printer();
