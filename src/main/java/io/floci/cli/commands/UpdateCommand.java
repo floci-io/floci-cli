@@ -74,8 +74,21 @@ public class UpdateCommand implements Callable<Integer> {
         return http;
     }
 
-    /** The binary to replace; {@code null} means "resolve the running executable". Test seam. */
-    Path selfPath;
+    /** The binary to replace; {@code null} means "resolve the running executable". */
+    private final Path selfPath;
+    private final String latestReleaseUrl;
+    private final String downloadBase;
+
+    public UpdateCommand() {
+        this(null, ReleaseChannel.latestReleaseUrl(), ReleaseChannel.downloadBase());
+    }
+
+    /** Test seam: replace {@code selfPath}, resolving releases and assets from the given URLs. */
+    public UpdateCommand(Path selfPath, String latestReleaseUrl, String downloadBase) {
+        this.selfPath = selfPath;
+        this.latestReleaseUrl = latestReleaseUrl;
+        this.downloadBase = downloadBase;
+    }
 
     @Override
     public Integer call() {
@@ -117,8 +130,8 @@ public class UpdateCommand implements Callable<Integer> {
             try {
                 printer.println("downloading " + asset + " " + target + "...");
                 Path fresh = work.resolve(asset);
-                fetchFile(ReleaseChannel.assetUrl(target, asset), fresh);
-                verifyChecksum(fresh, asset, fetchString(ReleaseChannel.assetUrl(target, "sha256sums.txt")));
+                fetchFile(ReleaseChannel.assetUrl(downloadBase, target, asset), fresh);
+                verifyChecksum(fresh, asset, fetchString(ReleaseChannel.assetUrl(downloadBase, target, "sha256sums.txt")));
                 printer.println(Ansi.green("✓") + " checksum verified");
                 replaceAtomically(fresh, binary);
             } finally {
@@ -141,7 +154,7 @@ public class UpdateCommand implements Callable<Integer> {
 
     private String fetchLatestVersion() {
         try {
-            JsonNode release = JSON.readTree(fetchString(ReleaseChannel.latestReleaseUrl()));
+            JsonNode release = JSON.readTree(fetchString(latestReleaseUrl));
             String tag = release.path("tag_name").asText("");
             // Same shape-check as UpdateNotifier: a captive portal or proxy error page must
             // not end up spliced into a download URL.

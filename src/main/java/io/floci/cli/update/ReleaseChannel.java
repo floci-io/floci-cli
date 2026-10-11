@@ -25,8 +25,16 @@ public final class ReleaseChannel {
 
     /** Download URL for one asset of one release, e.g. {@code floci-darwin-arm64}. */
     public static String assetUrl(String version, String asset) {
-        String base = System.getenv().getOrDefault(
-                DOWNLOAD_ENV, "https://github.com/" + REPO + "/releases/download");
-        return base + "/" + version + "/" + asset;
+        return assetUrl(downloadBase(), version, asset);
+    }
+
+    /** Same, under an explicit download base (see {@link #downloadBase()}). */
+    public static String assetUrl(String downloadBase, String version, String asset) {
+        return downloadBase + "/" + version + "/" + asset;
+    }
+
+    /** Where release assets are downloaded from: GitHub, or {@code FLOCI_UPDATE_DOWNLOAD_URL}. */
+    public static String downloadBase() {
+        return System.getenv().getOrDefault(DOWNLOAD_ENV, "https://github.com/" + REPO + "/releases/download");
     }
 }
