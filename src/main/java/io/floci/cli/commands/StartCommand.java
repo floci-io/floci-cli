@@ -377,8 +377,10 @@ public class StartCommand implements Callable<Integer> {
             id = docker.startContainer(args);
             progress.accept(Ansi.green("Container started") + " (" + id.substring(0, Math.min(12, id.length())) + ")");
         } catch (DockerException e) {
-            printer.error("Failed to start container: " + e.getMessage(),
-                    "Run '" + profile.commandPrefix() + " doctor' to check Docker, the image and the port.");
+            // withNextStep, not the two-argument error: docker's own output is often several
+            // lines, which must not be taken for a next step.
+            printer.error("Failed to start container: " + e.withNextStep(
+                    "Run '" + profile.commandPrefix() + " doctor' to check Docker, the image and the port."));
             return 1;
         }
 

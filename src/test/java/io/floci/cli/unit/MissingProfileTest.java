@@ -192,4 +192,19 @@ class MissingProfileTest {
         assertThrows(ProfileNotFoundException.class,
                 () -> cli().parseArgs("start", "--profile", "typo"));
     }
+
+    /** BL-096: --profile on a file that does not parse says so in two lines: the cause, then what to do. */
+    @Test
+    void aProfileThatDoesNotParseIsReportedInTwoLines() throws IOException {
+        writeProfile("broken", "port: [unterminated\n");
+        int[] exit = new int[1];
+
+        String stderr = captureStderr(() -> cli().execute("status", "--profile", "broken"), exit);
+
+        assertEquals(2, exit[0]);
+        assertEquals(2, stderr.strip().lines().count(), stderr);
+        assertTrue(stderr.contains("Profile 'broken' is invalid: "), stderr);
+        assertTrue(stderr.strip().endsWith("and try again."), stderr);
+        assertFalse(stderr.contains("[Source"), stderr);
+    }
 }

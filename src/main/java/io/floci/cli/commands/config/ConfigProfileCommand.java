@@ -8,6 +8,7 @@ import io.floci.cli.config.ProfileStore;
 import io.floci.cli.output.Ansi;
 import io.floci.cli.output.OutputFormat;
 import io.floci.cli.output.Printer;
+import io.floci.cli.util.Causes;
 import picocli.CommandLine.*;
 import picocli.CommandLine.Model.CommandSpec;
 
@@ -149,7 +150,7 @@ public class ConfigProfileCommand implements Callable<Integer> {
             }
             return 0;
         } catch (IOException e) {
-            printer.error("Could not list profiles: " + e.getMessage(),
+            printer.error("Could not list profiles: " + Causes.firstLine(e),
                     "Check the files under ~/.floci/profiles and re-run the command.");
             return 1;
         }
@@ -175,7 +176,7 @@ public class ConfigProfileCommand implements Callable<Integer> {
             if (p.namespace != null)  printer.println("  namespace:  " + p.namespace);
             return 0;
         } catch (IOException e) {
-            printer.error("Could not read profile: " + e.getMessage(), "Fix or delete the profile file, then re-run the command.");
+            printer.error("Could not read profile: " + Causes.firstLine(e), "Fix or delete the profile file, then re-run the command.");
             return 1;
         }
     }
@@ -212,7 +213,7 @@ public class ConfigProfileCommand implements Callable<Integer> {
             printer.error("Interrupted while " + editor.get(0) + " was open.\nRe-run '" + prefix + "edit " + name + "'.");
             return 1;
         } catch (IOException e) {
-            printer.error("Could not start the editor '" + String.join(" ", editor) + "': " + e.getMessage(),
+            printer.error("Could not start the editor '" + String.join(" ", editor) + "': " + Causes.firstLine(e),
                     "Set EDITOR to a command on your PATH, or edit " + file + " yourself.");
             return 1;
         }
@@ -231,8 +232,7 @@ public class ConfigProfileCommand implements Callable<Integer> {
             }
             ProfileDefaultValueProvider.warnAboutUnknownKeys(store, name, edited.get());
         } catch (IOException e) {
-            String reason = e.getMessage() == null ? "unreadable" : e.getMessage().lines().findFirst().orElse("unreadable");
-            printer.error("Profile '" + name + "' is no longer valid: " + reason + "\n"
+            printer.error("Profile '" + name + "' is no longer valid: " + Causes.firstLine(e) + "\n"
                     + "Re-run '" + prefix + "edit " + name + "' to fix it.");
             return 1;
         }
@@ -329,7 +329,7 @@ public class ConfigProfileCommand implements Callable<Integer> {
             printer.println(Ansi.gray("Start it with: " + profile.commandPrefix() + " start --profile " + name));
             return 0;
         } catch (IOException e) {
-            printer.error("Could not create profile: " + e.getMessage(), "Check that ~/.floci/profiles is writable and re-run the command.");
+            printer.error("Could not create profile: " + Causes.firstLine(e), "Check that ~/.floci/profiles is writable and re-run the command.");
             return 1;
         }
     }
@@ -401,7 +401,7 @@ public class ConfigProfileCommand implements Callable<Integer> {
             printer.println(Ansi.green("Deleted") + " profile '" + name + "'" + files);
             return 0;
         } catch (IOException e) {
-            printer.error("Could not delete profile: " + e.getMessage(), "Check that ~/.floci/profiles is writable and re-run the command.");
+            printer.error("Could not delete profile: " + Causes.firstLine(e), "Check that ~/.floci/profiles is writable and re-run the command.");
             return 1;
         }
     }

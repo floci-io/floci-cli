@@ -5,6 +5,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import io.floci.cli.output.Ansi;
+import io.floci.cli.util.Causes;
 
 import java.io.IOException;
 import java.nio.file.AccessDeniedException;
@@ -49,10 +50,7 @@ public class GlobalConfigStore {
 
     private static String reason(IOException e) {
         if (e instanceof AccessDeniedException) return "permission denied";
-        String message = e.getMessage();
-        if (message == null) return e.getClass().getSimpleName();
-        int newline = message.indexOf('\n');
-        return newline >= 0 ? message.substring(0, newline) : message;
+        return Causes.firstLine(e);
     }
 
     public void setDefaultProduct(String product) throws IOException {
