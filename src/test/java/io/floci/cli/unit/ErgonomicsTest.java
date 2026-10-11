@@ -187,6 +187,10 @@ class ErgonomicsTest {
             "code   --wait | code;--wait",
             "nano --rcfile=\"my rc\" | nano;--rcfile=my rc",
             "echo \"a \\\"quoted\\\" word\" | echo;a \"quoted\" word",
+            "C:\\Windows\\System32\\notepad.exe | C:\\Windows\\System32\\notepad.exe",
+            "\"C:\\Program Files\\Microsoft VS Code\\bin\\code.cmd\" --wait | C:\\Program Files\\Microsoft VS Code\\bin\\code.cmd;--wait",
+            "\\\\tools\\share\\edit.exe -n | \\\\tools\\share\\edit.exe;-n",
+            "'C:\\my tools\\edit.exe' | C:\\my tools\\edit.exe",
             "ed '' | ed;"})
     void anEditorValueIsSplitLikeAShellWould(String value, String expected) {
         assertEquals(List.of(expected.split(";", -1)), ConfigProfileCommand.editorCommand(value, null));
@@ -272,7 +276,7 @@ class ErgonomicsTest {
 
         assertTrue(warning.contains("server " + version + " is older than 1.5.0"), warning);
         assertTrue(warning.contains("docker pull floci/floci:latest"), warning);
-        assertTrue(warning.endsWith("then run 'floci restart'."), warning);
+        assertTrue(warning.contains("then run 'floci restart'."), warning);
     }
 
     @ParameterizedTest
@@ -295,8 +299,19 @@ class ErgonomicsTest {
     void theHintSelectsTheSameInstance() {
         String warning = ServerCompatibility.warning(ProductProfile.AWS, "1.4.0", " --profile dev").orElseThrow();
 
-        assertTrue(warning.endsWith("then run 'floci restart --profile dev'."), warning);
-        assertFalse(warning.contains("stop --remove"), warning);
+        assertTrue(warning.contains("then run 'floci restart --profile dev'."), warning);
+        // The way out for a pinned tag acts on the same instance too.
+        assertTrue(warning.contains("floci stop --remove --profile dev"), warning);
+    }
+
+    /** restart keeps the image reference, so the hint says what to do when that reference is the old tag. */
+    @Test
+    void theHintCoversAnInstancePinnedToAnOldTag() {
+        String warning = ServerCompatibility.warning(ProductProfile.AWS, "1.4.0", " --container dev").orElseThrow();
+
+        assertTrue(warning.contains("If the instance pins an older tag, restart keeps it"), warning);
+        assertTrue(warning.contains("change 'image' in its profile"), warning);
+        assertTrue(warning.contains("'--image floci/floci:latest'"), warning);
     }
 
     @Test

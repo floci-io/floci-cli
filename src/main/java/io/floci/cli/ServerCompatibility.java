@@ -26,10 +26,15 @@ public final class ServerCompatibility {
             return Optional.empty();
         }
         // restart, not stop and start: it brings the instance back with the port, data directory
-        // and services it has now.
+        // and services it has now. It also keeps the image reference, so an instance pinned to an
+        // old tag needs that changed first; the hint says where.
+        String prefix = product.commandPrefix();
         return Optional.of(product.displayName() + " server " + serverVersion + " is older than "
                 + ImageVersionCheck.MIN_VERSION + ", the oldest version this CLI supports; some commands may not work."
                 + "\nPull a newer image ('docker pull " + product.defaultImageRef() + "'), then run '"
-                + product.commandPrefix() + " restart" + instanceSelector + "'.");
+                + prefix + " restart" + instanceSelector + "'."
+                + "\nIf the instance pins an older tag, restart keeps it: change 'image' in its profile first, or run '"
+                + prefix + " stop --remove" + instanceSelector + "' and start it again with its usual flags plus"
+                + " '--image " + product.defaultImageRef() + "'.");
     }
 }

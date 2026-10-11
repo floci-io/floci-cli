@@ -255,9 +255,11 @@ public class ConfigProfileCommand implements Callable<Integer> {
 
     /**
      * {@code line} split into words the way a shell would for a simple command: whitespace
-     * separates, single and double quotes group (a path with spaces), and a backslash outside
-     * single quotes takes the next character literally. Nothing is expanded; the words go
-     * straight to the process, never through a shell.
+     * separates, and single and double quotes group (a path with spaces). A backslash is an
+     * escape only in front of a space or a quote; anywhere else it is an ordinary character, so
+     * a Windows path ({@code C:\Windows\System32\notepad.exe}, {@code \\server\share\edit})
+     * comes through intact. Nothing is expanded; the words go straight to the process, never
+     * through a shell.
      */
     static List<String> words(String line) {
         List<String> words = new ArrayList<>();
@@ -269,8 +271,7 @@ public class ConfigProfileCommand implements Callable<Integer> {
             if (quote != 0) {
                 if (c == quote) {
                     quote = 0;
-                } else if (c == '\\' && quote == '"' && i + 1 < line.length()
-                        && (line.charAt(i + 1) == '"' || line.charAt(i + 1) == '\\')) {
+                } else if (c == '\\' && quote == '"' && i + 1 < line.length() && line.charAt(i + 1) == '"') {
                     word.append(line.charAt(++i));
                 } else {
                     word.append(c);
@@ -278,7 +279,7 @@ public class ConfigProfileCommand implements Callable<Integer> {
             } else if (c == '\'' || c == '"') {
                 quote = c;
                 inWord = true;
-            } else if (c == '\\' && i + 1 < line.length()) {
+            } else if (c == '\\' && i + 1 < line.length() && escapable(line.charAt(i + 1))) {
                 word.append(line.charAt(++i));
                 inWord = true;
             } else if (Character.isWhitespace(c)) {
@@ -294,6 +295,10 @@ public class ConfigProfileCommand implements Callable<Integer> {
         }
         if (inWord) words.add(word.toString());
         return List.copyOf(words);
+    }
+
+    private static boolean escapable(char next) {
+        return Character.isWhitespace(next) || next == '"' || next == '\'';
     }
 
     private int createProfile(Printer printer, ProfileStore store) {
