@@ -312,7 +312,10 @@ All commands support `--help`.
 
 ## Global Flags
 
-Every tree takes the same flags; only the defaults differ. Marks are plain ASCII without
+Every tree takes the same flags; only the defaults differ. With `--json` (or `-o json`, `-o yaml`)
+a command prints one document on stdout and nothing else; when it fails, the error is on stderr
+and stdout is empty. Three commands print text whatever the format, because their output is not a
+document: `logs` (the container's own output), `env` (shell code) and `completion` (a script). Marks are plain ASCII without
 `--no-emoji` too whenever the output is not a terminal (a pipe, a file, CI logs) or `NO_COLOR` is
 set. `--json` wins when it is combined with `--output`.
 
@@ -737,6 +740,7 @@ floci config profile list                  # list saved profiles: container, por
 floci config profile create <name>         # create a new profile with the tree's defaults
 floci config profile create <name> --container <c> --port <p> --persist <dir> --services <csv> --image <img> --namespace <ns>
 floci config profile show <name>           # show a profile
+floci config profile show <name> --json    # the same keys as one row of `config profile list --json`
 floci config profile edit <name>           # open the profile in $VISUAL or $EDITOR, then check it still reads
 floci config profile delete <name>         # delete a profile
 floci config validate -f docker-compose.yml  # validate a Compose file

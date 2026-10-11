@@ -6,9 +6,12 @@ import io.floci.cli.docker.DockerClient;
 import io.floci.cli.http.FlociException;
 import io.floci.cli.http.FlociHttpClient;
 import io.floci.cli.output.Ansi;
+import io.floci.cli.output.OutputFormat;
 import io.floci.cli.output.Printer;
 import picocli.CommandLine.*;
 
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.concurrent.Callable;
 
 @Command(
@@ -44,6 +47,14 @@ public class SnapshotDeleteCommand implements Callable<Integer> {
         FlociHttpClient client = new FlociHttpClient(effectiveEndpoint, profile);
         try {
             client.deleteSnapshot(name);
+            if (printer.format() != OutputFormat.text) {
+                Map<String, Object> result = new LinkedHashMap<>();
+                result.put("snapshot", name);
+                result.put("action", "deleted");
+                result.put("endpoint", effectiveEndpoint);
+                printer.structured(result);
+                return 0;
+            }
             printer.println(Ansi.green("Snapshot deleted:") + " " + name);
             return 0;
         } catch (FlociException e) {

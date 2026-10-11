@@ -6,9 +6,12 @@ import io.floci.cli.docker.DockerClient;
 import io.floci.cli.http.FlociException;
 import io.floci.cli.http.FlociHttpClient;
 import io.floci.cli.output.Ansi;
+import io.floci.cli.output.OutputFormat;
 import io.floci.cli.output.Printer;
 import picocli.CommandLine.*;
 
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.concurrent.Callable;
 
 @Command(
@@ -51,6 +54,14 @@ public class SnapshotSaveCommand implements Callable<Integer> {
         }
         try {
             client.postSnapshot(name);
+            if (printer.format() != OutputFormat.text) {
+                Map<String, Object> result = new LinkedHashMap<>();
+                result.put("snapshot", name);
+                result.put("action", "saved");
+                result.put("endpoint", effectiveEndpoint);
+                printer.structured(result);
+                return 0;
+            }
             printer.println(Ansi.green("Snapshot saved:") + " " + name);
             return 0;
         } catch (FlociException e) {

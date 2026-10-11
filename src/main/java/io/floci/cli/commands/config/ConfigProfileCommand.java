@@ -119,16 +119,7 @@ public class ConfigProfileCommand implements Callable<Integer> {
             if (printer.format() != OutputFormat.text) {
                 List<Map<String, Object>> out = new ArrayList<>();
                 for (Profile p : profiles) {
-                    Map<String, Object> row = new LinkedHashMap<>();
-                    row.put("name", p.name);
-                    row.put("container", p.container);
-                    row.put("port", p.port);
-                    row.put("endpoint", p.endpoint);
-                    row.put("image", p.image);
-                    row.put("persistDir", p.persistDir);
-                    row.put("services", p.services);
-                    row.put("namespace", p.namespace);
-                    out.add(row);
+                    out.add(row(p));
                 }
                 printer.structured(out);
                 return 0;
@@ -155,6 +146,30 @@ public class ConfigProfileCommand implements Callable<Integer> {
         }
     }
 
+    // One profile as structured output: the same keys from list and show, null where unset.
+    private static Map<String, Object> row(Profile p) {
+        Map<String, Object> row = new LinkedHashMap<>();
+        row.put("name", p.name);
+        row.put("container", p.container);
+        row.put("port", p.port);
+        row.put("endpoint", p.endpoint);
+        row.put("image", p.image);
+        row.put("persistDir", p.persistDir);
+        row.put("services", p.services);
+        row.put("namespace", p.namespace);
+        return row;
+    }
+
+    // What create, edit and delete report in structured output: the profile, what was done to it
+    // and the file or files involved.
+    private static Map<String, Object> done(String name, String action, List<Path> files) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("name", name);
+        result.put("action", action);
+        result.put("files", files.stream().map(Path::toString).toList());
+        return result;
+    }
+
     private int showProfile(Printer printer, ProfileStore store) {
         if (name == null) { printer.error(nameRequired()); return 1; }
         try {
@@ -165,6 +180,10 @@ public class ConfigProfileCommand implements Callable<Integer> {
             }
             Profile p = profile.get();
             ProfileDefaultValueProvider.warnAboutUnknownKeys(store, name, p);
+            if (printer.format() != OutputFormat.text) {
+                printer.structured(row(p));
+                return 0;
+            }
             printer.println(Ansi.bold("Profile: ") + p.name);
             if (p.endpoint != null)   printer.println("  endpoint:   " + p.endpoint);
             if (p.container != null)  printer.println("  container:  " + p.container);
@@ -235,6 +254,10 @@ public class ConfigProfileCommand implements Callable<Integer> {
             printer.error("Profile '" + name + "' is no longer valid: " + reason + "\n"
                     + "Re-run '" + prefix + "edit " + name + "' to fix it.");
             return 1;
+        }
+        if (printer.format() != OutputFormat.text) {
+            printer.structured(done(name, "edited", List.of(file)));
+            return 0;
         }
         printer.println("Profile '" + name + "' saved " + Ansi.gray("(" + file + ")"));
         return 0;
@@ -325,6 +348,10 @@ public class ConfigProfileCommand implements Callable<Integer> {
                 printer.warn(warning);
             }
             store.save(p);
+            if (printer.format() != OutputFormat.text) {
+                printer.structured(done(name, "created", List.of(store.profileFile(name))));
+                return 0;
+            }
             printer.println(Ansi.green("Created") + " profile '" + name + "' at " + store.profileFile(name));
             printer.println(Ansi.gray("Start it with: " + profile.commandPrefix() + " start --profile " + name));
             return 0;
@@ -398,6 +425,10 @@ public class ConfigProfileCommand implements Callable<Integer> {
             String files = removed.size() > 1
                     ? " (" + removed.get(0).getFileName() + " and " + removed.get(1).getFileName() + ")"
                     : "";
+            if (printer.format() != OutputFormat.text) {
+                printer.structured(done(name, "deleted", removed));
+                return 0;
+            }
             printer.println(Ansi.green("Deleted") + " profile '" + name + "'" + files);
             return 0;
         } catch (IOException e) {

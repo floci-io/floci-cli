@@ -1,10 +1,14 @@
 package io.floci.cli.unit;
 
+import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.floci.cli.FlociCli;
 import io.floci.cli.ProductProfile;
+import io.floci.cli.commands.config.ConfigDefaultProductCommand;
 import io.floci.cli.commands.config.ConfigProfileCommand;
 import io.floci.cli.commands.config.ConfigShowCommand;
+import io.floci.cli.config.GlobalConfigStore;
 import io.floci.cli.config.Profile;
 import io.floci.cli.config.ProfileDefaultValueProvider;
 import io.floci.cli.config.ProfileStore;
@@ -400,5 +404,99 @@ class ConfigCommandsTest {
         Set<String> partial = new HashSet<>(base);
         partial.add("port");
         assertEquals(partial, jsonKeys(runShow(ProductProfile.AWS, "--profile", "partial", "-o", "json")));
+    }
+
+    // ---- BL-091: --json and -o json reach the profile commands -------------------------------------
+
+    private static final ObjectMapper STRICT_JSON = new ObjectMapper().enable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS);
+
+    @Test
+    void showPrintsTheProfileAsOneJsonDocument() throws Exception {
+        writeProfile("dev", "container: floci-dev\nport: 14566\nservices: s3,sqs\n");
+
+        Run r = profileCmd(ProductProfile.AWS, "show", "dev", "--json");
+
+        assertEquals(0, r.exit(), r.err());
+        JsonNode json = STRICT_JSON.readTree(r.out());
+        assertEquals("dev", json.path("name").asText());
+        assertEquals("floci-dev", json.path("container").asText());
+        assertEquals(14566, json.path("port").asInt());
+        assertEquals("s3,sqs", json.path("services").asText());
+        assertTrue(json.path("image").isNull(), "an unset field is null, as in list: " + r.out());
+        assertFalse(r.out().contains("Profile:"), r.out());
+    }
+
+    /** show and list describe a profile with the same keys. */
+    @Test
+    void showAndListAgreeOnTheShape() throws Exception {
+        writeProfile("dev", "container: floci-dev\nport: 14566\n");
+
+        JsonNode shown = STRICT_JSON.readTree(profileCmd(ProductProfile.AWS, "show", "dev", "-o", "json").out());
+        JsonNode listed = STRICT_JSON.readTree(profileCmd(ProductProfile.AWS, "list", "-o", "json").out());
+
+        assertEquals(1, listed.size());
+        assertEquals(listed.get(0), shown);
+    }
+
+    @Test
+    void createAndDeleteReportWhatTheyDid() throws Exception {
+        Run created = profileCmd(ProductProfile.GCP, "create", "ci", "--port", "14588", "--json");
+
+        assertEquals(0, created.exit(), created.err());
+        JsonNode create = STRICT_JSON.readTree(created.out());
+        assertEquals("ci", create.path("name").asText());
+        assertEquals("created", create.path("action").asText());
+        assertEquals(store().profileFile("ci").toString(), create.path("files").get(0).asText());
+        assertEquals(14588, store().get("ci").orElseThrow().port);
+
+        Run deleted = profileCmd(ProductProfile.GCP, "delete", "ci", "-o", "json");
+
+        assertEquals(0, deleted.exit(), deleted.err());
+        JsonNode delete = STRICT_JSON.readTree(deleted.out());
+        assertEquals("deleted", delete.path("action").asText());
+        assertEquals(1, delete.path("files").size());
+        assertTrue(store().get("ci").isEmpty());
+    }
+
+    @Test
+    void yamlWorksToo() throws Exception {
+        writeProfile("dev", "port: 14566\n");
+
+        Run r = profileCmd(ProductProfile.AWS, "show", "dev", "-o", "yaml");
+
+        assertEquals(0, r.exit(), r.err());
+        assertTrue(r.out().contains("name: \"dev\""), r.out());
+        assertTrue(r.out().contains("port: 14566"), r.out());
+    }
+
+    /** A failure still goes to stderr and leaves stdout empty, so a script never parses half a result. */
+    @Test
+    void aFailedShowLeavesStdoutEmptyInJson() {
+        Run r = profileCmd(ProductProfile.AWS, "show", "nope", "--json");
+
+        assertEquals(1, r.exit());
+        assertEquals("", r.out());
+        assertTrue(r.err().contains("Profile 'nope' not found."), r.err());
+    }
+
+    @Test
+    void defaultProductReportsWhatItSaved() throws Exception {
+        Path config = tempDir.resolve("config.yaml");
+        ConfigDefaultProductCommand command = new ConfigDefaultProductCommand(new GlobalConfigStore(config));
+        PrintStream out = System.out;
+        ByteArrayOutputStream outBuf = new ByteArrayOutputStream();
+        System.setOut(new PrintStream(outBuf));
+        int exit;
+        try {
+            exit = new CommandLine(command).execute("oci", "--json");
+        } finally {
+            System.setOut(out);
+        }
+
+        assertEquals(0, exit);
+        JsonNode json = STRICT_JSON.readTree(outBuf.toString());
+        assertEquals("oci", json.path("defaultProduct").asText());
+        assertEquals(config.toString(), json.path("file").asText());
+        assertEquals("oci", new GlobalConfigStore(config).getDefaultProduct());
     }
 }
