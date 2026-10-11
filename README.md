@@ -723,14 +723,15 @@ its image; a file with a single service is checked whatever its image is):
 
 | Check | Result when it fails |
 |---|---|
-| The emulator port is mapped (`"4566:4566"`, `"5566:4566"`, `"127.0.0.1:5566:4566"`, a range, or the long form; any host port works) | error |
-| `/var/run/docker.sock` is mounted | error where the product needs it, otherwise a warning |
+| The emulator port is mapped over TCP (`"4566:4566"`, `"5566:4566"`, `"127.0.0.1:5566:4566"`, a range, or the long form; any host port works) | error |
+| A socket is mounted at `/var/run/docker.sock` in the container (the host side may be any socket) | error where the product needs it, otherwise a warning |
 | The volume at `/app/data` is writable and not bound to a file | error |
 | A volume at `/app/data` comes with `<PREFIX>_STORAGE_MODE=persistent`, and the other way round | warning |
 | The image tag is not older than the oldest version this CLI supports (AWS tree) | warning |
 
 It exits 1 when there is an error and 0 otherwise. `-o json` and `-o yaml` print
-`file`, `service`, `valid`, `errors` and `warnings`.
+`file`, `service`, `valid`, `errors` and `warnings`, also for a file that cannot be parsed. An
+`env_file` is not read, so nothing is said about a storage mode it may set.
 
 #### Profiles
 

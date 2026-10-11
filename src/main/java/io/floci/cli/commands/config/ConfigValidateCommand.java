@@ -67,18 +67,25 @@ public class ConfigValidateCommand implements Callable<Integer> {
             return 1;
         }
 
-        JsonNode compose;
+        JsonNode compose = null;
+        String unreadable = null;
         try {
             compose = YAML.readTree(content);
+            if (compose == null || !compose.isObject()) {
+                unreadable = "Could not read " + composeFile + " as a Compose file: it has no top-level mapping";
+            }
         } catch (IOException e) {
             String reason = e.getMessage() == null ? "unreadable" : e.getMessage().lines().findFirst().orElse("unreadable");
-            printer.error("Could not read " + composeFile + " as YAML: " + reason,
-                    "Fix the file's syntax, or pass another with --file.");
-            return 1;
+            unreadable = "Could not read " + composeFile + " as YAML: " + reason;
         }
-        if (compose == null || !compose.isObject()) {
-            printer.error("Could not read " + composeFile + " as a Compose file: it has no top-level mapping.",
-                    "Fix the file, or pass another with --file.");
+        if (unreadable != null) {
+            // Structured output always carries the report, so a script reading it gets 'valid: false'
+            // and the reason rather than nothing.
+            if (printer.format() != OutputFormat.text) {
+                printer.structured(document(composeFile, new ComposeCheck.Report(null, List.of(unreadable), List.of())));
+            } else {
+                printer.error(unreadable, "Fix the file's syntax, or pass another with --file.");
+            }
             return 1;
         }
 
@@ -86,13 +93,7 @@ public class ConfigValidateCommand implements Callable<Integer> {
         ComposeCheck.Report report = ComposeCheck.analyze(compose, profile, dockerSockRequired, dockerSockNeededFor, baseDir);
 
         if (printer.format() != OutputFormat.text) {
-            Map<String, Object> out = new LinkedHashMap<>();
-            out.put("file", composeFile.toString());
-            out.put("service", report.service());
-            out.put("valid", report.valid());
-            out.put("errors", report.errors());
-            out.put("warnings", report.warnings());
-            printer.structured(out);
+            printer.structured(document(composeFile, report));
             return report.valid() ? 0 : 1;
         }
 
@@ -116,6 +117,16 @@ public class ConfigValidateCommand implements Callable<Integer> {
             return 1;
         }
         return 0;
+    }
+
+    private static Map<String, Object> document(Path composeFile, ComposeCheck.Report report) {
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("file", composeFile.toString());
+        out.put("service", report.service());
+        out.put("valid", report.valid());
+        out.put("errors", report.errors());
+        out.put("warnings", report.warnings());
+        return out;
     }
 
     private Path resolveComposeFile() {

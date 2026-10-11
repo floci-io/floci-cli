@@ -36,8 +36,14 @@ public final class ComposeCheck {
         }
     }
 
-    /** A volume entry, from either the short {@code src:dst[:mode]} or the long form. */
-    record Mount(String source, String target, boolean readOnly) {}
+    /** Where the emulator looks for the Docker socket, inside the container. */
+    static final String DOCKER_SOCK = "/var/run/docker.sock";
+
+    /**
+     * A volume entry, from either the short {@code src:dst[:mode]} or the long form. {@code bind}
+     * is true when the source is a path on the host rather than a named volume.
+     */
+    record Mount(String source, String target, boolean readOnly, boolean bind) {}
 
     /**
      * @param baseDir the Compose file's directory, against which relative bind sources resolve
@@ -79,9 +85,11 @@ public final class ComposeCheck {
         Map<String, String> environment = environment(service.path("environment"));
         int port = profile.defaultPort();
 
-        if (mounts.stream().noneMatch(m -> endsWithDockerSock(m.source()) || endsWithDockerSock(m.target()))) {
+        // The container side is what the emulator opens; the host side may be any socket (Podman's,
+        // a rootless Docker's), so only the target is checked.
+        if (mounts.stream().noneMatch(m -> DOCKER_SOCK.equals(stripTrailingSlash(m.target())))) {
             (dockerSockRequired ? errors : warnings)
-                    .add("Missing /var/run/docker.sock volume mount — required for " + dockerSockNeededFor);
+                    .add("Missing " + DOCKER_SOCK + " volume mount — required for " + dockerSockNeededFor);
         }
 
         // With host networking the container's ports are the host's; there is nothing to map.
@@ -93,8 +101,11 @@ public final class ComposeCheck {
         Mount data = mounts.stream().filter(m -> DATA_DIR.equals(stripTrailingSlash(m.target()))).findFirst().orElse(null);
         String storageVar = profile.envVar("STORAGE_MODE");
         String storageMode = environment.get(storageVar);
-        // A value Compose will substitute (${MODE:-persistent}) cannot be judged from here.
-        boolean storageKnown = storageMode == null || !storageMode.contains("${");
+        // A value Compose will substitute (${MODE:-persistent}) cannot be judged from here, and
+        // neither can one an env_file may set: the file is not read.
+        boolean storageKnown = storageMode == null
+                ? service.path("env_file").isMissingNode() || service.path("env_file").isNull()
+                : !storageMode.contains("${");
         if (data != null && storageKnown && !"persistent".equalsIgnoreCase(storageMode)) {
             warnings.add("A volume is mounted at " + DATA_DIR + " but " + storageVar + " is not 'persistent' — "
                     + "the emulator keeps its state in memory by default, so the volume stays empty");
@@ -107,7 +118,7 @@ public final class ComposeCheck {
             if (data.readOnly()) {
                 errors.add("The volume at " + DATA_DIR + " is mounted read-only — the emulator cannot save its state there");
             }
-            String notADirectory = fileWhereADirectoryIsNeeded(data.source(), baseDir);
+            String notADirectory = fileWhereADirectoryIsNeeded(data, baseDir);
             if (notADirectory != null) {
                 errors.add("The volume at " + DATA_DIR + " is bound to " + notADirectory + ", which is a file, not a directory");
             }
@@ -151,16 +162,23 @@ public final class ComposeCheck {
     public static boolean publishes(JsonNode ports, int port) {
         for (JsonNode entry : ports) {
             if (entry.isObject()) {
-                if (entry.path("target").asInt(-1) == port) return true;
+                if (entry.path("target").asInt(-1) == port && isTcp(entry.path("protocol").asText(""))) return true;
                 continue;
             }
             String text = entry.asText("").strip();
-            int protocol = text.indexOf('/');
-            if (protocol >= 0) text = text.substring(0, protocol);
+            int slash = text.indexOf('/');
+            String protocol = slash >= 0 ? text.substring(slash + 1) : "";
+            if (slash >= 0) text = text.substring(0, slash);
             String container = text.substring(text.lastIndexOf(':') + 1);
-            if (inRange(container, port)) return true;
+            if (isTcp(protocol) && inRange(container, port)) return true;
         }
         return false;
+    }
+
+    // The emulator's endpoint is HTTP: a UDP mapping of the same number does not reach it. An
+    // entry without a protocol is TCP, as Compose reads it.
+    private static boolean isTcp(String protocol) {
+        return protocol.isBlank() || "tcp".equalsIgnoreCase(protocol.strip());
     }
 
     private static boolean inRange(String spec, int port) {
@@ -178,26 +196,37 @@ public final class ComposeCheck {
         List<Mount> mounts = new ArrayList<>();
         for (JsonNode entry : volumes) {
             if (entry.isObject()) {
+                // In the long form the type says what the source is; a bind's is a host path
+                // even when it is a bare name like 'data'.
                 mounts.add(new Mount(entry.path("source").asText(""), entry.path("target").asText(""),
-                        entry.path("read_only").asBoolean(false)));
+                        entry.path("read_only").asBoolean(false), "bind".equals(entry.path("type").asText(""))));
                 continue;
             }
             String text = entry.asText("");
             // A Windows source (C:\data:/app/data) has a colon of its own after the drive letter.
-            int from = text.length() > 2 && Character.isLetter(text.charAt(0)) && text.charAt(1) == ':'
-                    && (text.charAt(2) == '\\' || text.charAt(2) == '/') ? 2 : 0;
+            int from = startsWithDrive(text) ? 2 : 0;
             int first = text.indexOf(':', from);
             if (first < 0) {
-                mounts.add(new Mount("", text, false)); // an anonymous volume: only the container path
+                mounts.add(new Mount("", text, false, false)); // an anonymous volume: only the container path
                 continue;
             }
+            String source = text.substring(0, first);
             String rest = text.substring(first + 1);
             int second = rest.indexOf(':');
             String target = second < 0 ? rest : rest.substring(0, second);
             String mode = second < 0 ? "" : rest.substring(second + 1);
-            mounts.add(new Mount(text.substring(0, first), target, List.of(mode.split(",")).contains("ro")));
+            // In the short form a source is a host path when it looks like one; a bare name is a
+            // named volume.
+            boolean bind = source.startsWith("/") || source.startsWith(".") || source.startsWith("~")
+                    || startsWithDrive(source);
+            mounts.add(new Mount(source, target, List.of(mode.split(",")).contains("ro"), bind));
         }
         return mounts;
+    }
+
+    private static boolean startsWithDrive(String text) {
+        return text.length() > 2 && Character.isLetter(text.charAt(0)) && text.charAt(1) == ':'
+                && (text.charAt(2) == '\\' || text.charAt(2) == '/');
     }
 
     /** A service's {@code environment}, from either the mapping or the {@code KEY=value} list form. */
@@ -217,20 +246,19 @@ public final class ComposeCheck {
         return values;
     }
 
-    private static boolean endsWithDockerSock(String path) {
-        return path.endsWith("docker.sock");
-    }
-
     private static String stripTrailingSlash(String path) {
         return path.length() > 1 && path.endsWith("/") ? path.substring(0, path.length() - 1) : path;
     }
 
-    // Best effort: only a bind source that is a path on this machine and already exists can be
-    // looked at. A named volume, a ${VARIABLE} or a path that is not there yet says nothing.
-    private static String fileWhereADirectoryIsNeeded(String source, Path baseDir) {
-        if (!(source.startsWith("/") || source.startsWith("."))) return null;
+    // Best effort: only a bind source that already exists on this machine can be looked at. A
+    // named volume, a ${VARIABLE}, a home-relative path Compose expands itself, or a path that
+    // is not there yet says nothing.
+    private static String fileWhereADirectoryIsNeeded(Mount mount, Path baseDir) {
+        if (!mount.bind() || mount.source().isBlank() || mount.source().contains("${") || mount.source().startsWith("~")) {
+            return null;
+        }
         try {
-            Path path = baseDir.resolve(source).normalize();
+            Path path = baseDir.resolve(mount.source()).normalize();
             return Files.isRegularFile(path) ? path.toString() : null;
         } catch (InvalidPathException e) {
             return null;

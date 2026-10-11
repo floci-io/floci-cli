@@ -74,6 +74,40 @@ class ConfigValidateTest {
         assertTrue(errors.get(0).startsWith("No port mapping for 4566 found"), errors.get(0));
     }
 
+    /** The emulator's endpoint is HTTP: a UDP mapping of the same number does not reach it. */
+    @ParameterizedTest
+    @ValueSource(strings = {"\"4566:4566/udp\"", "{target: 4566, published: 5566, protocol: udp}", "\"5566:4566/sctp\""})
+    void aMappingThatIsNotTcpIsAnError(String ports) throws Exception {
+        List<String> errors = aws(service(ports, "")).errors();
+
+        assertEquals(1, errors.size(), errors.toString());
+        assertTrue(errors.get(0).startsWith("No port mapping for 4566 found"), errors.get(0));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"\"4566:4566/TCP\"", "{target: 4566, published: 5566, protocol: tcp}", "{target: 4566}"})
+    void tcpIsAcceptedHoweverItIsSpelled(String ports) throws Exception {
+        assertEquals(List.of(), aws(service(ports, "")).errors(), ports);
+    }
+
+    /** What matters is where the socket lands in the container; the host side may be any socket. */
+    @ParameterizedTest
+    @ValueSource(strings = {"/run/user/1000/podman/podman.sock:/var/run/docker.sock", "/var/run/docker.sock:/var/run/docker.sock:ro",
+            "{type: bind, source: /var/run/docker.sock, target: /var/run/docker.sock}"})
+    void aSocketMountedAtTheExpectedPathIsAccepted(String volume) throws Exception {
+        assertEquals(List.of(), aws(service("\"4566:4566\"", "").replace("/var/run/docker.sock:/var/run/docker.sock", volume)).errors());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"./notdocker.sock:/tmp/notdocker.sock", "/var/run/docker.sock:/tmp/docker.sock",
+            "{type: bind, source: /var/run/docker.sock, target: /run/docker.sock}"})
+    void aSocketMountedSomewhereElseDoesNotCount(String volume) throws Exception {
+        List<String> errors = aws(service("\"4566:4566\"", "").replace("/var/run/docker.sock:/var/run/docker.sock", volume)).errors();
+
+        assertEquals(1, errors.size(), errors.toString());
+        assertTrue(errors.get(0).startsWith("Missing /var/run/docker.sock volume mount"), errors.get(0));
+    }
+
     @Test
     void hostNetworkingNeedsNoPortMapping() throws Exception {
         ComposeCheck.Report r = aws("""
@@ -166,6 +200,24 @@ class ConfigValidateTest {
         assertEquals(List.of(), r.warnings(), environment);
     }
 
+    /** An env_file may set the storage mode; it is not read, so nothing is claimed about it. */
+    @ParameterizedTest
+    @ValueSource(strings = {"    env_file: .env\n", "    env_file:\n      - .env\n      - .env.local\n"})
+    void anEnvFileMakesTheStorageModeUnknown(String envFile) throws Exception {
+        ComposeCheck.Report r = aws(service("\"4566:4566\"", "      - ./state:/app/data\n" + envFile));
+
+        assertEquals(List.of(), r.warnings(), envFile);
+    }
+
+    /** A mode the file itself spells out is still judged, env_file or not. */
+    @Test
+    void anExplicitStorageModeIsJudgedEvenWithAnEnvFile() throws Exception {
+        ComposeCheck.Report r = aws(service("\"4566:4566\"",
+                "      - ./state:/app/data\n    env_file: .env\n    environment: {FLOCI_STORAGE_MODE: memory}\n"));
+
+        assertEquals(1, r.warnings().size(), r.warnings().toString());
+    }
+
     @Test
     void persistentStorageWithoutADataVolumeIsFlagged() throws Exception {
         ComposeCheck.Report r = aws(service("\"4566:4566\"", "    environment:\n      FLOCI_STORAGE_MODE: persistent\n"));
@@ -210,6 +262,24 @@ class ConfigValidateTest {
 
         assertEquals(1, r.errors().size(), r.errors().toString());
         assertTrue(r.errors().get(0).contains("which is a file, not a directory"), r.errors().get(0));
+    }
+
+    /** In the long form the type says the source is a host path, even when it is a bare name. */
+    @Test
+    void aLongFormBindToAFileIsAnErrorEvenWithABareName() throws Exception {
+        Files.writeString(tempDir.resolve("data"), "not a directory");
+
+        ComposeCheck.Report bind = aws(service("\"4566:4566\"",
+                "      - {type: bind, source: data, target: /app/data}\n    environment: {FLOCI_STORAGE_MODE: persistent}\n"));
+        ComposeCheck.Report named = aws(service("\"4566:4566\"",
+                "      - {type: volume, source: data, target: /app/data}\n    environment: {FLOCI_STORAGE_MODE: persistent}\n"));
+        ComposeCheck.Report shortNamed = aws(service("\"4566:4566\"",
+                "      - data:/app/data\n    environment: {FLOCI_STORAGE_MODE: persistent}\n"));
+
+        assertEquals(1, bind.errors().size(), bind.errors().toString());
+        assertTrue(bind.errors().get(0).contains("which is a file, not a directory"), bind.errors().get(0));
+        assertEquals(List.of(), named.errors(), "a named volume called 'data' is not the file");
+        assertEquals(List.of(), shortNamed.errors(), "nor is the short form's bare name");
     }
 
     /** A directory, a path that does not exist yet and a named volume say nothing against the mount. */
@@ -359,5 +429,24 @@ class ConfigValidateTest {
         assertEquals(1, r.exit());
         assertTrue(r.err().contains("as YAML"), r.err());
         assertTrue(r.err().contains("pass another with --file"), r.err());
+    }
+
+    /** A script reading the report gets one for a file that cannot be parsed too. */
+    @ParameterizedTest
+    @ValueSource(strings = {"services: [unterminated\n", "- just\n- a list\n", "plain text\n"})
+    void aFileThatCannotBeReadStillGetsAStructuredReport(String content) throws Exception {
+        Path file = Files.writeString(tempDir.resolve("compose.yml"), content);
+
+        Run r = run("config", "validate", "-f", file.toString(), "-o", "json");
+
+        assertEquals(1, r.exit());
+        JsonNode json = new ObjectMapper().readTree(r.out());
+        assertEquals(file.toString(), json.path("file").asText());
+        assertTrue(json.path("service").isNull(), r.out());
+        assertFalse(json.path("valid").asBoolean());
+        assertEquals(1, json.path("errors").size());
+        assertTrue(json.path("errors").get(0).asText().startsWith("Could not read "), r.out());
+        assertEquals(0, json.path("warnings").size());
+        assertEquals("", r.err());
     }
 }
