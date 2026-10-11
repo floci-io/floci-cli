@@ -8,6 +8,7 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.io.PrintStream;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -208,9 +209,17 @@ public class DockerClient {
     }
 
     public void pull(String image, String policy) throws DockerException {
+        pull(image, policy, System.out);
+    }
+
+    /**
+     * {@link #pull(String, String)} with docker's progress written to {@code progress}. A command
+     * printing structured output sends it to stderr, so stdout stays one parseable document.
+     */
+    public void pull(String image, String policy, PrintStream progress) throws DockerException {
         if ("never".equalsIgnoreCase(policy)) return;
         if ("missing".equalsIgnoreCase(policy) && isImagePresent(image)) return;
-        runStreaming("docker", "pull", "--", image);
+        runStreaming(progress, "docker", "pull", "--", image);
     }
 
     public String startContainer(List<String> args) throws DockerException {
@@ -249,7 +258,7 @@ public class DockerClient {
         if (since != null && !since.isBlank()) { cmd.add("--since"); cmd.add(since); }
         cmd.add("--");
         cmd.add(name);
-        runStreaming(cmd.toArray(String[]::new));
+        runStreaming(System.out, cmd.toArray(String[]::new));
     }
 
     private String run(String... cmd) throws DockerException {
@@ -304,7 +313,7 @@ public class DockerClient {
         return words.toString();
     }
 
-    private void runStreaming(String... cmd) throws DockerException {
+    private void runStreaming(PrintStream stdout, String... cmd) throws DockerException {
         Process proc = null;
         boolean finished = false;
         try {
@@ -312,7 +321,7 @@ public class DockerClient {
             proc = started;
             Thread out = new Thread(() -> {
                 try (var reader = new BufferedReader(new InputStreamReader(started.getInputStream()))) {
-                    reader.lines().forEach(System.out::println);
+                    reader.lines().forEach(stdout::println);
                 } catch (IOException ignored) {}
             });
             Thread err = new Thread(() -> {

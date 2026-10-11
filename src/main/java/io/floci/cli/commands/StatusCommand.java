@@ -32,14 +32,21 @@ public class StatusCommand implements Callable<Integer> {
     }
 
     protected StatusCommand(ProductProfile profile) {
+        this(profile, new DockerClient());
+    }
+
+    /** Test seam: {@code docker} answers the container lookup. */
+    public StatusCommand(ProductProfile profile, DockerClient docker) {
         this.profile = profile;
         this.global = new GlobalOptions(profile);
+        this.docker = docker;
     }
+
+    private final DockerClient docker;
 
     @Override
     public Integer call() {
         Printer printer = global.printer();
-        DockerClient docker = new DockerClient();
 
         // Gather container info
         String containerState = "not found";
@@ -80,9 +87,10 @@ public class StatusCommand implements Callable<Integer> {
         data.put("version", serverVersion);
         data.put("edition", serverEdition);
 
+        int exit = exitCode(containerState, reachable);
         if (printer.format() != OutputFormat.text) {
             printer.structured(data);
-            return 0;
+            return exit;
         }
 
         printer.println(Ansi.bold(profile.displayName() + " Status"));
@@ -107,7 +115,20 @@ public class StatusCommand implements Callable<Integer> {
             printer.println(Ansi.gray("Run '" + profile.commandPrefix() + " start' to launch " + profile.displayName() + "."));
         }
 
-        return 0;
+        return exit;
+    }
+
+    /**
+     * 0 when the instance is up, 1 when it is not, so a script can ask. Up means the server
+     * answers and its container, if there is one, is running. An instance with no container here
+     * (a remote endpoint, a Compose service under another name), or whose container docker could
+     * not look up, is up when it answers.
+     */
+    public static int exitCode(String containerState, boolean reachable) {
+        // A lookup that failed ("error: ...") says nothing about the container either way.
+        boolean containerDown = !"running".equals(containerState) && !"not found".equals(containerState)
+                && !containerState.startsWith("error:");
+        return reachable && !containerDown ? 0 : 1;
     }
 
 }

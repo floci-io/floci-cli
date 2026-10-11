@@ -459,7 +459,13 @@ floci stop                    # graceful stop (10s timeout)
 floci stop --timeout 30       # wait up to 30s before force-kill
 floci stop --timeout -1       # never force-kill: wait for the container to exit
 floci stop --remove           # also remove the container after stopping
+floci stop -o json            # {"container", "state", "stopped", "removed"}
 ```
+
+`start`, `stop` and `restart` print one document with `-o json` or `-o yaml` and nothing else on
+stdout: the progress lines are left out and docker's pull progress goes to stderr. `start` and
+`restart` report `container`, `id`, `image`, `endpoint`, `state` and `ready` (`ready` is absent
+with `--detach`). `logs` prints the container's own output and stays plain text.
 
 ### `floci status` / `floci gcp status` / `floci az status` / `floci oci status`
 
@@ -467,7 +473,12 @@ floci stop --remove           # also remove the container after stopping
 floci status                          # auto-detects endpoint from container port mapping
 floci status --container myfloci      # target a specific container
 floci status -o json                  # structured output
+floci status >/dev/null && echo up    # exit 0: the instance is up, exit 1: it is not
 ```
+
+`status` exits 0 when the server answers and its container, if there is one, is running, and 1
+otherwise, in every output format. An instance with no local container (a remote `--endpoint`, a
+Compose service under another name) counts as up when it answers.
 
 ### `floci env`
 
