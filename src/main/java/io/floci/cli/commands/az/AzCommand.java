@@ -25,6 +25,7 @@ import picocli.CommandLine.*;
                 AzWaitCommand.class,
                 AzVersionCommand.class,
                 AzServicesCommand.class,
+                AzResetCommand.class,
                 AzDoctorCommand.class,
                 AzEnvCommand.class,
                 AzSetupCommand.class,

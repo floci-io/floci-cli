@@ -9,6 +9,7 @@ import picocli.CommandLine.Option;
 import picocli.CommandLine.Spec;
 
 import java.net.URI;
+import java.util.Optional;
 import java.util.function.UnaryOperator;
 import java.util.regex.Pattern;
 
@@ -105,7 +106,8 @@ public class GlobalOptions {
         return "";
     }
 
-    private boolean typed(String option) {
+    /** Whether {@code option} was given on the command line, as opposed to coming from a profile, the environment or the default. */
+    public boolean typed(String option) {
         try {
             return mixee != null && mixee.commandLine() != null
                     && mixee.commandLine().getParseResult() != null
@@ -150,18 +152,29 @@ public class GlobalOptions {
         try {
             int containerPort = URI.create(fallback).getPort();
             if (containerPort == -1) containerPort = product.defaultPort();
-            for (String mapping : ports.trim().split("\\s+")) {
-                int arrow = mapping.indexOf("->");
-                if (arrow < 0) continue;
-                String hostPort = mapping.substring(0, arrow);
-                String rest = mapping.substring(arrow + 2);
-                String cPort = rest.contains("/") ? rest.substring(0, rest.indexOf('/')) : rest;
-                if (String.valueOf(containerPort).equals(cPort)) {
-                    return "http://localhost:" + hostPort;
-                }
-            }
+            return publishedEndpoint(ports, containerPort).orElse(fallback);
         } catch (Exception ignored) {}
         return fallback;
+    }
+
+    /**
+     * Where a container with these published {@code ports} ("14566->4566/tcp ...") is reached for
+     * its {@code containerPort}, or empty when that port is not published. For callers that must
+     * not fall back to a configured endpoint.
+     */
+    public static Optional<String> publishedEndpoint(String ports, int containerPort) {
+        if (ports == null || ports.isBlank()) return Optional.empty();
+        for (String mapping : ports.trim().split("\\s+")) {
+            int arrow = mapping.indexOf("->");
+            if (arrow < 0) continue;
+            String hostPort = mapping.substring(0, arrow);
+            String rest = mapping.substring(arrow + 2);
+            String cPort = rest.contains("/") ? rest.substring(0, rest.indexOf('/')) : rest;
+            if (String.valueOf(containerPort).equals(cPort)) {
+                return Optional.of("http://localhost:" + hostPort);
+            }
+        }
+        return Optional.empty();
     }
 
     private static boolean isStdoutTty() {

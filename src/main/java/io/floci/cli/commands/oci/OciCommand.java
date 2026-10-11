@@ -25,6 +25,7 @@ import picocli.CommandLine.*;
                 OciWaitCommand.class,
                 OciVersionCommand.class,
                 OciServicesCommand.class,
+                OciResetCommand.class,
                 OciDoctorCommand.class,
                 OciEnvCommand.class,
                 OciSetupCommand.class,

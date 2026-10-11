@@ -24,6 +24,7 @@ import picocli.CommandLine.*;
                 GcpWaitCommand.class,
                 GcpVersionCommand.class,
                 GcpServicesCommand.class,
+                GcpResetCommand.class,
                 GcpDoctorCommand.class,
                 GcpEnvCommand.class,
                 GcpConfigCommand.class,
