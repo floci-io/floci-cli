@@ -109,7 +109,13 @@ public class ResetCommand implements Callable<Integer> {
             return new Target(null, "Container '" + global.container + "' is not running (state: "
                     + info.get().state() + "), so nothing was reset." + how);
         }
-        return new Target(global.endpointFromPorts(info.get().ports(), global.endpoint), null);
+        Optional<String> published = global.publishedEndpoint(info.get().ports(), global.endpoint);
+        if (chosen && published.isEmpty()) {
+            // No port to find it by: the configured endpoint may well be another instance.
+            return new Target(null, "Container '" + global.container
+                    + "' publishes no port for the emulator, so nothing was reset." + how);
+        }
+        return new Target(published.orElse(global.endpoint), null);
     }
 
     @Override

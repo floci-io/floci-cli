@@ -193,6 +193,35 @@ class ResetCommandTest {
         assertTrue(target.error().contains("is not running (state: exited)"), target.error());
     }
 
+    /**
+     * Running, but with no published port for the emulator (or only an unrelated one): there is
+     * nothing to find it by, and the configured endpoint may be the default instance.
+     */
+    @ParameterizedTest
+    @ValueSource(strings = {"", "18080->8080/tcp"})
+    void aChosenContainerWithoutAMatchingPortResetsNothing(String ports) {
+        ResetCommand.Target target = targetOf(dockerWith("floci-team-b", "running", ports), "--container", "floci-team-b");
+
+        assertNull(target.endpoint());
+        assertTrue(target.error().contains("publishes no port for the emulator, so nothing was reset."), target.error());
+    }
+
+    @Test
+    void aChosenContainerIsFoundThroughItsPortMapping() {
+        ResetCommand.Target target = targetOf(dockerWith("floci-team-b", "running", "14566->4566/tcp"),
+                "--container", "floci-team-b");
+
+        assertEquals("http://localhost:14566", target.endpoint());
+    }
+
+    /** The default container without a published port (host networking) is still the default instance. */
+    @Test
+    void theDefaultContainerWithoutAPublishedPortUsesItsConfiguredEndpoint() {
+        ResetCommand.Target target = targetOf(dockerWith("floci", "running", ""));
+
+        assertEquals("http://localhost:4566", target.endpoint());
+    }
+
     @Test
     void aChosenContainerDockerCannotLookUpResetsNothing() {
         DockerClient broken = new DockerClient() {

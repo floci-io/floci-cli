@@ -9,6 +9,7 @@ import picocli.CommandLine.Option;
 import picocli.CommandLine.Spec;
 
 import java.net.URI;
+import java.util.Optional;
 import java.util.function.UnaryOperator;
 import java.util.regex.Pattern;
 
@@ -147,9 +148,17 @@ public class GlobalOptions {
 
     // Matches the container-side port from the configured endpoint to find the actual host port.
     public String endpointFromPorts(String ports, String fallback) {
-        if (ports == null || ports.isBlank()) return fallback;
+        return publishedEndpoint(ports, fallback).orElse(fallback);
+    }
+
+    /**
+     * The endpoint a container with these published {@code ports} is reached on, or empty when it
+     * publishes no port for the one {@code configured} names. For callers that must not fall back.
+     */
+    public Optional<String> publishedEndpoint(String ports, String configured) {
+        if (ports == null || ports.isBlank()) return Optional.empty();
         try {
-            int containerPort = URI.create(fallback).getPort();
+            int containerPort = URI.create(configured).getPort();
             if (containerPort == -1) containerPort = product.defaultPort();
             for (String mapping : ports.trim().split("\\s+")) {
                 int arrow = mapping.indexOf("->");
@@ -158,11 +167,11 @@ public class GlobalOptions {
                 String rest = mapping.substring(arrow + 2);
                 String cPort = rest.contains("/") ? rest.substring(0, rest.indexOf('/')) : rest;
                 if (String.valueOf(containerPort).equals(cPort)) {
-                    return "http://localhost:" + hostPort;
+                    return Optional.of("http://localhost:" + hostPort);
                 }
             }
         } catch (Exception ignored) {}
-        return fallback;
+        return Optional.empty();
     }
 
     private static boolean isStdoutTty() {
