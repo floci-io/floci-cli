@@ -54,7 +54,7 @@ public class VersionCommand implements Callable<Integer> {
             serverEdition = info.edition();
         } catch (Exception ignored) {}
         // On stderr, so structured output stays one document.
-        ServerCompatibility.warning(profile, serverVersion).ifPresent(printer::warn);
+        ServerCompatibility.warning(profile, serverVersion, global.instanceSelector()).ifPresent(printer::warn);
 
         // Try to read image digest from Docker (best-effort)
         try {

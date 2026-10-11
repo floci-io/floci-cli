@@ -15,15 +15,21 @@ public final class ServerCompatibility {
      * when there is nothing to say. Only the AWS emulator has a minimum: the others are versioned
      * on their own lines (0.x), where the same number would flag every release. A version that
      * does not read as one ("unknown", a development build) is not judged.
+     *
+     * @param instanceSelector the flags that select the instance the version came from
+     *                         ({@link GlobalOptions#instanceSelector()}), so the hint acts on that
+     *                         instance and not on the default one
      */
-    public static Optional<String> warning(ProductProfile product, String serverVersion) {
+    public static Optional<String> warning(ProductProfile product, String serverVersion, String instanceSelector) {
         if (!"aws".equals(product.name()) || !Version.isValid(serverVersion)
                 || ImageVersionCheck.meetsMinimum(serverVersion, ImageVersionCheck.MIN_VERSION)) {
             return Optional.empty();
         }
+        // restart, not stop and start: it brings the instance back with the port, data directory
+        // and services it has now.
         return Optional.of(product.displayName() + " server " + serverVersion + " is older than "
                 + ImageVersionCheck.MIN_VERSION + ", the oldest version this CLI supports; some commands may not work."
-                + "\nRun '" + product.commandPrefix() + " stop --remove' and then '" + product.commandPrefix()
-                + " start --pull always' to run a newer image.");
+                + "\nPull a newer image ('docker pull " + product.defaultImageRef() + "'), then run '"
+                + product.commandPrefix() + " restart" + instanceSelector + "'.");
     }
 }

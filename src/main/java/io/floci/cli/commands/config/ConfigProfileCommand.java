@@ -245,13 +245,55 @@ public class ConfigProfileCommand implements Callable<Integer> {
 
     /**
      * The editor to run, as a command and its arguments: {@code VISUAL} first, then
-     * {@code EDITOR}, as other tools do. A value like {@code "code --wait"} carries arguments, so
-     * it is split on whitespace. Empty when neither is set.
+     * {@code EDITOR}, as other tools do. Empty when neither is set.
      */
     public static List<String> editorCommand(String visual, String editor) {
         String chosen = visual != null && !visual.isBlank() ? visual : editor;
         if (chosen == null || chosen.isBlank()) return List.of();
-        return List.of(chosen.strip().split("\\s+"));
+        return words(chosen);
+    }
+
+    /**
+     * {@code line} split into words the way a shell would for a simple command: whitespace
+     * separates, single and double quotes group (a path with spaces), and a backslash outside
+     * single quotes takes the next character literally. Nothing is expanded; the words go
+     * straight to the process, never through a shell.
+     */
+    static List<String> words(String line) {
+        List<String> words = new ArrayList<>();
+        StringBuilder word = new StringBuilder();
+        boolean inWord = false;
+        char quote = 0;
+        for (int i = 0; i < line.length(); i++) {
+            char c = line.charAt(i);
+            if (quote != 0) {
+                if (c == quote) {
+                    quote = 0;
+                } else if (c == '\\' && quote == '"' && i + 1 < line.length()
+                        && (line.charAt(i + 1) == '"' || line.charAt(i + 1) == '\\')) {
+                    word.append(line.charAt(++i));
+                } else {
+                    word.append(c);
+                }
+            } else if (c == '\'' || c == '"') {
+                quote = c;
+                inWord = true;
+            } else if (c == '\\' && i + 1 < line.length()) {
+                word.append(line.charAt(++i));
+                inWord = true;
+            } else if (Character.isWhitespace(c)) {
+                if (inWord) {
+                    words.add(word.toString());
+                    word.setLength(0);
+                    inWord = false;
+                }
+            } else {
+                word.append(c);
+                inWord = true;
+            }
+        }
+        if (inWord) words.add(word.toString());
+        return List.copyOf(words);
     }
 
     private int createProfile(Printer printer, ProfileStore store) {

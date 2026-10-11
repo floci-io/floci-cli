@@ -95,6 +95,14 @@ class ErgonomicsTest {
         assertEquals(plain, GlobalOptions.plainGlyphs(noEmoji, terminal, noColorEnv));
     }
 
+    /** The update notice is printed before any command runs, so the choice is made from the raw arguments too. */
+    @ParameterizedTest
+    @CsvSource({"'status --no-emoji', false, true, true", "'status', false, true, false", "'status', true, true, true",
+            "'status', false, false, true", "'--no-emoji=true status', false, true, true"})
+    void theMarksAreChosenBeforeAnyCommandRuns(String commandLine, boolean noColorEnv, boolean interactive, boolean plain) {
+        assertEquals(plain, FlociCli.plainGlyphs(commandLine.split(" "), noColorEnv, interactive));
+    }
+
     @Test
     void thePlainSetIsAsciiOnly() {
         for (String mark : List.of(Glyphs.ASCII.ok(), Glyphs.ASCII.warn(), Glyphs.ASCII.fail(), Glyphs.ASCII.arrow())) {
@@ -168,6 +176,36 @@ class ErgonomicsTest {
         assertEquals("--wait " + store().existingFile("dev"), Files.readString(args).strip());
     }
 
+    /** A quoted path with spaces is one word, as a shell would read it; nothing else is interpreted. */
+    @ParameterizedTest
+    @CsvSource(delimiter = '|', quoteCharacter = '`', value = {
+            "\"/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code\" --wait | /Applications/Visual Studio Code.app/Contents/Resources/app/bin/code;--wait",
+            "'/opt/my editor/bin/edit' -n | /opt/my editor/bin/edit;-n",
+            "/opt/my\\ editor/bin/edit | /opt/my editor/bin/edit",
+            "emacsclient -c -a \"emacs --no-splash\" | emacsclient;-c;-a;emacs --no-splash",
+            "vim -c 'set ft=yaml' | vim;-c;set ft=yaml",
+            "code   --wait | code;--wait",
+            "nano --rcfile=\"my rc\" | nano;--rcfile=my rc",
+            "echo \"a \\\"quoted\\\" word\" | echo;a \"quoted\" word",
+            "ed '' | ed;"})
+    void anEditorValueIsSplitLikeAShellWould(String value, String expected) {
+        assertEquals(List.of(expected.split(";", -1)), ConfigProfileCommand.editorCommand(value, null));
+    }
+
+    @Test
+    @DisabledOnOs(OS.WINDOWS)
+    void anEditorInADirectoryWithSpacesIsRun() throws Exception {
+        store().save(new Profile(ProductProfile.AWS, "dev"));
+        Path dir = Files.createDirectories(tempDir.resolve("my editors"));
+        Path editor = Files.writeString(dir.resolve("edit it"), "#!/bin/sh\necho 'port: 14566' >> \"$2\"\n");
+        assertTrue(editor.toFile().setExecutable(true));
+
+        Run r = edit(Map.of("EDITOR", "\"" + editor + "\" --wait"), "dev");
+
+        assertEquals(0, r.exit(), r.err());
+        assertEquals(14566, store().get("dev").orElseThrow().port);
+    }
+
     @Test
     void theEditorIsVisualThenEditorSplitOnSpaces() {
         assertEquals(List.of("code", "--wait"), ConfigProfileCommand.editorCommand("code --wait", "vi"));
@@ -230,25 +268,35 @@ class ErgonomicsTest {
     @ParameterizedTest
     @ValueSource(strings = {"1.4.9", "1.0.0", "0.9.0"})
     void anAwsServerBelowTheMinimumIsWarnedAbout(String version) {
-        String warning = ServerCompatibility.warning(ProductProfile.AWS, version).orElseThrow();
+        String warning = ServerCompatibility.warning(ProductProfile.AWS, version, "").orElseThrow();
 
         assertTrue(warning.contains("server " + version + " is older than 1.5.0"), warning);
-        assertTrue(warning.contains("floci start --pull always"), warning);
+        assertTrue(warning.contains("docker pull floci/floci:latest"), warning);
+        assertTrue(warning.endsWith("then run 'floci restart'."), warning);
     }
 
     @ParameterizedTest
     @ValueSource(strings = {"1.5.0", "2.2.0", "unknown", "unavailable", "", "dev-SNAPSHOT"})
     void aSupportedOrUnreadableVersionIsNotWarnedAbout(String version) {
-        assertTrue(ServerCompatibility.warning(ProductProfile.AWS, version).isEmpty(), version);
+        assertTrue(ServerCompatibility.warning(ProductProfile.AWS, version, "").isEmpty(), version);
     }
 
     /** The other emulators are on 0.x version lines of their own: the AWS minimum says nothing about them. */
     @Test
     void theOtherProductsHaveNoMinimum() {
         for (ProductProfile product : List.of(ProductProfile.GCP, ProductProfile.AZ, ProductProfile.OCI)) {
-            assertTrue(ServerCompatibility.warning(product, "0.4.2").isEmpty(), product.name());
+            assertTrue(ServerCompatibility.warning(product, "0.4.2", "").isEmpty(), product.name());
         }
-        assertTrue(ServerCompatibility.warning(ProductProfile.AWS, null).isEmpty());
+        assertTrue(ServerCompatibility.warning(ProductProfile.AWS, null, "").isEmpty());
+    }
+
+    /** The hint acts on the instance the version came from, and keeps that instance's settings. */
+    @Test
+    void theHintSelectsTheSameInstance() {
+        String warning = ServerCompatibility.warning(ProductProfile.AWS, "1.4.0", " --profile dev").orElseThrow();
+
+        assertTrue(warning.endsWith("then run 'floci restart --profile dev'."), warning);
+        assertFalse(warning.contains("stop --remove"), warning);
     }
 
     @Test
@@ -268,6 +316,7 @@ class ErgonomicsTest {
                     "--endpoint", "http://127.0.0.1:" + server.getAddress().getPort());
 
             assertTrue(r.err().contains("server 1.4.0 is older than 1.5.0"), r.err());
+            assertTrue(r.err().contains("floci restart --container floci-ergonomics-none"), r.err());
             assertTrue(r.out().strip().startsWith("{") && r.out().strip().endsWith("}"), r.out());
             assertFalse(r.out().contains("older than"), r.out());
         } finally {

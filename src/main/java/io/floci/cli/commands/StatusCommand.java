@@ -71,7 +71,7 @@ public class StatusCommand implements Callable<Integer> {
             reachable = true;
         } catch (Exception ignored) {}
         // On stderr, so structured output stays one document.
-        ServerCompatibility.warning(profile, serverVersion).ifPresent(printer::warn);
+        ServerCompatibility.warning(profile, serverVersion, global.instanceSelector()).ifPresent(printer::warn);
 
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("container", global.container);
