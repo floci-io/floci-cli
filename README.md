@@ -874,7 +874,11 @@ the same three codes:
 |---|---|
 | `0` | The command did what it was asked. |
 | `1` | It ran and failed, or the answer to the question it asks is "no". |
-| `2` | It was not run: an unknown flag or command, a value that cannot be used, or a `--profile` that does not exist or cannot be read. |
+| `2` | The command line could not be used: an unknown flag or command, a missing argument, a value picocli cannot convert (`--port abc`), or a `--profile` that does not exist or cannot be read. |
+
+A value the command line accepts but the command then rejects is reported by that command. Most
+use `2` for it, as the table below shows; three use `1`: `config default-product <unknown product>`,
+`update --version <not a release version>` and `config profile create --port <out of range>`.
 
 Where a command's codes carry a specific meaning a script can rely on:
 
@@ -884,12 +888,13 @@ Where a command's codes carry a specific meaning a script can rely on:
 | `wait` | ready before `--timeout` | timed out | `--timeout` is not a positive duration |
 | `doctor` | every check passed (warnings allowed) | at least one check failed | `--check` names no known check |
 | `update --check` | up to date | an update is available | the check itself failed |
-| `update` | updated, or already up to date | the update failed; the binary is unchanged | bad flag |
+| `update` | updated, or already up to date | the update failed, or `--version` is not a release version; the binary is unchanged | bad flag |
 | `start`, `restart` | started (and ready, unless `--detach`) | Docker, the image, the port or readiness failed | `--port`, `--pull` or the namespace is not valid |
 | `stop` | stopped, or was not running | no such container, or Docker failed | bad flag or profile |
 | `reset` | state reset | declined, not available on this server, or no running instance to reset | no terminal to ask on and no `--yes` |
 | `config validate` | no errors (warnings allowed) | errors found, or the file cannot be read | bad flag |
-| `config profile ...` | done | not found, already exists, or cannot be read | the profile name is not valid |
+| `config profile ...` | done | not found, already exists, cannot be read, or `--port` is out of range | the profile name is not valid |
+| `config default-product` | saved | not `aws`, `gcp`, `az` or `oci`, or the file cannot be written | bad flag |
 | `env` | variables printed | | `--shell` is not supported |
 | `completion` | script printed | | the shell is not `bash` or `zsh` |
 | `snapshot ...` | done | failed, or the server has no snapshot API yet | bad flag or profile |
