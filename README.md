@@ -103,7 +103,7 @@ java -jar floci.jar version
 Native-binary installs (install script, direct download) can self-update:
 
 ```sh
-floci update --check   # exit 0: up to date, exit 1: update available
+floci update --check   # exit 0: up to date, 1: update available, 2: the check failed
 floci update           # download, verify checksum, replace the binary
 ```
 
@@ -851,7 +851,7 @@ sha256 against the release's `sha256sums.txt`, and atomically replaces the runni
 
 ```sh
 floci update                      # update to the latest release
-floci update --check              # exit 0: up to date, exit 1: update available
+floci update --check              # exit 0: up to date, 1: update available, 2: the check failed
 floci update --version 0.1.7      # install a specific version
 floci update --check || floci update   # script-friendly: update only when stale
 ```
