@@ -140,7 +140,7 @@ public class ResetCommand implements Callable<Integer> {
         try {
             new FlociHttpClient(effectiveEndpoint, profile).resetState();
         } catch (FlociException e) {
-            if (e.getMessage().contains("HTTP 404") || e.getMessage().contains("HTTP 501")) {
+            if (e.endpointMissing()) {
                 printer.error("Resetting state is not available on this " + profile.displayName() + " server version.\n"
                         + "Restart it without --persist for a clean state, or track progress: " + profile.serverRepo() + "/issues");
             } else {

@@ -664,7 +664,6 @@ floci wait -o json                # machine-readable output
 ```sh
 floci doctor                      # run all checks
 floci doctor --check docker.installed   # run a single check by name
-floci doctor --fix                # auto-fix fixable issues
 floci doctor -o json              # structured output for scripts
 
 floci gcp doctor                  # GCP-specific checks
