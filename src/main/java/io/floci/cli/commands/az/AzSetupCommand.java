@@ -120,8 +120,9 @@ public class AzSetupCommand implements Callable<Integer> {
         try {
             flociAzDir = InstanceState.dir(stateRoot, ProductProfile.AZ, cloud);
         } catch (IllegalArgumentException e) {
+            // A container name that cannot be used: the same exit code as any other bad argument.
             printer.error(e.getMessage());
-            return 1;
+            return ExitCode.USAGE;
         }
         try {
             return reset ? reset(printer, flociAzDir, cloud) : setup(printer, flociAzDir, cloud);

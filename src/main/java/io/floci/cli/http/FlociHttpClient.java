@@ -313,12 +313,22 @@ public class FlociHttpClient {
         }
     }
 
+    /**
+     * Why {@code name} cannot be a snapshot name, or {@code null}. Commands ask before they send
+     * anything, so a bad name is a usage error rather than a failed request.
+     */
+    public static String snapshotNameError(String name) {
+        if (name == null || name.isBlank() || name.equals(".") || name.equals("..") || name.contains("/")) {
+            return "Invalid snapshot name '" + name + "'.\n"
+                    + "Use a name that is not '.' or '..' and has no '/'.";
+        }
+        return null;
+    }
+
     /** A snapshot name as one URL path segment; names that could change the path are refused. */
     static String snapshotSegment(String name) throws FlociException {
-        if (name == null || name.isBlank() || name.equals(".") || name.equals("..") || name.contains("/")) {
-            throw new FlociException("Invalid snapshot name '" + name + "'.\n"
-                    + "Use a name that is not '.' or '..' and has no '/'.");
-        }
+        String invalid = snapshotNameError(name);
+        if (invalid != null) throw new FlociException(invalid);
         return URLEncoder.encode(name, StandardCharsets.UTF_8).replace("+", "%20");
     }
 }

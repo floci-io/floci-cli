@@ -339,7 +339,7 @@ class AzSetupCommandTest {
 
     @Test
     void aContainerNameThatWouldEscapeIsRefused() {
-        assertEquals(1, run("--container", "../x"));
+        assertEquals(2, run("--container", "../x"), "a rejected value is a usage error");
         assertTrue(az.calls.isEmpty());
     }
 

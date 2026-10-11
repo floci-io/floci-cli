@@ -101,8 +101,10 @@ public class UpdateCommand implements Callable<Integer> {
             String current = CliVersion.CLI_VERSION;
             boolean pinned = to != null && !to.isBlank();
             if (pinned && !Version.isValid(to.trim())) {
-                // It goes into the download URL; refuse anything that is not a release version.
-                throw new UpdateException("invalid --version '" + to + "'.\nPass a release version such as 0.3.0.");
+                // It goes into the download URL; refuse anything that is not a release version. A
+                // value the command cannot accept, so the exit code of any other bad argument.
+                printer.error("invalid --version '" + to + "'.\nPass a release version such as 0.3.0.");
+                return ExitCode.USAGE;
             }
             String target = pinned ? to.trim() : fetchLatestVersion();
 

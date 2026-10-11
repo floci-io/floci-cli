@@ -74,6 +74,11 @@ public class RestartCommand implements Callable<Integer> {
             printer.error(invalid);
             return 2;
         }
+        String rejected = start.persistPathError();
+        if (rejected != null) {
+            printer.error(rejected);
+            return ExitCode.USAGE;
+        }
         String unwritable = start.preparePersistDir();
         if (unwritable != null) {
             printer.error(unwritable);

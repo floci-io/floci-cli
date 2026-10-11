@@ -99,7 +99,7 @@ public class ConfigProfileCommand implements Callable<Integer> {
                 case "delete" -> deleteProfile(printer, store);
                 default -> {
                     printer.error("Unknown action '" + action + "'.\nUse one of: list, show, create, edit, delete.");
-                    yield 1;
+                    yield ExitCode.USAGE;
                 }
             };
         } catch (IllegalArgumentException e) {
@@ -156,7 +156,7 @@ public class ConfigProfileCommand implements Callable<Integer> {
     }
 
     private int showProfile(Printer printer, ProfileStore store) {
-        if (name == null) { printer.error(nameRequired()); return 1; }
+        if (name == null) { printer.error(nameRequired()); return ExitCode.USAGE; }
         try {
             var profile = store.get(name);
             if (profile.isEmpty()) {
@@ -186,7 +186,7 @@ public class ConfigProfileCommand implements Callable<Integer> {
      * not created here, since {@code create} is what writes the product's defaults into it.
      */
     private int editProfile(Printer printer, ProfileStore store) {
-        if (name == null) { printer.error(nameRequired()); return 1; }
+        if (name == null) { printer.error(nameRequired()); return ExitCode.USAGE; }
         String prefix = this.profile.commandPrefix() + " config profile ";
         // Asked of the file, not of its contents: a profile that no longer parses is exactly the
         // one that has to be opened to be repaired.
@@ -299,7 +299,7 @@ public class ConfigProfileCommand implements Callable<Integer> {
     }
 
     private int createProfile(Printer printer, ProfileStore store) {
-        if (name == null) { printer.error(nameRequired()); return 1; }
+        if (name == null) { printer.error(nameRequired()); return ExitCode.USAGE; }
         try {
             if (store.get(name).isPresent()) {
                 printer.error("Profile '" + name + "' already exists.\nDelete it first, or edit " + store.existingFile(name) + ".");
@@ -308,7 +308,7 @@ public class ConfigProfileCommand implements Callable<Integer> {
             if (port != null && (port < 1 || port > 65535)) {
                 printer.error("--port must be between 1 and 65535, but was " + port + ".\n"
                         + "Pick a free port, for example " + (profile.defaultPort() + 10000) + ".");
-                return 1;
+                return ExitCode.USAGE;
             }
             Profile p = new Profile(profile, name);
             // Only flags the user typed: the mixin's own values may come from FLOCI_* env vars, and
@@ -388,7 +388,7 @@ public class ConfigProfileCommand implements Callable<Integer> {
     }
 
     private int deleteProfile(Printer printer, ProfileStore store) {
-        if (name == null) { printer.error(nameRequired()); return 1; }
+        if (name == null) { printer.error(nameRequired()); return ExitCode.USAGE; }
         try {
             List<Path> removed = store.delete(name);
             if (removed.isEmpty()) {
