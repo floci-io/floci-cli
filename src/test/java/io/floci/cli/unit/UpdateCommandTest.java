@@ -10,6 +10,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.DisabledOnOs;
 import org.junit.jupiter.api.condition.OS;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import picocli.CommandLine;
 
 import java.io.ByteArrayOutputStream;
@@ -25,6 +27,7 @@ import java.util.HexFormat;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.regex.Pattern;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -38,6 +41,9 @@ class UpdateCommandTest {
     private static final String NEWER = "99.0.0";
     private static final byte[] FRESH = "fresh binary".getBytes(StandardCharsets.UTF_8);
     private static final byte[] OLD = "old binary".getBytes(StandardCharsets.UTF_8);
+    private static final String SUMS_PATH = "/download/" + NEWER + "/sha256sums.txt";
+    private static final Pattern ASSET_PATH =
+            Pattern.compile("/download/" + Pattern.quote(NEWER) + "/floci-(darwin|linux)-(arm64|amd64)");
 
     @TempDir
     Path tempDir;
@@ -56,14 +62,18 @@ class UpdateCommandTest {
         server.createContext("/download/", exchange -> {
             String path = exchange.getRequestURI().getPath();
             downloads.add(path);
-            if (path.endsWith("/sha256sums.txt")) {
+            // Like the real release host: only this release's own files exist.
+            if (path.equals(SUMS_PATH)) {
                 StringBuilder sums = new StringBuilder();
                 for (String platform : List.of("darwin-arm64", "darwin-amd64", "linux-arm64", "linux-amd64")) {
                     sums.append(checksum.get()).append("  ./floci-").append(platform).append("/floci-").append(platform).append('\n');
                 }
                 respond(exchange, sums.toString().getBytes(StandardCharsets.UTF_8));
-            } else {
+            } else if (ASSET_PATH.matcher(path).matches()) {
                 respond(exchange, FRESH);
+            } else {
+                exchange.sendResponseHeaders(404, -1);
+                exchange.close();
             }
         });
         server.start();
@@ -124,6 +134,10 @@ class UpdateCommandTest {
         assertEquals(0, r.exit(), r.err());
         assertArrayEquals(FRESH, Files.readAllBytes(binary));
         assertTrue(r.out().contains("checksum verified"), r.out());
+        // Exactly the release's binary for this platform, then its checksums: nothing else.
+        assertEquals(2, downloads.size(), downloads.toString());
+        assertTrue(ASSET_PATH.matcher(downloads.get(0)).matches(), downloads.toString());
+        assertEquals(SUMS_PATH, downloads.get(1));
         try (var left = Files.list(binary.getParent())) {
             assertEquals(List.of("floci"), left.map(p -> p.getFileName().toString()).toList(), "no staging file left behind");
         }
@@ -176,16 +190,41 @@ class UpdateCommandTest {
         assertArrayEquals(OLD, Files.readAllBytes(binary));
     }
 
-    /** A captive portal or proxy page instead of the GitHub API must not become a download URL. */
-    @Test
-    void aLatestReleaseResponseWithoutAVersionIsRefused() throws Exception {
+    /**
+     * A captive portal or proxy page, or JSON without a usable release version, must not become a
+     * download URL. The JSON cases reach the version check itself, not just the parser.
+     */
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "<html>Sign in to the network</html>",
+            "{}",
+            "{\"tag_name\":\"\"}",
+            "{\"tag_name\":\"not-a-version\"}",
+            "{\"tag_name\":\"../../evil\"}",
+            "{\"message\":\"API rate limit exceeded\"}"})
+    void aLatestReleaseResponseWithoutAVersionIsRefused(String response) throws Exception {
         Path binary = installed(tempDir.resolve("bin"));
-        latest.set("<html>Sign in to the network</html>");
+        latest.set(response);
 
         Run r = update(binary);
 
         assertEquals(1, r.exit());
         assertTrue(r.err().contains("cannot determine the latest version"), r.err());
         assertEquals(List.of(), downloads);
+        assertArrayEquals(OLD, Files.readAllBytes(binary));
+    }
+
+    /** A release whose files are not on the download host fails the update and leaves the binary alone. */
+    @Test
+    void aReleaseWithoutItsFilesLeavesTheBinaryAlone() throws Exception {
+        Path binary = installed(tempDir.resolve("bin"));
+        latest.set("{\"tag_name\":\"98.0.0\"}"); // newer than this build, but the stub has no such release
+
+        Run r = update(binary);
+
+        assertEquals(1, r.exit());
+        assertArrayEquals(OLD, Files.readAllBytes(binary));
+        assertEquals(1, downloads.size(), downloads.toString());
+        assertTrue(downloads.get(0).startsWith("/download/98.0.0/floci-"), downloads.toString());
     }
 }

@@ -44,8 +44,10 @@ class PrinterTest {
         p.error("broken\nRun 'floci doctor'.");
         p.warn("careful");
 
-        assertEquals("hello\n", out.toString());
-        assertEquals("Error: broken\nRun 'floci doctor'.\nWarning: careful\n", err.toString());
+        // println ends a line the platform's way; the newline inside the message is the caller's.
+        String newline = System.lineSeparator();
+        assertEquals("hello" + newline, out.toString());
+        assertEquals("Error: broken\nRun 'floci doctor'." + newline + "Warning: careful" + newline, err.toString());
     }
 
     /** --quiet silences ordinary output, never errors or warnings. */
@@ -68,7 +70,7 @@ class PrinterTest {
         printer(OutputFormat.json, false).structured(sample());
 
         String json = out.toString();
-        assertTrue(json.startsWith("{\n"), json);
+        assertTrue(json.startsWith("{" + System.lineSeparator()), json);
         assertTrue(json.indexOf("\"status\"") < json.indexOf("\"services\""), json);
         assertTrue(json.contains("\"s3\", \"sqs\"") || json.contains("\"s3\",\"sqs\""), json);
     }
