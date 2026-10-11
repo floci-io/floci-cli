@@ -37,6 +37,13 @@ public final class YamlTree {
      */
     static final int MAX_NODES = 100_000;
 
+    /**
+     * The deepest nesting a document may have. A recursive alias ({@code x: &a [*a]}) is a list
+     * that contains itself: without a limit, copying it would recurse until the stack overflows,
+     * long before the node budget is spent. Real Compose files are a handful of levels deep.
+     */
+    static final int MAX_DEPTH = 64;
+
     private static final JsonNodeFactory NODES = JsonNodeFactory.instance;
 
     private YamlTree() {}
@@ -65,8 +72,8 @@ public final class YamlTree {
     /**
      * The first document of {@code yaml}; a missing node for an empty one.
      *
-     * @throws IOException when the text is not YAML, or expands to more than {@link #MAX_NODES}
-     *                     nodes, with a one-line reason
+     * @throws IOException when the text is not YAML, expands to more than {@link #MAX_NODES}
+     *                     nodes or nests deeper than {@link #MAX_DEPTH}, with a one-line reason
      */
     public static JsonNode read(String yaml) throws IOException {
         Object first;
@@ -81,12 +88,16 @@ public final class YamlTree {
             String reason = e.getMessage() == null ? "not valid YAML" : e.getMessage().lines().findFirst().orElse("not valid YAML");
             throw new IOException(reason);
         }
-        return first == null ? NODES.missingNode() : tree(first, new int[] {MAX_NODES});
+        return first == null ? NODES.missingNode() : tree(first, new int[] {MAX_NODES}, 0);
     }
 
     // SnakeYAML hands back shared objects for aliases; the tree gets a copy at each use, counted
     // against the budget so the copying cannot run away.
-    private static JsonNode tree(Object value, int[] budget) throws IOException {
+    private static JsonNode tree(Object value, int[] budget, int depth) throws IOException {
+        if (depth > MAX_DEPTH) {
+            throw new IOException("the document is nested more than " + MAX_DEPTH
+                    + " levels deep, or an alias refers to itself");
+        }
         if (--budget[0] < 0) {
             throw new IOException("the document has more than " + MAX_NODES + " values once its aliases are expanded");
         }
@@ -94,14 +105,14 @@ public final class YamlTree {
         if (value instanceof Map<?, ?> map) {
             ObjectNode object = NODES.objectNode();
             for (Map.Entry<?, ?> entry : map.entrySet()) {
-                object.set(String.valueOf(entry.getKey()), tree(entry.getValue(), budget));
+                object.set(String.valueOf(entry.getKey()), tree(entry.getValue(), budget, depth + 1));
             }
             return object;
         }
         if (value instanceof Collection<?> items) {
             ArrayNode array = NODES.arrayNode();
             for (Object item : items) {
-                array.add(tree(item, budget));
+                array.add(tree(item, budget, depth + 1));
             }
             return array;
         }

@@ -515,6 +515,42 @@ class ConfigValidateTest {
         assertTrue(json.path("errors").get(0).asText().contains("once its aliases are expanded"), r.out());
     }
 
+    /**
+     * An alias that refers to itself is a collection containing itself. It is reported like any
+     * other unreadable file, not left to overflow the stack.
+     */
+    @ParameterizedTest
+    @ValueSource(strings = {"x: &a [*a]\n", "x: &a {self: *a}\n", "x: &a [[[*a]]]\nservices: {}\n"})
+    void aRecursiveAliasIsReportedNotFollowed(String yaml) {
+        IOException e = assertThrows(IOException.class, () -> YamlTree.read(yaml));
+
+        assertTrue(e.getMessage().contains("an alias refers to itself"), e.getMessage());
+    }
+
+    @Test
+    void theCommandReportsARecursiveAlias() throws Exception {
+        Path file = Files.writeString(tempDir.resolve("compose.yml"), "x-loop: &a [*a]\nservices: {}\n");
+
+        Run json = run("config", "validate", "-f", file.toString(), "-o", "json");
+        Run text = run("config", "validate", "-f", file.toString());
+
+        assertEquals(1, json.exit());
+        assertFalse(new ObjectMapper().readTree(json.out()).path("valid").asBoolean());
+        assertTrue(json.out().contains("an alias refers to itself"), json.out());
+        assertEquals(1, text.exit());
+        assertTrue(text.err().contains("an alias refers to itself"), text.err());
+        assertFalse(text.err().contains("StackOverflow"), text.err());
+    }
+
+    /** Ordinary nesting, well past what a Compose file uses, is still read. */
+    @Test
+    void deepButFiniteNestingIsRead() throws Exception {
+        StringBuilder yaml = new StringBuilder("a: ");
+        yaml.append("[".repeat(40)).append("x").append("]".repeat(40)).append("\n");
+
+        assertTrue(YamlTree.read(yaml.toString()).path("a").isArray());
+    }
+
     /** A real Compose file with many aliases stays far below the budget. */
     @Test
     void manyOrdinaryAliasesAreFine() throws Exception {
