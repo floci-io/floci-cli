@@ -8,6 +8,7 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.io.PrintStream;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -67,18 +68,10 @@ public class DockerClient {
     private static final ObjectMapper JSON = new ObjectMapper();
 
     public Optional<RunSettings> inspectRunSettings(String name, int containerPort) throws DockerException {
-        String out;
+        Optional<JsonNode> document = inspectDocument(name);
+        if (document.isEmpty()) return Optional.empty();
         try {
-            out = run("docker", "container", "inspect", "--format", "{{json .}}", "--", name);
-        } catch (DockerException e) {
-            if (e.getMessage() != null && e.getMessage().toLowerCase().contains("no such")) {
-                return Optional.empty();
-            }
-            throw e;
-        }
-        if (out.isBlank()) return Optional.empty();
-        try {
-            JsonNode c = JSON.readTree(out);
+            JsonNode c = document.get();
             String image = textOrNull(c.path("Config").path("Image"));
             Integer hostPort = null;
             JsonNode binding = c.path("HostConfig").path("PortBindings").path(containerPort + "/tcp");
@@ -133,25 +126,55 @@ public class DockerClient {
     }
 
     public Optional<ContainerInfo> inspectContainer(String name) throws DockerException {
+        Optional<JsonNode> document = inspectDocument(name);
+        if (document.isEmpty()) return Optional.empty();
+        JsonNode c = document.get();
+        String reported = c.path("Name").asText("").replaceFirst("^/", "");
+        return Optional.of(new ContainerInfo(
+                c.path("Id").asText(""),
+                reported.isBlank() ? name : reported,
+                c.path("Config").path("Image").asText(""),
+                c.path("State").path("Status").asText(""),
+                publishedPorts(c.path("NetworkSettings").path("Ports"))));
+    }
+
+    /**
+     * The published ports of an inspect document as {@code "14566->4566/tcp 18080->8080/tcp"}:
+     * host port, then the container side. A port that is exposed but not published has no
+     * binding and is left out.
+     */
+    public static String publishedPorts(JsonNode ports) {
+        StringBuilder published = new StringBuilder();
+        for (var port : ports.properties()) {
+            JsonNode bindings = port.getValue();
+            if (!bindings.isArray() || bindings.isEmpty()) continue;
+            String hostPort = bindings.get(0).path("HostPort").asText("");
+            if (hostPort.isBlank()) continue;
+            if (!published.isEmpty()) published.append(' ');
+            published.append(hostPort).append("->").append(port.getKey());
+        }
+        return published.toString();
+    }
+
+    // The container's whole inspect document, or empty when there is no such container. One
+    // JSON read serves every caller; a field-by-field Go template had to be split on a
+    // delimiter, which a value could contain.
+    private Optional<JsonNode> inspectDocument(String name) throws DockerException {
+        String out;
         try {
-            String out = run("docker", "container", "inspect",
-                    "--format",
-                    "{{.Id}}|{{.Name}}|{{.Config.Image}}|{{.State.Status}}|" +
-                            "{{range $p, $b := .NetworkSettings.Ports}}{{if $b}}{{(index $b 0).HostPort}}->{{$p}} {{end}}{{end}}",
-                    "--", name);
-            if (out.isBlank()) return Optional.empty();
-            String[] parts = out.trim().split("\\|", -1);
-            return Optional.of(new ContainerInfo(
-                    parts.length > 0 ? parts[0] : "",                       // id
-                    parts.length > 1 ? parts[1].replaceFirst("^/", "") : name,
-                    parts.length > 2 ? parts[2] : "",                       // image
-                    parts.length > 3 ? parts[3] : "",                       // status
-                    parts.length > 4 ? parts[4].trim() : ""));              // ports
+            out = run("docker", "container", "inspect", "--format", "{{json .}}", "--", name);
         } catch (DockerException e) {
             if (e.getMessage() != null && e.getMessage().toLowerCase().contains("no such")) {
                 return Optional.empty();
             }
             throw e;
+        }
+        if (out.isBlank()) return Optional.empty();
+        try {
+            return Optional.of(JSON.readTree(out));
+        } catch (Exception e) {
+            throw new DockerException("Could not read the details of container '" + name + "': " + e.getMessage()
+                    + "\n" + CHECK_DOCKER);
         }
     }
 
@@ -186,9 +209,17 @@ public class DockerClient {
     }
 
     public void pull(String image, String policy) throws DockerException {
+        pull(image, policy, System.out);
+    }
+
+    /**
+     * {@link #pull(String, String)} with docker's progress written to {@code progress}. A command
+     * printing structured output sends it to stderr, so stdout stays one parseable document.
+     */
+    public void pull(String image, String policy, PrintStream progress) throws DockerException {
         if ("never".equalsIgnoreCase(policy)) return;
         if ("missing".equalsIgnoreCase(policy) && isImagePresent(image)) return;
-        runStreaming("docker", "pull", "--", image);
+        runStreaming(progress, "docker", "pull", "--", image);
     }
 
     public String startContainer(List<String> args) throws DockerException {
@@ -227,7 +258,7 @@ public class DockerClient {
         if (since != null && !since.isBlank()) { cmd.add("--since"); cmd.add(since); }
         cmd.add("--");
         cmd.add(name);
-        runStreaming(cmd.toArray(String[]::new));
+        runStreaming(System.out, cmd.toArray(String[]::new));
     }
 
     private String run(String... cmd) throws DockerException {
@@ -282,7 +313,7 @@ public class DockerClient {
         return words.toString();
     }
 
-    private void runStreaming(String... cmd) throws DockerException {
+    private void runStreaming(PrintStream stdout, String... cmd) throws DockerException {
         Process proc = null;
         boolean finished = false;
         try {
@@ -290,7 +321,7 @@ public class DockerClient {
             proc = started;
             Thread out = new Thread(() -> {
                 try (var reader = new BufferedReader(new InputStreamReader(started.getInputStream()))) {
-                    reader.lines().forEach(System.out::println);
+                    reader.lines().forEach(stdout::println);
                 } catch (IOException ignored) {}
             });
             Thread err = new Thread(() -> {

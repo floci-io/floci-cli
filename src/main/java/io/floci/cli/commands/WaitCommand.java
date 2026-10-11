@@ -70,6 +70,12 @@ public class WaitCommand implements Callable<Integer> {
      */
     String knownEndpoint;
 
+    /**
+     * Set by {@code start}, which reports the outcome in its own structured result: this wait
+     * then prints no document of its own, so stdout carries exactly one.
+     */
+    boolean embedded;
+
     static final long FIRST_DELAY_MS = 25;
     static final long MAX_DELAY_MS = 500;
     static final Duration MAX_REQUEST_TIMEOUT = Duration.ofSeconds(10);
@@ -99,7 +105,7 @@ public class WaitCommand implements Callable<Integer> {
             if (isReady(client, service, requestTimeout(Duration.between(Instant.now(), deadline)))) {
                 if (spinner) clearSpinner(printer);
                 if (printer.format() != OutputFormat.text) {
-                    printer.structured(Map.of("ready", true, "endpoint", effectiveEndpoint));
+                    if (!embedded) printer.structured(Map.of("ready", true, "endpoint", effectiveEndpoint));
                 } else {
                     printer.println(Ansi.green(profile.displayName() + " is ready") + " (" + effectiveEndpoint + ")");
                 }
