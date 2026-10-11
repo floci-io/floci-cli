@@ -477,6 +477,111 @@ class ConfigValidateTest {
         assertEquals("shared", tree.path("again").asText());
     }
 
+    /**
+     * Sixteen levels, three aliases each: 48 aliases, under the parser's own limit, and 43 million
+     * values once expanded. The reader stops at its budget instead of building that tree.
+     */
+    @Test
+    void aFileThatExpandsToMillionsOfValuesIsRefusedQuickly() {
+        StringBuilder bomb = new StringBuilder("x-0: &l0 [a, b, c]\n");
+        for (int level = 1; level <= 16; level++) {
+            bomb.append("x-").append(level).append(": &l").append(level)
+                    .append(" [*l").append(level - 1).append(", *l").append(level - 1).append(", *l").append(level - 1).append("]\n");
+        }
+        bomb.append("services:\n  floci:\n    image: floci/floci:latest\n");
+
+        long start = System.nanoTime();
+        IOException e = assertThrows(IOException.class, () -> YamlTree.read(bomb.toString()));
+        long elapsedMs = (System.nanoTime() - start) / 1_000_000;
+
+        assertTrue(e.getMessage().contains("once its aliases are expanded"), e.getMessage());
+        assertTrue(elapsedMs < 5_000, "took " + elapsedMs + " ms");
+    }
+
+    @Test
+    void theCommandReportsSuchAFileInsteadOfRunningOutOfMemory() throws Exception {
+        StringBuilder bomb = new StringBuilder("x-0: &l0 [a, b, c]\n");
+        for (int level = 1; level <= 16; level++) {
+            bomb.append("x-").append(level).append(": &l").append(level)
+                    .append(" [*l").append(level - 1).append(", *l").append(level - 1).append(", *l").append(level - 1).append("]\n");
+        }
+        Path file = Files.writeString(tempDir.resolve("compose.yml"), bomb + "services: {}\n");
+
+        Run r = run("config", "validate", "-f", file.toString(), "-o", "json");
+
+        assertEquals(1, r.exit());
+        JsonNode json = new ObjectMapper().readTree(r.out());
+        assertFalse(json.path("valid").asBoolean());
+        assertTrue(json.path("errors").get(0).asText().contains("once its aliases are expanded"), r.out());
+    }
+
+    /** A real Compose file with many aliases stays far below the budget. */
+    @Test
+    void manyOrdinaryAliasesAreFine() throws Exception {
+        StringBuilder compose = new StringBuilder("x-env: &env {A: 1, B: 2, C: 3}\nservices:\n");
+        for (int i = 0; i < 40; i++) {
+            compose.append("  svc").append(i).append(":\n    image: busybox\n    environment: *env\n");
+        }
+        compose.append("  floci:\n    image: floci/floci:latest\n    ports: [\"4566:4566\"]\n"
+                + "    volumes: [\"/var/run/docker.sock:/var/run/docker.sock\"]\n");
+
+        ComposeCheck.Report r = aws(compose.toString());
+
+        assertEquals("floci", r.service());
+        assertEquals(List.of(), r.errors());
+    }
+
+    /**
+     * Compose reads YAML 1.2, where only true and false are booleans. A service or key called
+     * on, off, yes or no keeps its spelling instead of turning into true or false.
+     */
+    @ParameterizedTest
+    @ValueSource(strings = {"on", "off", "yes", "no", "y", "n", "On", "NO"})
+    void aServiceNamedLikeAYaml11BooleanKeepsItsName(String name) throws Exception {
+        ComposeCheck.Report r = aws("""
+                services:
+                  %s:
+                    image: floci/floci:latest
+                    ports: ["4566:4566"]
+                    volumes: ["/var/run/docker.sock:/var/run/docker.sock"]
+                """.formatted(name));
+
+        assertEquals(name, r.service());
+        assertEquals(List.of(), r.errors());
+    }
+
+    @Test
+    void onlyTrueAndFalseAreBooleans() throws Exception {
+        JsonNode tree = YamlTree.read("""
+                a: true
+                b: False
+                c: yes
+                d: off
+                e: 2024-01-01
+                f: 0x1F
+                g: ~
+                """);
+
+        assertTrue(tree.path("a").isBoolean() && tree.path("a").asBoolean());
+        assertTrue(tree.path("b").isBoolean() && !tree.path("b").asBoolean());
+        assertEquals("yes", tree.path("c").asText());
+        assertTrue(tree.path("c").isTextual());
+        assertEquals("off", tree.path("d").asText());
+        assertEquals("2024-01-01", tree.path("e").asText());
+        assertTrue(tree.path("f").isIntegralNumber());
+        assertTrue(tree.path("g").isNull());
+    }
+
+    /** read_only written as true still makes a data volume read-only. */
+    @Test
+    void aBooleanValueIsStillABoolean() throws Exception {
+        ComposeCheck.Report r = aws(service("\"4566:4566\"",
+                "      - {type: bind, source: ./data, target: /app/data, read_only: true}\n    environment: {FLOCI_STORAGE_MODE: persistent}\n"));
+
+        assertEquals(1, r.errors().size(), r.errors().toString());
+        assertTrue(r.errors().get(0).contains("mounted read-only"), r.errors().get(0));
+    }
+
     @Test
     void anAliasWithoutItsAnchorIsAParseError() {
         assertThrows(IOException.class, () -> YamlTree.read("services:\n  floci: *missing\n"));
