@@ -3,6 +3,7 @@ package io.floci.cli.commands;
 import io.floci.cli.CliVersion;
 import io.floci.cli.GlobalOptions;
 import io.floci.cli.ProductProfile;
+import io.floci.cli.ServerCompatibility;
 import io.floci.cli.http.FlociHttpClient;
 import io.floci.cli.output.Ansi;
 import io.floci.cli.output.OutputFormat;
@@ -52,6 +53,8 @@ public class VersionCommand implements Callable<Integer> {
             serverVersion = info.version();
             serverEdition = info.edition();
         } catch (Exception ignored) {}
+        // On stderr, so structured output stays one document.
+        ServerCompatibility.warning(profile, serverVersion, global.instanceSelector()).ifPresent(printer::warn);
 
         // Try to read image digest from Docker (best-effort)
         try {

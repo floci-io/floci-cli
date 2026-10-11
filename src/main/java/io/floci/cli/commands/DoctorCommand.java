@@ -21,6 +21,7 @@ import io.floci.cli.doctor.checks.ImagePresentCheck;
 import io.floci.cli.doctor.checks.ImageVersionCheck;
 import io.floci.cli.doctor.checks.PortAvailableCheck;
 import io.floci.cli.output.Ansi;
+import io.floci.cli.output.Glyphs;
 import io.floci.cli.output.OutputFormat;
 import io.floci.cli.output.Printer;
 import picocli.CommandLine.*;
@@ -226,9 +227,9 @@ public class DoctorCommand implements Callable<Integer> {
 
     public static void printResult(Printer printer, CheckResult r) {
         String icon = switch (r.status()) {
-            case ok   -> Ansi.green("✓");
-            case warn -> Ansi.yellow("⚠");
-            case fail -> Ansi.red("✗");
+            case ok   -> Ansi.green(Glyphs.ok());
+            case warn -> Ansi.yellow(Glyphs.warn());
+            case fail -> Ansi.red(Glyphs.fail());
         };
         String namePadded = String.format("%-26s", r.name());
         printer.println("  " + icon + " " + namePadded + " " + r.message());

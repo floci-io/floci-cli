@@ -1,11 +1,14 @@
-Usage: floci gcp snapshot delete [-hqvV] [--no-color] [--container=<name>] [--endpoint=<url>]
-                                 [-o=text|json|yaml] [--profile=<name>] <name>
+Usage: floci gcp snapshot delete [-hqvV] [--json] [--no-color] [--no-emoji] [--container=<name>]
+                                 [--endpoint=<url>] [-o=text|json|yaml] [--profile=<name>] <name>
 Delete a Floci GCP snapshot
       <name>               Snapshot name
       --container=<name>   Floci container name (default: floci-gcp)
       --endpoint=<url>     Floci server endpoint URL (default: http://localhost:4588)
   -h, --help               Show this help message and exit.
+      --json               Shorthand for --output json
       --no-color           Disable ANSI colors
+      --no-emoji           Plain ASCII marks instead of Unicode ones (the default when output is
+                             piped)
   -o, --output=text|json|yaml
                            Output format: text, json, yaml
       --profile=<name>     Config profile from ~/.floci/profiles/

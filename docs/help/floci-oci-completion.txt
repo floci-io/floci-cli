@@ -1,12 +1,14 @@
-Usage: floci oci completion [-hqvV] [--no-color] [--container=<name>] [--endpoint=<url>]
-                            [-o=text|json|yaml] [--profile=<name>] bash|zsh|fish|powershell
+Usage: floci oci completion [-hqvV] [--json] [--no-color] [--no-emoji] [--container=<name>]
+                            [--endpoint=<url>] [-o=text|json|yaml] [--profile=<name>] bash|zsh
 Generate shell completion scripts
-      bash|zsh|fish|powershell
-                           Shell type: bash, zsh, fish, powershell
+      bash|zsh             Shell type: bash or zsh
       --container=<name>   Floci container name (default: floci)
       --endpoint=<url>     Floci server endpoint URL (default: http://localhost:4566)
   -h, --help               Show this help message and exit.
+      --json               Shorthand for --output json
       --no-color           Disable ANSI colors
+      --no-emoji           Plain ASCII marks instead of Unicode ones (the default when output is
+                             piped)
   -o, --output=text|json|yaml
                            Output format: text, json, yaml
       --profile=<name>     Config profile from ~/.floci/profiles/

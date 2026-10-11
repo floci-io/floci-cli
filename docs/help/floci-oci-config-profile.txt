@@ -1,18 +1,22 @@
-Usage: floci oci config profile [-hqvV] [--no-color] [--container=<name>] [--endpoint=<url>]
-                                [--image=<image>] [--namespace=<name>] [-o=text|json|yaml]
-                                [--persist=<dir>] [--port=<port>] [--profile=<name>]
-                                [--services=<csv>] list|show|create|delete [<name>] [COMMAND]
+Usage: floci oci config profile [-hqvV] [--json] [--no-color] [--no-emoji] [--container=<name>]
+                                [--endpoint=<url>] [--image=<image>] [--namespace=<name>]
+                                [-o=text|json|yaml] [--persist=<dir>] [--port=<port>]
+                                [--profile=<name>] [--services=<csv>] list|show|create|edit|delete
+                                [<name>] [COMMAND]
 Manage Floci OCI configuration profiles
-      list|show|create|delete
-                           Action: list, show, create, delete
-      [<name>]             Profile name (required for show, create, delete)
+      list|show|create|edit|delete
+                           Action: list, show, create, edit, delete
+      [<name>]             Profile name (required for show, create, edit, delete)
       --container=<name>   Floci container name (default: floci-oci)
       --endpoint=<url>     Floci server endpoint URL (default: http://localhost:4599)
   -h, --help               Show this help message and exit.
       --image=<image>      create: Docker image for this instance
+      --json               Shorthand for --output json
       --namespace=<name>   create: Docker resource namespace for the containers this instance
                              launches (default: derived from --container)
       --no-color           Disable ANSI colors
+      --no-emoji           Plain ASCII marks instead of Unicode ones (the default when output is
+                             piped)
   -o, --output=text|json|yaml
                            Output format: text, json, yaml
       --persist=<dir>      create: host directory that keeps this instance's state

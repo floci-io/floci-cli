@@ -1,6 +1,7 @@
-Usage: floci az env [-hqvV] [--no-color] [--account=<name>] [--container=<name>] [--endpoint=<url>]
-                    [--format=connection-string|sdk-vars] [--host=<host>] [-o=text|json|yaml]
-                    [--profile=<name>] [--service=<csv>] [--shell=<shell>]
+Usage: floci az env [-hqvV] [--json] [--no-color] [--no-emoji] [--account=<name>]
+                    [--container=<name>] [--endpoint=<url>] [--format=connection-string|sdk-vars]
+                    [--host=<host>] [-o=text|json|yaml] [--profile=<name>] [--service=<csv>]
+                    [--shell=<shell>]
 Print Azure environment variables to connect to Floci Azure
       --account=<name>     Storage account name (default: devstoreaccount1)
       --container=<name>   Floci container name (default: floci-az)
@@ -9,7 +10,10 @@ Print Azure environment variables to connect to Floci Azure
                            Output mode: connection-string, sdk-vars (default: connection-string)
   -h, --help               Show this help message and exit.
       --host=<host>        Hostname for endpoint URLs (default: localhost.floci.io)
+      --json               Shorthand for --output json
       --no-color           Disable ANSI colors
+      --no-emoji           Plain ASCII marks instead of Unicode ones (the default when output is
+                             piped)
   -o, --output=text|json|yaml
                            Output format: text, json, yaml
       --profile=<name>     Config profile from ~/.floci/profiles/

@@ -1,11 +1,14 @@
-Usage: floci aws wait [-hqvV] [--no-color] [--container=<name>] [--endpoint=<url>]
-                      [-o=text|json|yaml] [--profile=<name>] [--service=<name>]
+Usage: floci aws wait [-hqvV] [--json] [--no-color] [--no-emoji] [--container=<name>]
+                      [--endpoint=<url>] [-o=text|json|yaml] [--profile=<name>] [--service=<name>]
                       [--timeout=<duration>]
 Wait until Floci AWS is ready to accept requests
       --container=<name>     Floci container name (default: floci)
       --endpoint=<url>       Floci server endpoint URL (default: http://localhost:4566)
   -h, --help                 Show this help message and exit.
+      --json                 Shorthand for --output json
       --no-color             Disable ANSI colors
+      --no-emoji             Plain ASCII marks instead of Unicode ones (the default when output is
+                               piped)
   -o, --output=text|json|yaml
                              Output format: text, json, yaml
       --profile=<name>       Config profile from ~/.floci/profiles/

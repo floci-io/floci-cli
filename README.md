@@ -312,15 +312,21 @@ All commands support `--help`.
 
 ## Global Flags
 
+Every tree takes the same flags; only the defaults differ. Marks are plain ASCII without
+`--no-emoji` too whenever the output is not a terminal (a pipe, a file, CI logs) or `NO_COLOR` is
+set. `--json` wins when it is combined with `--output`.
+
 ### AWS global flags
 
 ```
 --endpoint <url>            Floci server URL     (default: http://localhost:4566, env: FLOCI_ENDPOINT)
 --container <name>          Container name       (default: floci, env: FLOCI_CONTAINER)
 --output|-o text|json|yaml  Output format        (default: text)
+--json                      Shorthand for --output json
 --quiet, -q                 Suppress non-error output
 --verbose, -v               Debug logging to stderr
 --no-color                  Disable ANSI colors
+--no-emoji                  Plain ASCII marks (+ ! x ->) instead of Unicode ones
 --profile <name>            Load settings from ~/.floci/profiles/<name>.yaml
 ```
 
@@ -332,9 +338,11 @@ Explicit flags override the profile; the profile overrides the environment varia
 --endpoint <url>            Floci GCP server URL    (default: http://localhost:4588, env: FLOCI_GCP_ENDPOINT)
 --container <name>          Container name          (default: floci-gcp, env: FLOCI_GCP_CONTAINER)
 --output|-o text|json|yaml  Output format           (default: text)
+--json                      Shorthand for --output json
 --quiet, -q                 Suppress non-error output
 --verbose, -v               Debug logging to stderr
 --no-color                  Disable ANSI colors
+--no-emoji                  Plain ASCII marks (+ ! x ->) instead of Unicode ones
 --profile <name>            Load settings from ~/.floci/profiles/<name>.yaml
 ```
 
@@ -346,9 +354,11 @@ Explicit flags override the profile; the profile overrides the environment varia
 --endpoint <url>            Floci Azure server URL  (default: http://localhost:4577, env: FLOCI_AZ_ENDPOINT)
 --container <name>          Container name          (default: floci-az, env: FLOCI_AZ_CONTAINER)
 --output|-o text|json|yaml  Output format           (default: text)
+--json                      Shorthand for --output json
 --quiet, -q                 Suppress non-error output
 --verbose, -v               Debug logging to stderr
 --no-color                  Disable ANSI colors
+--no-emoji                  Plain ASCII marks (+ ! x ->) instead of Unicode ones
 --profile <name>            Load settings from ~/.floci/profiles/<name>.yaml
 ```
 
@@ -360,9 +370,11 @@ Explicit flags override the profile; the profile overrides the environment varia
 --endpoint <url>            Floci OCI server URL    (default: http://localhost:4599, env: FLOCI_OCI_ENDPOINT)
 --container <name>          Container name          (default: floci-oci, env: FLOCI_OCI_CONTAINER)
 --output|-o text|json|yaml  Output format           (default: text)
+--json                      Shorthand for --output json
 --quiet, -q                 Suppress non-error output
 --verbose, -v               Debug logging to stderr
 --no-color                  Disable ANSI colors
+--no-emoji                  Plain ASCII marks (+ ! x ->) instead of Unicode ones
 --profile <name>            Load settings from ~/.floci/profiles/<name>.yaml
 ```
 
@@ -459,7 +471,13 @@ floci stop                    # graceful stop (10s timeout)
 floci stop --timeout 30       # wait up to 30s before force-kill
 floci stop --timeout -1       # never force-kill: wait for the container to exit
 floci stop --remove           # also remove the container after stopping
+floci stop -o json            # {"container", "state", "stopped", "removed"}
 ```
+
+`start`, `stop` and `restart` print one document with `-o json` or `-o yaml` and nothing else on
+stdout: the progress lines are left out and docker's pull progress goes to stderr. `start` and
+`restart` report `container`, `id`, `image`, `endpoint`, `state` and `ready` (`ready` is absent
+with `--detach`). `logs` prints the container's own output and stays plain text.
 
 ### `floci status` / `floci gcp status` / `floci az status` / `floci oci status`
 
@@ -467,7 +485,12 @@ floci stop --remove           # also remove the container after stopping
 floci status                          # auto-detects endpoint from container port mapping
 floci status --container myfloci      # target a specific container
 floci status -o json                  # structured output
+floci status >/dev/null && echo up    # exit 0: the instance is up, exit 1: it is not
 ```
+
+`status` exits 0 when the server answers and its container, if there is one, is running, and 1
+otherwise, in every output format. An instance with no local container (a remote `--endpoint`, a
+Compose service under another name) counts as up when it answers.
 
 ### `floci env`
 
@@ -678,6 +701,10 @@ floci version                     # CLI version, server version, image digest
 floci version -o json
 ```
 
+`floci version` and `floci status` warn on stderr when the AWS server is older than 1.5.0, the
+oldest version this CLI supports. The GCP, Azure and OCI emulators are versioned separately and
+have no minimum yet.
+
 ### `floci services` / `floci gcp services` / `floci az services` / `floci oci services`
 
 ```sh
@@ -710,6 +737,7 @@ floci config profile list                  # list saved profiles: container, por
 floci config profile create <name>         # create a new profile with the tree's defaults
 floci config profile create <name> --container <c> --port <p> --persist <dir> --services <csv> --image <img> --namespace <ns>
 floci config profile show <name>           # show a profile
+floci config profile edit <name>           # open the profile in $VISUAL or $EDITOR, then check it still reads
 floci config profile delete <name>         # delete a profile
 floci config validate -f docker-compose.yml  # validate a Compose file
 ```
@@ -717,6 +745,21 @@ floci config validate -f docker-compose.yml  # validate a Compose file
 Each product tree has its own `config show|validate|profile` (`floci gcp config show`, ...), which
 uses that product's defaults; `config default-product` is available through bare `floci config`
 and `floci aws config`, but not through the GCP, Azure, or OCI config trees.
+
+`config validate` reads the Compose file and checks the service that runs the emulator (found by
+its image; a file with a single service is checked whatever its image is):
+
+| Check | Result when it fails |
+|---|---|
+| The emulator port is mapped over TCP (`"4566:4566"`, `"5566:4566"`, `"127.0.0.1:5566:4566"`, a range, or the long form; any host port works) | error |
+| A socket is mounted at `/var/run/docker.sock` in the container (the host side may be any socket) | error where the product needs it, otherwise a warning |
+| The volume at `/app/data` is writable and not bound to a file | error |
+| A volume at `/app/data` comes with `<PREFIX>_STORAGE_MODE=persistent`, and the other way round | warning |
+| The image tag is not older than the oldest version this CLI supports (AWS tree) | warning |
+
+It exits 1 when there is an error and 0 otherwise. `-o json` and `-o yaml` print
+`file`, `service`, `valid`, `errors` and `warnings`, also for a file that cannot be parsed. An
+`env_file` is not read, so nothing is said about a storage mode it may set.
 
 #### Profiles
 
@@ -844,6 +887,8 @@ floci completion bash >> ~/.bashrc
 floci completion zsh  >> ~/.zshrc
 ```
 
+Completion scripts are generated for bash and zsh. Any other shell name is a usage error (exit 2).
+
 ### `floci update`
 
 Self-update the CLI in place: downloads the release binary from GitHub, verifies its
@@ -893,7 +938,7 @@ Where a command's codes carry a specific meaning a script can rely on:
 | `stop` | stopped, or was not running | no such container, or Docker failed | bad flag or profile |
 | `reset` | state reset | declined, not available on this server, or no running instance to reset | no terminal to ask on and no `--yes` |
 | `config validate` | no errors (warnings allowed) | errors found, or the file cannot be read | bad flag |
-| `config profile ...` | done | not found, already exists, cannot be read, or `--port` is out of range | the profile name is not valid |
+| `config profile ...` | done | not found, already exists, cannot be read, `--port` is out of range, or (for `edit`) no editor is set, the editor failed or the file no longer parses | the profile name is not valid |
 | `config default-product` | saved | not `aws`, `gcp`, `az` or `oci`, or the file cannot be written | bad flag |
 | `env` | variables printed | | `--shell` is not supported |
 | `completion` | script printed | | the shell is not `bash` or `zsh` |

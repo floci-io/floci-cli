@@ -5,6 +5,7 @@ import io.floci.cli.ProductProfile;
 import io.floci.cli.docker.DockerClient;
 import io.floci.cli.http.FlociHttpClient;
 import io.floci.cli.output.Ansi;
+import io.floci.cli.output.Glyphs;
 import io.floci.cli.output.OutputFormat;
 import io.floci.cli.output.Printer;
 import picocli.CommandLine.*;
@@ -61,7 +62,7 @@ public class ServicesCommand implements Callable<Integer> {
         printer.println(Ansi.bold(profile.displayName() + " Services") + "  " + Ansi.gray("(" + services.size() + " enabled)"));
         printer.println("");
         for (String svc : services) {
-            printer.println("  " + Ansi.green("✓") + "  " + svc);
+            printer.println("  " + Ansi.green(Glyphs.ok()) + "  " + svc);
         }
         if (services.isEmpty()) {
             printer.println("  " + Ansi.gray("(no services reported)"));

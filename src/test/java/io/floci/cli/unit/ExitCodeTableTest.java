@@ -36,11 +36,15 @@ class ExitCodeTableTest {
             "2, start --pull sometimes",
             "2, doctor --check no.such.check",
             "2, env --shell tcsh",
+            "2, completion fish",
+            "2, status --json --no-such-flag",
             "2, config profile show ../escape",
             // Accepted by the command line, rejected by the command with 1.
             "1, update --version not-a-version",
             "1, config profile create demo --port 0",
             "1, config profile show no-such-profile",
+            "1, config profile edit no-such-profile",
+            "1, config validate -f no-such-compose-file.yml",
             // Nothing wrong.
             "0, --version",
             "0, config profile list"})

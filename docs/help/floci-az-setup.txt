@@ -1,6 +1,7 @@
-Usage: floci az setup [-hqvV] [--global] [--no-color] [--reset] [--client-id=<id>]
-                      [--client-secret=<secret>] [--container=<name>] [--endpoint=<url>]
-                      [-o=text|json|yaml] [--profile=<name>] [--subscription=<id>] [--tenant=<id>]
+Usage: floci az setup [-hqvV] [--global] [--json] [--no-color] [--no-emoji] [--reset]
+                      [--client-id=<id>] [--client-secret=<secret>] [--container=<name>]
+                      [--endpoint=<url>] [-o=text|json|yaml] [--profile=<name>]
+                      [--subscription=<id>] [--tenant=<id>]
 Point the az CLI at Floci Azure: trust its certificate, register the cloud and log in
       --client-id=<id>      Service principal client id (default:
                               00000000-0000-0000-0000-000000000003)
@@ -12,7 +13,10 @@ Point the az CLI at Floci Azure: trust its certificate, register the cloud and l
       --global              Configure your default az config (~/.azure) instead of an isolated one
                               under ~/.floci/az
   -h, --help                Show this help message and exit.
+      --json                Shorthand for --output json
       --no-color            Disable ANSI colors
+      --no-emoji            Plain ASCII marks instead of Unicode ones (the default when output is
+                              piped)
   -o, --output=text|json|yaml
                             Output format: text, json, yaml
       --profile=<name>      Config profile from ~/.floci/profiles/

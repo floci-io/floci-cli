@@ -1,12 +1,16 @@
-Usage: floci gcp snapshot import [-hqvV] [--no-color] [--container=<name>] [--endpoint=<url>]
-                                 -f=<path> [--name=<name>] [-o=text|json|yaml] [--profile=<name>]
+Usage: floci gcp snapshot import [-hqvV] [--json] [--no-color] [--no-emoji] [--container=<name>]
+                                 [--endpoint=<url>] -f=<path> [--name=<name>] [-o=text|json|yaml]
+                                 [--profile=<name>]
 Import a Floci GCP snapshot from a tarball file
       --container=<name>   Floci container name (default: floci-gcp)
       --endpoint=<url>     Floci server endpoint URL (default: http://localhost:4588)
   -f, --file=<path>        Source tarball path
   -h, --help               Show this help message and exit.
+      --json               Shorthand for --output json
       --name=<name>        Name for the imported snapshot
       --no-color           Disable ANSI colors
+      --no-emoji           Plain ASCII marks instead of Unicode ones (the default when output is
+                             piped)
   -o, --output=text|json|yaml
                            Output format: text, json, yaml
       --profile=<name>     Config profile from ~/.floci/profiles/

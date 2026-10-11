@@ -12,6 +12,7 @@ import io.floci.cli.config.ProfileDefaultValueProvider;
 import io.floci.cli.config.ProfileNotFoundException;
 import io.floci.cli.config.ProfileStore;
 import io.floci.cli.output.Ansi;
+import io.floci.cli.output.Glyphs;
 import io.floci.cli.update.UpdateNotifier;
 import picocli.CommandLine;
 import picocli.CommandLine.*;
@@ -80,6 +81,11 @@ public class FlociCli implements Runnable {
         if (colorDisabled(args, System.getenv("NO_COLOR") != null, System.console() != null)) {
             Ansi.disable();
         }
+        // Decided here too, not only when a command builds its printer: the update notice below
+        // is printed before any command runs.
+        if (plainGlyphs(args, System.getenv("NO_COLOR") != null, System.console() != null)) {
+            Glyphs.plain();
+        }
 
         // If no explicit product subcommand, route bare commands to the configured default.
         // "floci az start" and "floci aws start" always win; only bare "floci start" is affected.
@@ -103,7 +109,7 @@ public class FlociCli implements Runnable {
         if (notify) {
             UpdateNotifier.pendingNotice(CliVersion.CLI_VERSION).ifPresent(latest ->
                     System.err.println(Ansi.yellow("A new release of floci is available: "
-                            + CliVersion.CLI_VERSION + " → " + latest + "\n"
+                            + CliVersion.CLI_VERSION + " " + Glyphs.arrow() + " " + latest + "\n"
                             + "Run 'floci update' to install it") + "\n"));
             UpdateNotifier.refreshInBackground();
         }
@@ -154,6 +160,13 @@ public class FlociCli implements Runnable {
      * arguments here as well as by {@code GlobalOptions.printer()}: a parse error is printed by the
      * exception handlers before any command, and so any printer, exists.
      */
+    /** Whether marks are plain ASCII for this invocation, read from the raw arguments like {@link #colorDisabled}. */
+    public static boolean plainGlyphs(String[] args, boolean noColorEnv, boolean interactive) {
+        boolean flag = Arrays.stream(args)
+                .anyMatch(a -> a.equals("--no-emoji") || a.equalsIgnoreCase("--no-emoji=true"));
+        return GlobalOptions.plainGlyphs(flag, interactive, noColorEnv);
+    }
+
     public static boolean colorDisabled(String[] args, boolean noColorEnv, boolean interactive) {
         return noColorEnv || !interactive || Arrays.stream(args)
                 .anyMatch(a -> a.equals("--no-color") || a.equalsIgnoreCase("--no-color=true"));

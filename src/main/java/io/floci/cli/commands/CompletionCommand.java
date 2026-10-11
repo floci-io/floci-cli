@@ -21,7 +21,9 @@ public class CompletionCommand implements Callable<Integer> {
     @Spec
     Model.CommandSpec spec;
 
-    @Parameters(index = "0", description = "Shell type: bash, zsh, fish, powershell", paramLabel = "bash|zsh|fish|powershell")
+    // Only the shells a script is generated for: picocli writes bash completion, which zsh loads
+    // through bashcompinit. Listing fish and powershell here promised scripts that do not exist.
+    @Parameters(index = "0", description = "Shell type: bash or zsh", paramLabel = "bash|zsh")
     String shell;
 
     @Override
@@ -36,13 +38,13 @@ public class CompletionCommand implements Callable<Integer> {
             case "bash" -> AutoComplete.bash("floci", root);
             case "zsh"  -> AutoComplete.bash("floci", root); // zsh is bash-compatible; picocli bash script works for zsh too
             default -> {
-                printer.error("Shell '" + shell + "' not supported. Supported: bash, zsh\n" +
-                        "For fish and powershell, track https://github.com/floci-io/floci-cli/issues");
+                printer.error("Shell '" + shell + "' is not supported.\nUse bash or zsh.");
                 yield null;
             }
         };
 
-        if (script == null) return 1;
+        // A value the command cannot accept, like any other bad argument.
+        if (script == null) return ExitCode.USAGE;
         System.out.print(script);
         return 0;
     }
