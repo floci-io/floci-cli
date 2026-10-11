@@ -13,7 +13,9 @@ import io.floci.cli.output.Printer;
 import picocli.CommandLine.*;
 
 import java.io.Console;
+import java.net.URI;
 import java.util.LinkedHashMap;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.Callable;
@@ -86,16 +88,17 @@ public class ResetCommand implements Callable<Integer> {
      * chose must be found running.
      *
      * <p>An endpoint that a profile or {@code <PREFIX>_ENDPOINT} supplies names a server just as
-     * a typed one does. With no container chosen it is used as given too: looking up the default
-     * container instead, as {@link GlobalOptions#resolvedEndpoint} does, would reset whatever
-     * runs locally under the default name rather than the server the user pointed at. Only when
+     * a typed one does, so with no container chosen it is not silently replaced by a container
+     * that runs locally under the default name. But a profile carries a container name as well
+     * (every created profile is seeded with the default one), so the two can point at different
+     * servers. When they do, nothing is reset: the user has to say which one is meant. Only when
      * nothing at all was selected is the default container looked up, falling back to the
      * default endpoint, which names the same default instance.
      */
     public Target target() {
         if (global.typed("--endpoint")) return new Target(global.endpoint, null);
         boolean chosen = global.typed("--container") || !profile.defaultContainer().equals(global.container);
-        if (!chosen && namesAServer(global.endpoint, profile)) return new Target(global.endpoint, null);
+        if (!chosen && namesAServer(global.endpoint, profile)) return namedEndpoint();
         String how = "\nRun '" + profile.commandPrefix() + " status" + global.instanceSelector()
                 + "' to check it, or pass --endpoint <url> to name the server to reset.";
         Optional<DockerClient.ContainerInfo> info;
@@ -125,6 +128,43 @@ public class ResetCommand implements Callable<Integer> {
                     + "' publishes no port for the emulator, so nothing was reset." + how);
         }
         return new Target(published.orElse(global.endpoint), null);
+    }
+
+    // The configured endpoint names a server and the container name is only the default one. The
+    // endpoint is used, unless a container of that name is running here and is a different
+    // server: then the configuration is ambiguous, and a reset must not pick.
+    private Target namedEndpoint() {
+        Optional<String> local;
+        try {
+            local = docker.inspectContainer(global.container)
+                    .filter(info -> "running".equals(info.state()))
+                    .flatMap(info -> GlobalOptions.publishedEndpoint(info.ports(), profile.defaultPort()));
+        } catch (DockerException e) {
+            local = Optional.empty(); // nothing known to contradict the endpoint
+        }
+        if (local.isEmpty() || sameLocalServer(local.get(), global.endpoint)) {
+            return new Target(global.endpoint, null);
+        }
+        return new Target(null, "The configured endpoint is " + global.endpoint + ", but container '" + global.container
+                + "' is running at " + local.get() + ". They are different servers, so nothing was reset."
+                + "\nPass --endpoint <url> or --container <name> to say which one to reset.");
+    }
+
+    /**
+     * Whether {@code configured} is the server a local container publishes at {@code published}
+     * ({@code http://localhost:<port>}): the same port, on a host name that means this machine.
+     */
+    public static boolean sameLocalServer(String published, String configured) {
+        try {
+            URI here = URI.create(published);
+            URI there = URI.create(withoutTrailingSlashes(configured));
+            String host = there.getHost() == null ? "" : there.getHost().toLowerCase(Locale.ROOT);
+            boolean thisMachine = host.equals("localhost") || host.equals("127.0.0.1") || host.equals("[::1]")
+                    || host.equals("::1") || host.equals("0.0.0.0") || host.equals("localhost.floci.io");
+            return thisMachine && here.getPort() == there.getPort();
+        } catch (IllegalArgumentException e) {
+            return false;
+        }
     }
 
     /**

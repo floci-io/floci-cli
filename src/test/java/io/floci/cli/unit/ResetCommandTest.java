@@ -182,31 +182,75 @@ class ResetCommandTest {
     }
 
     /**
-     * BL-084: an endpoint from a profile names a server just as a typed one does. A container that
-     * happens to run locally under the default name must not take its place.
+     * BL-084: an endpoint from a profile names a server, and a container that happens to run
+     * locally under the default name must never take its place. A created profile also carries
+     * that default container name, so when the two are different servers nothing is reset.
      */
     @Test
-    void anEndpointFromAProfileIsNotReplacedByTheLocalDefaultContainer() throws Exception {
+    void anEndpointFromAProfileIsNeverReplacedByTheLocalDefaultContainer() throws Exception {
         DockerClient local = dockerWith("floci", "running", "4566->4566/tcp");
 
-        ResetCommand.Target target = targetWithProfile(local, "endpoint: http://remote-host:4566\n");
+        ResetCommand.Target target = targetWithProfile(local, "container: floci\nendpoint: http://remote-host:4566\n");
+
+        assertNull(target.endpoint(), "neither server is picked");
+        assertTrue(target.error().contains("The configured endpoint is http://remote-host:4566"), target.error());
+        assertTrue(target.error().contains("container 'floci' is running at http://localhost:4566"), target.error());
+        assertTrue(target.error().contains("so nothing was reset."), target.error());
+        assertTrue(target.error().contains("Pass --endpoint <url> or --container <name>"), target.error());
+    }
+
+    /** The same holds with the container name left out of the profile, or a local port that differs. */
+    @ParameterizedTest
+    @ValueSource(strings = {"endpoint: http://remote-host:4566\n", "endpoint: http://localhost:14566\n",
+            "container: floci\nendpoint: http://localhost:14566\nport: 14566\n"})
+    void aRunningDefaultContainerThatIsAnotherServerStopsTheReset(String yaml) throws Exception {
+        ResetCommand.Target target = targetWithProfile(dockerWith("floci", "running", "4566->4566/tcp"), yaml);
+
+        assertNull(target.endpoint(), yaml);
+        assertTrue(target.error().contains("They are different servers, so nothing was reset."), target.error());
+    }
+
+    /** No local container to contradict it: the endpoint the profile names is the server. */
+    @ParameterizedTest
+    @CsvSource({"something-else, running, ''", "floci, exited, ''", "floci, running, '18080->8080/tcp'"})
+    void anEndpointFromAProfileIsUsedWhenNoLocalContainerContradictsIt(String name, String state, String ports) throws Exception {
+        ResetCommand.Target target = targetWithProfile(dockerWith(name, state, ports), "endpoint: http://remote-host:4566\n");
 
         assertNull(target.error(), target.error());
         assertEquals("http://remote-host:4566", target.endpoint());
     }
 
-    /** The same server is reset whether or not something runs locally under the default name. */
+    /** The endpoint and the running container are one server: the profile is consistent, reset goes ahead. */
+    @ParameterizedTest
+    @ValueSource(strings = {"http://localhost:14566", "http://127.0.0.1:14566", "http://localhost.floci.io:14566", "http://localhost:14566/"})
+    void anEndpointThatIsTheRunningContainerIsUsed(String endpoint) throws Exception {
+        ResetCommand.Target target = targetWithProfile(dockerWith("floci", "running", "14566->4566/tcp"),
+                "container: floci\nport: 14566\nendpoint: " + endpoint + "\n");
+
+        assertNull(target.error(), target.error());
+        assertEquals(endpoint, target.endpoint());
+    }
+
     @Test
-    void anEndpointFromAProfileResolvesTheSameWithOrWithoutALocalContainer() throws Exception {
-        String yaml = "endpoint: http://localhost:14566\n";
+    void sameLocalServerComparesPortAndWhetherTheHostIsThisMachine() {
+        assertTrue(ResetCommand.sameLocalServer("http://localhost:4566", "http://127.0.0.1:4566"));
+        assertTrue(ResetCommand.sameLocalServer("http://localhost:4566", "https://localhost:4566/"));
+        assertFalse(ResetCommand.sameLocalServer("http://localhost:4566", "http://localhost:14566"));
+        assertFalse(ResetCommand.sameLocalServer("http://localhost:4566", "http://remote-host:4566"));
+        assertFalse(ResetCommand.sameLocalServer("http://localhost:4566", "not a url"));
+    }
 
-        ResetCommand.Target running = targetWithProfile(dockerWith("floci", "running", "4566->4566/tcp"), yaml);
-        ResetCommand.Target absent = targetWithProfile(dockerWith("something-else", "running", ""), yaml);
-        ResetCommand.Target stopped = targetWithProfile(dockerWith("floci", "exited", ""), yaml);
+    /** When docker cannot be asked, nothing contradicts the endpoint the user configured. */
+    @Test
+    void aDockerFailureDoesNotOverrideAConfiguredEndpoint() throws Exception {
+        DockerClient broken = new DockerClient() {
+            @Override
+            public Optional<ContainerInfo> inspectContainer(String name) throws DockerException {
+                throw new DockerException("Cannot connect to the Docker daemon");
+            }
+        };
 
-        assertEquals("http://localhost:14566", running.endpoint());
-        assertEquals(running, absent);
-        assertEquals(running, stopped);
+        assertEquals("http://remote-host:4566", targetWithProfile(broken, "endpoint: http://remote-host:4566\n").endpoint());
     }
 
     /** A profile that names a container is found through the container, endpoint or not. */
@@ -257,7 +301,32 @@ class ResetCommandTest {
     void yesWithAProfileEndpointPostsToThatEndpoint() throws Exception {
         Files.createDirectories(tempDir);
         Files.writeString(tempDir.resolve("p.yaml"), "endpoint: http://127.0.0.1:" + server.getAddress().getPort() + "\n");
-        // A local default container on another port: resetting it would hit nothing and fail.
+        // A stopped container of the default name does not contradict the profile's endpoint.
+        ResetCommand reset = new ResetCommand(ProductProfile.AWS, dockerWith("floci", "exited", ""), NOBODY);
+        PrintStream out = System.out;
+        PrintStream err = System.err;
+        ByteArrayOutputStream errBuf = new ByteArrayOutputStream();
+        System.setOut(new PrintStream(new ByteArrayOutputStream()));
+        System.setErr(new PrintStream(errBuf));
+        int exit;
+        try {
+            exit = new CommandLine(reset)
+                    .setDefaultValueProvider(new ProfileDefaultValueProvider(new ProfileStore(tempDir)))
+                    .execute("--yes", "--profile", "p");
+        } finally {
+            System.setOut(out);
+            System.setErr(err);
+        }
+
+        assertEquals(0, exit, errBuf.toString());
+        assertEquals(List.of("POST /_floci/state/reset"), requests);
+    }
+
+    /** End to end with --yes: two different servers, no request at all. */
+    @Test
+    void yesWithAContradictingLocalContainerSendsNothing() throws Exception {
+        Files.createDirectories(tempDir);
+        Files.writeString(tempDir.resolve("p.yaml"), "endpoint: http://127.0.0.1:" + server.getAddress().getPort() + "\n");
         int elsewhere;
         try (ServerSocket socket = new ServerSocket(0)) {
             elsewhere = socket.getLocalPort();
@@ -279,8 +348,9 @@ class ResetCommandTest {
             System.setErr(err);
         }
 
-        assertEquals(0, exit, errBuf.toString());
-        assertEquals(List.of("POST /_floci/state/reset"), requests);
+        assertEquals(1, exit);
+        assertEquals(List.of(), requests, "nothing was reset");
+        assertTrue(errBuf.toString().contains("They are different servers"), errBuf.toString());
     }
 
     @Test
