@@ -4,6 +4,7 @@ import com.sun.net.httpserver.HttpServer;
 import io.floci.cli.FlociCli;
 import io.floci.cli.ProductProfile;
 import io.floci.cli.commands.ResetCommand;
+import io.floci.cli.config.ProfileDefaultValueProvider;
 import io.floci.cli.config.ProfileStore;
 import io.floci.cli.docker.DockerClient;
 import io.floci.cli.docker.DockerException;
@@ -20,6 +21,7 @@ import java.io.OutputStream;
 import java.io.PrintStream;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -212,6 +214,35 @@ class ResetCommandTest {
                 "--container", "floci-team-b");
 
         assertEquals("http://localhost:14566", target.endpoint());
+    }
+
+    /**
+     * An instance on its own host port: the profile's endpoint names that host port (14566), the
+     * container still listens on the emulator's (4566). It is found by the latter.
+     */
+    @Test
+    void anInstanceOnACustomHostPortIsFoundByTheEmulatorsPort() throws Exception {
+        Files.createDirectories(tempDir);
+        Files.writeString(tempDir.resolve("team-b.yaml"),
+                "container: floci-team-b\nendpoint: http://localhost:14566\nport: 14566\n");
+        ResetCommand reset = new ResetCommand(ProductProfile.AWS,
+                dockerWith("floci-team-b", "running", "14566->4566/tcp"), NOBODY);
+        new CommandLine(reset)
+                .setDefaultValueProvider(new ProfileDefaultValueProvider(new ProfileStore(tempDir)))
+                .parseArgs("--profile", "team-b");
+
+        ResetCommand.Target target = reset.target();
+
+        assertNull(target.error(), target.error());
+        assertEquals("http://localhost:14566", target.endpoint());
+    }
+
+    @Test
+    void theOtherProductsAreFoundByTheirOwnPort() {
+        ResetCommand gcp = new ResetCommand(ProductProfile.GCP, dockerWith("floci-gcp-b", "running", "14588->4588/tcp"), NOBODY);
+        new CommandLine(gcp).parseArgs("--container", "floci-gcp-b");
+
+        assertEquals("http://localhost:14588", gcp.target().endpoint());
     }
 
     /** The default container without a published port (host networking) is still the default instance. */

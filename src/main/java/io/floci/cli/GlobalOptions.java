@@ -148,29 +148,32 @@ public class GlobalOptions {
 
     // Matches the container-side port from the configured endpoint to find the actual host port.
     public String endpointFromPorts(String ports, String fallback) {
-        return publishedEndpoint(ports, fallback).orElse(fallback);
+        if (ports == null || ports.isBlank()) return fallback;
+        try {
+            int containerPort = URI.create(fallback).getPort();
+            if (containerPort == -1) containerPort = product.defaultPort();
+            return publishedEndpoint(ports, containerPort).orElse(fallback);
+        } catch (Exception ignored) {}
+        return fallback;
     }
 
     /**
-     * The endpoint a container with these published {@code ports} is reached on, or empty when it
-     * publishes no port for the one {@code configured} names. For callers that must not fall back.
+     * Where a container with these published {@code ports} ("14566->4566/tcp ...") is reached for
+     * its {@code containerPort}, or empty when that port is not published. For callers that must
+     * not fall back to a configured endpoint.
      */
-    public Optional<String> publishedEndpoint(String ports, String configured) {
+    public static Optional<String> publishedEndpoint(String ports, int containerPort) {
         if (ports == null || ports.isBlank()) return Optional.empty();
-        try {
-            int containerPort = URI.create(configured).getPort();
-            if (containerPort == -1) containerPort = product.defaultPort();
-            for (String mapping : ports.trim().split("\\s+")) {
-                int arrow = mapping.indexOf("->");
-                if (arrow < 0) continue;
-                String hostPort = mapping.substring(0, arrow);
-                String rest = mapping.substring(arrow + 2);
-                String cPort = rest.contains("/") ? rest.substring(0, rest.indexOf('/')) : rest;
-                if (String.valueOf(containerPort).equals(cPort)) {
-                    return Optional.of("http://localhost:" + hostPort);
-                }
+        for (String mapping : ports.trim().split("\\s+")) {
+            int arrow = mapping.indexOf("->");
+            if (arrow < 0) continue;
+            String hostPort = mapping.substring(0, arrow);
+            String rest = mapping.substring(arrow + 2);
+            String cPort = rest.contains("/") ? rest.substring(0, rest.indexOf('/')) : rest;
+            if (String.valueOf(containerPort).equals(cPort)) {
+                return Optional.of("http://localhost:" + hostPort);
             }
-        } catch (Exception ignored) {}
+        }
         return Optional.empty();
     }
 
