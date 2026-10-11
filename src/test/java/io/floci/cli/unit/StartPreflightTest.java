@@ -61,6 +61,11 @@ class StartPreflightTest {
         }
 
         @Override
+        public void pull(String image, String policy, PrintStream progress) {
+            calls.add("pull");
+        }
+
+        @Override
         public String startContainer(List<String> args) {
             runArgs.addAll(args);
             calls.add("run");

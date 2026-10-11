@@ -10,6 +10,7 @@ import io.floci.cli.doctor.CheckStatus;
 import io.floci.cli.doctor.checks.DockerSocketCheck;
 import io.floci.cli.doctor.checks.PortAvailableCheck;
 import io.floci.cli.output.Ansi;
+import io.floci.cli.output.OutputFormat;
 import io.floci.cli.output.Printer;
 import picocli.CommandLine;
 import picocli.CommandLine.*;
@@ -19,10 +20,13 @@ import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.TreeMap;
 import java.util.concurrent.Callable;
+import java.util.function.Consumer;
 import java.util.regex.Pattern;
 
 @Command(
@@ -295,6 +299,10 @@ public class StartCommand implements Callable<Integer> {
     @Override
     public Integer call() {
         Printer printer = global.printer();
+        // Structured output is one document on stdout: the progress lines a person reads are
+        // left out, and docker's own pull progress goes to stderr.
+        boolean structured = printer.format() != OutputFormat.text;
+        Consumer<String> progress = structured ? line -> { } : printer::println;
 
         String invalid = validationError();
         if (invalid != null) {
@@ -323,7 +331,7 @@ public class StartCommand implements Callable<Integer> {
                     return 1;
                 }
                 // Remove stopped container so we can start fresh
-                printer.println(Ansi.gray("Removing stopped container '" + global.container + "'..."));
+                progress.accept(Ansi.gray("Removing stopped container '" + global.container + "'..."));
                 docker.removeContainer(global.container);
             }
         } catch (DockerException e) {
@@ -350,8 +358,12 @@ public class StartCommand implements Callable<Integer> {
 
         // Pull image if needed
         try {
-            printer.println(Ansi.gray("Checking image " + image + " (policy: " + pull + ")..."));
-            docker.pull(image, pull);
+            progress.accept(Ansi.gray("Checking image " + image + " (policy: " + pull + ")..."));
+            if (structured) {
+                docker.pull(image, pull, System.err);
+            } else {
+                docker.pull(image, pull);
+            }
         } catch (DockerException e) {
             printer.error("Failed to pull image: " + e.getMessage() + "\nRun '" + profile.commandPrefix() + " start --pull never' to skip pulling.");
             return 1;
@@ -359,32 +371,51 @@ public class StartCommand implements Callable<Integer> {
 
         List<String> args = dockerRunArgs(DockerClient.dockerSocketRunArgs(), daemon);
 
+        String id;
         try {
-            printer.println("Starting " + Ansi.gold(profile.displayName()) + " container...");
-            String id = docker.startContainer(args);
-            printer.println(Ansi.green("Container started") + " (" + id.substring(0, Math.min(12, id.length())) + ")");
+            progress.accept("Starting " + Ansi.gold(profile.displayName()) + " container...");
+            id = docker.startContainer(args);
+            progress.accept(Ansi.green("Container started") + " (" + id.substring(0, Math.min(12, id.length())) + ")");
         } catch (DockerException e) {
             printer.error("Failed to start container: " + e.getMessage(),
                     "Run '" + profile.commandPrefix() + " doctor' to check Docker, the image and the port.");
             return 1;
         }
 
+        // The endpoint of the port actually bound, keeping whatever host the endpoint already
+        // names — a profile or --endpoint may well point somewhere else.
+        String endpoint = withPort(global.endpoint, port);
+
         if (detach) {
-            printer.println(Ansi.gray("Detached. Run '" + profile.commandPrefix() + " wait' to poll for readiness."));
+            progress.accept(Ansi.gray("Detached. Run '" + profile.commandPrefix() + " wait' to poll for readiness."));
+            if (structured) printer.structured(result(id, endpoint, null));
             return 0;
         }
 
-        // Point the readiness poll at the port actually bound, keeping whatever host the
-        // endpoint already names — a profile or --endpoint may well point somewhere else.
-        global.endpoint = withPort(global.endpoint, port);
+        global.endpoint = endpoint;
 
         // Wait for readiness
-        printer.println(Ansi.gray("Waiting for " + profile.displayName() + " to be ready..."));
+        progress.accept(Ansi.gray("Waiting for " + profile.displayName() + " to be ready..."));
         WaitCommand wait = new WaitCommand(profile);
         wait.global = global;
-        wait.knownEndpoint = global.endpoint;
+        wait.knownEndpoint = endpoint;
         wait.timeout = "30s";
-        return wait.call();
+        wait.embedded = true;
+        int exit = wait.call();
+        if (structured) printer.structured(result(id, endpoint, exit == 0));
+        return exit;
+    }
+
+    // What -o json/yaml reports for a start: 'ready' is left out when --detach did not wait for it.
+    private Map<String, Object> result(String id, String endpoint, Boolean ready) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("container", global.container);
+        result.put("id", id);
+        result.put("image", image);
+        result.put("endpoint", endpoint);
+        result.put("state", "running");
+        if (ready != null) result.put("ready", ready);
+        return result;
     }
 
     /**

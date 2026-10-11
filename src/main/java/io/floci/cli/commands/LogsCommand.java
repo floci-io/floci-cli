@@ -4,6 +4,7 @@ import io.floci.cli.GlobalOptions;
 import io.floci.cli.ProductProfile;
 import io.floci.cli.docker.DockerClient;
 import io.floci.cli.docker.DockerException;
+import io.floci.cli.output.OutputFormat;
 import io.floci.cli.output.Printer;
 import picocli.CommandLine.*;
 
@@ -56,6 +57,11 @@ public class LogsCommand implements Callable<Integer> {
         } catch (DockerException e) {
             printer.error("Failed to inspect container: " + e.withNextStep(DockerClient.CHECK_DOCKER));
             return 1;
+        }
+
+        if (printer.format() != OutputFormat.text) {
+            // Logs are the container's own output, line by line; there is no document to build.
+            printer.warn("logs prints the container's output as plain text; -o " + printer.format() + " is ignored.");
         }
 
         if (service != null) {

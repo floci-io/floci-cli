@@ -6,6 +6,7 @@ import io.floci.cli.config.ProfileDefaultValueProvider;
 import io.floci.cli.config.ProfileNotFoundException;
 import io.floci.cli.docker.DockerClient;
 import io.floci.cli.docker.DockerException;
+import io.floci.cli.output.OutputFormat;
 import io.floci.cli.output.Printer;
 import picocli.CommandLine.*;
 import picocli.CommandLine.Model.CommandSpec;
@@ -81,7 +82,9 @@ public class RestartCommand implements Callable<Integer> {
 
         if (!containerExists()) {
             // Nothing to stop: start it, rather than failing on the stop.
-            printer.println("Container '" + global.container + "' not found; starting it.");
+            if (printer.format() == OutputFormat.text) {
+                printer.println("Container '" + global.container + "' not found; starting it.");
+            }
             return start.call();
         }
 
@@ -97,8 +100,10 @@ public class RestartCommand implements Callable<Integer> {
      * that follows needs neither a pause nor a second inspect-and-remove of its own.
      */
     public StopCommand buildStopCommand() {
-        StopCommand stop = new StopCommand(profile);
+        StopCommand stop = new StopCommand(profile, docker);
         stop.global = global;
+        // The start that follows reports the restart; one structured document, not two.
+        stop.embedded = true;
         stop.remove = true;
         stop.timeout = 10;
         return stop;
