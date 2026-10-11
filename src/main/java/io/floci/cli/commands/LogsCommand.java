@@ -54,7 +54,7 @@ public class LogsCommand implements Callable<Integer> {
                 return 1;
             }
         } catch (DockerException e) {
-            printer.error("Failed to inspect container: " + e.getMessage(), DockerClient.CHECK_DOCKER);
+            printer.error("Failed to inspect container: " + e.withNextStep(DockerClient.CHECK_DOCKER));
             return 1;
         }
 
@@ -66,7 +66,7 @@ public class LogsCommand implements Callable<Integer> {
             docker.streamLogs(global.container, follow, tail, since);
             return 0;
         } catch (DockerException e) {
-            printer.error("Failed to fetch logs: " + e.getMessage(), DockerClient.CHECK_DOCKER);
+            printer.error("Failed to fetch logs: " + e.withNextStep(DockerClient.CHECK_DOCKER));
             return 1;
         }
     }

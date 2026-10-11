@@ -46,7 +46,9 @@ public final class Printer {
      * own (a second line), as messages from DockerException or FlociException often do.
      */
     public void error(String message, String nextStep) {
-        error(message.contains("\n") ? message : message + "\n" + nextStep);
+        // A trailing newline is not a second line: forwarded output often ends with one.
+        String text = message.stripTrailing();
+        error(text.contains("\n") ? text : text + "\n" + nextStep);
     }
 
     public void warn(String message) {

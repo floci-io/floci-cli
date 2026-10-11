@@ -59,7 +59,7 @@ public class SnapshotListCommand implements Callable<Integer> {
                         "Track progress: " + profile.serverRepo() + "/issues");
             } else {
                 printer.error("Failed to list snapshots: " + e.getMessage(),
-                        "Run '" + profile.commandPrefix() + " status' to check the emulator.");
+                        "Run '" + profile.commandPrefix() + " status" + global.instanceSelector() + "' to check the emulator.");
             }
             return 1;
         }

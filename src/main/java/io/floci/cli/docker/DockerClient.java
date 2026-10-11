@@ -255,7 +255,7 @@ public class DockerClient {
             String out = stdout.join();
             String err = stderr.join();
             if (proc.exitValue() != 0) {
-                throw new DockerException(err.isBlank() ? out : err);
+                throw DockerException.ofOutput(err.isBlank() ? out : err);
             }
             return out;
         } catch (InterruptedException e) {

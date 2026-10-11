@@ -14,7 +14,8 @@ import static org.junit.jupiter.api.Assertions.*;
  * AGENTS.md: every {@code printer.error(...)} ends with a suggested next step. A call that writes
  * its own text must either put a second line in it or pass the next step as a second argument;
  * a call that only forwards a message (a variable or {@code e.getMessage()}) is trusted to forward
- * one that already has it.
+ * one that already has it. {@code e.withNextStep(...)} on a DockerException is the third way: the
+ * exception knows whether its text is docker's raw output or already carries advice.
  */
 class ErrorHintConventionTest {
 
@@ -28,7 +29,8 @@ class ErrorHintConventionTest {
                 while ((at = src.indexOf("printer.error(", at)) >= 0) {
                     int start = at + "printer.error(".length();
                     String args = argumentsFrom(src, start);
-                    if (args.contains("\"") && !args.contains("\\n") && !hasTopLevelComma(args)) {
+                    if (args.contains("\"") && !args.contains("\\n") && !hasTopLevelComma(args)
+                            && !args.contains(".withNextStep(")) {
                         int line = (int) src.substring(0, at).chars().filter(c -> c == '\n').count() + 1;
                         missing.add(file + ":" + line);
                     }

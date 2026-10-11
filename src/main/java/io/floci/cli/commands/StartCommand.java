@@ -332,7 +332,10 @@ public class StartCommand implements Callable<Integer> {
                 return 1;
             }
             // The socket guidance, when there is any, is the next step; otherwise the general one.
-            printer.error("Failed to inspect container: " + e.getMessage() + socketGuidance(daemon), DockerClient.CHECK_DOCKER);
+            String guidance = socketGuidance(daemon);
+            printer.error("Failed to inspect container: " + (guidance.isEmpty()
+                    ? e.withNextStep(DockerClient.CHECK_DOCKER)
+                    : e.getMessage().strip() + guidance));
             return 1;
         }
 
