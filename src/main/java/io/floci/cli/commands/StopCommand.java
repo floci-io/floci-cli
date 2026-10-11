@@ -90,18 +90,33 @@ public class StopCommand implements Callable<Integer> {
             return 1;
         }
 
-        if (remove) {
+        // What is left of it: a container run with docker's --rm is gone the moment it stops,
+        // whatever --remove said, so the result is read back rather than assumed.
+        String state = stateNow();
+        boolean gone = state == null;
+        if (remove && !gone) {
             try {
                 docker.removeContainer(global.container);
-                progress.accept("Container removed.");
+                gone = true;
             } catch (DockerException e) {
                 printer.error("Failed to remove container: " + e.withNextStep(DockerClient.CHECK_DOCKER));
                 return 1;
             }
         }
+        if (remove) progress.accept("Container removed.");
 
-        report(printer, structured, remove ? "removed" : "exited", true, remove);
+        report(printer, structured, gone ? "removed" : state, true, gone);
         return 0;
+    }
+
+    // The container's state as docker has it now; null when it no longer exists. A lookup that
+    // fails after a stop that succeeded is reported as the state the stop leaves behind.
+    private String stateNow() {
+        try {
+            return docker.inspectContainer(global.container).map(DockerClient.ContainerInfo::state).orElse(null);
+        } catch (DockerException e) {
+            return "exited";
+        }
     }
 
     // What -o json/yaml reports for a stop: the state the container was left in, whether this

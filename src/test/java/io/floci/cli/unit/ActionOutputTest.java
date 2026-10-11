@@ -1,7 +1,10 @@
 package io.floci.cli.unit;
 
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.MappingIterator;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import com.sun.net.httpserver.HttpServer;
 import io.floci.cli.ProductProfile;
 import io.floci.cli.commands.RestartCommand;
@@ -44,7 +47,20 @@ class ActionOutputTest {
 
     // A remote daemon, so start does not probe the local port its own stub server listens on.
     private static final DockerHost REMOTE = new DockerHost(Kind.TCP, null, "tcp://build-host:2375");
-    private static final ObjectMapper JSON = new ObjectMapper();
+    // One document and nothing after it: a second value on stdout fails the parse.
+    private static final ObjectMapper JSON = new ObjectMapper().enable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS);
+    private static final ObjectMapper YAML = new ObjectMapper(new YAMLFactory());
+
+    /** The single YAML document on {@code stdout}; fails when there are several, or none. */
+    private static JsonNode oneYamlDocument(String stdout) throws Exception {
+        List<JsonNode> documents = new ArrayList<>();
+        try (MappingIterator<JsonNode> all = YAML.readerFor(JsonNode.class).readValues(stdout)) {
+            all.forEachRemaining(documents::add);
+        }
+        assertEquals(1, documents.size(), "exactly one YAML document on stdout: " + stdout);
+        assertTrue(documents.get(0).isObject(), stdout);
+        return documents.get(0);
+    }
 
     @TempDir
     Path tempDir;
@@ -188,12 +204,48 @@ class ActionOutputTest {
     }
 
     @Test
-    void startInYamlIsOneDocumentToo() {
+    void startInYamlIsOneDocumentToo() throws Exception {
         Run r = execute(new StartCommand(ProductProfile.AWS, new FakeDocker(null)), startArgs("-o", "yaml", "--detach"));
 
         assertEquals(0, r.exit(), r.err());
-        assertTrue(r.out().startsWith("container: \"floci-actions\""), r.out());
-        assertFalse(r.out().contains("Detached."), r.out());
+        JsonNode yaml = oneYamlDocument(r.out());
+        assertEquals("floci-actions", yaml.path("container").asText());
+        assertEquals("running", yaml.path("state").asText());
+        assertEquals(5, yaml.size(), "container, id, image, endpoint, state: " + r.out());
+    }
+
+    @Test
+    void anythingExtraOnStdoutFailsTheseTests() {
+        assertThrows(Exception.class, () -> JSON.readTree("{\"a\":1}\n{\"b\":2}\n"));
+        assertThrows(Exception.class, () -> JSON.readTree("{\"a\":1}\nStarting...\n"));
+        assertThrows(AssertionError.class, () -> oneYamlDocument("a: 1\n---\nb: 2\n"));
+    }
+
+    /** A container that died while start waited for it is reported as it is, not as running. */
+    @Test
+    void aContainerThatExitedDuringTheWaitIsNotReportedRunning() throws Exception {
+        emulator.stop(0); // nothing answers the readiness poll
+        FakeDocker docker = new FakeDocker(null) {
+            @Override
+            public String startContainer(List<String> args) {
+                String id = super.startContainer(args);
+                state = "exited"; // it crashed right after docker run returned
+                return id;
+            }
+        };
+        StartCommand start = new StartCommand(ProductProfile.AWS, docker) {
+            @Override
+            protected String readinessTimeout() {
+                return "300ms";
+            }
+        };
+
+        Run r = execute(start, startArgs("-o", "json"));
+
+        assertEquals(1, r.exit());
+        JsonNode json = JSON.readTree(r.out());
+        assertEquals("exited", json.path("state").asText());
+        assertFalse(json.path("ready").asBoolean());
     }
 
     /** Text output is what it was: the progress lines, and docker's pull output on stdout. */
@@ -228,6 +280,29 @@ class ActionOutputTest {
         assertTrue(json.path("stopped").asBoolean());
         assertEquals(remove, json.path("removed").asBoolean());
         assertEquals(List.of(calls.split(";")), docker.calls);
+    }
+
+    /** A container run with docker's --rm is gone once it stops, whatever --remove said. */
+    @ParameterizedTest
+    @CsvSource({"false", "true"})
+    void aContainerDockerRemovesItselfIsReportedRemoved(boolean remove) throws Exception {
+        FakeDocker docker = new FakeDocker("running") {
+            @Override
+            public void stopContainer(String name, int timeout) {
+                calls.add("stop");
+                state = null; // --rm: docker removed it
+            }
+        };
+        List<String> args = new ArrayList<>(List.of("-o", "json"));
+        if (remove) args.add("--remove");
+
+        Run r = execute(new StopCommand(ProductProfile.AWS, docker), args.toArray(String[]::new));
+
+        assertEquals(0, r.exit(), r.err());
+        JsonNode json = JSON.readTree(r.out());
+        assertEquals("removed", json.path("state").asText());
+        assertTrue(json.path("removed").asBoolean());
+        assertEquals(List.of("stop"), docker.calls, "nothing left to remove");
     }
 
     @Test

@@ -399,11 +399,16 @@ public class StartCommand implements Callable<Integer> {
         WaitCommand wait = new WaitCommand(profile);
         wait.global = global;
         wait.knownEndpoint = endpoint;
-        wait.timeout = "30s";
+        wait.timeout = readinessTimeout();
         wait.embedded = true;
         int exit = wait.call();
         if (structured) printer.structured(result(id, endpoint, exit == 0));
         return exit;
+    }
+
+    /** How long start waits for the emulator to answer. A seam: tests do not wait half a minute. */
+    protected String readinessTimeout() {
+        return "30s";
     }
 
     // What -o json/yaml reports for a start: 'ready' is left out when --detach did not wait for it.
@@ -413,9 +418,19 @@ public class StartCommand implements Callable<Integer> {
         result.put("id", id);
         result.put("image", image);
         result.put("endpoint", endpoint);
-        result.put("state", "running");
+        result.put("state", stateNow());
         if (ready != null) result.put("ready", ready);
         return result;
+    }
+
+    // Read back, not assumed: a container that crashed while start waited for it has exited, and
+    // a script must not be told it is running. "unknown" when docker cannot say.
+    private String stateNow() {
+        try {
+            return docker.inspectContainer(global.container).map(DockerClient.ContainerInfo::state).orElse("removed");
+        } catch (DockerException e) {
+            return "unknown";
+        }
     }
 
     /**
