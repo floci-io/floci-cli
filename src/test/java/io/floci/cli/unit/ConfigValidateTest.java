@@ -6,6 +6,7 @@ import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import io.floci.cli.FlociCli;
 import io.floci.cli.ProductProfile;
 import io.floci.cli.commands.config.ComposeCheck;
+import io.floci.cli.commands.config.YamlTree;
 import io.floci.cli.config.ProfileStore;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -13,6 +14,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.io.PrintStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -30,7 +32,7 @@ class ConfigValidateTest {
     Path tempDir;
 
     private ComposeCheck.Report aws(String compose) throws Exception {
-        return ComposeCheck.analyze(YAML.readTree(compose), ProductProfile.AWS, true, NEEDED_FOR, tempDir);
+        return ComposeCheck.analyze(YamlTree.read(compose), ProductProfile.AWS, true, NEEDED_FOR, tempDir);
     }
 
     private static String service(String ports, String extra) {
@@ -142,7 +144,7 @@ class ConfigValidateTest {
 
     @Test
     void theSocketIsOnlyAWarningWhereTheProductDoesNotNeedIt() throws Exception {
-        JsonNode compose = YAML.readTree("""
+        JsonNode compose = YamlTree.read("""
                 services:
                   gcp:
                     image: floci/floci-gcp:latest
@@ -228,7 +230,7 @@ class ConfigValidateTest {
 
     @Test
     void theStorageVariableIsTheProductsOwn() throws Exception {
-        JsonNode compose = YAML.readTree("""
+        JsonNode compose = YamlTree.read("""
                 services:
                   oci:
                     image: floci/floci-oci:latest
@@ -357,6 +359,177 @@ class ConfigValidateTest {
 
         assertFalse(r.valid());
         assertTrue(r.errors().get(0).startsWith("No services found"), r.errors().toString());
+    }
+
+    // ---- anchors, aliases and merge keys ---------------------------------------------------------
+
+    /** BL-085: a service built from an anchor with a merge key is read the way Compose reads it. */
+    @Test
+    void aServiceBuiltFromAnAnchorIsReadInFull() throws Exception {
+        ComposeCheck.Report r = aws("""
+                x-floci: &floci
+                  image: floci/floci:latest
+                  ports:
+                    - "4566:4566"
+                  volumes:
+                    - /var/run/docker.sock:/var/run/docker.sock
+                services:
+                  floci:
+                    <<: *floci
+                """);
+
+        assertEquals("floci", r.service());
+        assertEquals(List.of(), r.errors());
+        assertEquals(List.of(), r.warnings());
+    }
+
+    @Test
+    void anAliasedListIsReadAsTheList() throws Exception {
+        ComposeCheck.Report r = aws("""
+                x-volumes: &v
+                  - /var/run/docker.sock:/var/run/docker.sock
+                x-ports: &p ["5566:4566"]
+                services:
+                  floci:
+                    image: floci/floci:latest
+                    ports: *p
+                    volumes: *v
+                """);
+
+        assertEquals(List.of(), r.errors());
+    }
+
+    /** A key written in the service wins over the one a merge brings in, wherever '<<' stands. */
+    @Test
+    void anExplicitKeyOverridesTheMergedOne() throws Exception {
+        ComposeCheck.Report r = aws("""
+                x-base: &base
+                  image: nginx
+                  ports: ["8080:8080"]
+                  volumes: ["/var/run/docker.sock:/var/run/docker.sock"]
+                services:
+                  floci:
+                    image: floci/floci:latest
+                    ports: ["4566:4566"]
+                    <<: *base
+                """);
+
+        assertEquals("floci", r.service());
+        assertEquals(List.of(), r.errors());
+    }
+
+    @Test
+    void aMergeOfSeveralMappingsTakesTheEarlierOneFirst() throws Exception {
+        JsonNode tree = YamlTree.read("""
+                a: &a {x: 1, y: 1}
+                b: &b {y: 2, z: 2}
+                c:
+                  <<: [*a, *b]
+                  z: 3
+                """);
+
+        assertEquals(1, tree.path("c").path("x").asInt());
+        assertEquals(1, tree.path("c").path("y").asInt());
+        assertEquals(3, tree.path("c").path("z").asInt());
+        assertFalse(tree.path("c").has("<<"));
+    }
+
+    /** An alias is a copy: what is checked for one service does not leak into the anchor's owner. */
+    @Test
+    void anAnchoredServiceCanBeReusedByAnother() throws Exception {
+        ComposeCheck.Report r = aws("""
+                services:
+                  floci: &main
+                    image: floci/floci:latest
+                    ports: ["4566:4566"]
+                    volumes: ["/var/run/docker.sock:/var/run/docker.sock"]
+                  floci-b:
+                    <<: *main
+                    ports: ["14566:4566"]
+                """);
+
+        assertEquals("floci", r.service());
+        assertEquals(List.of(), r.errors());
+    }
+
+    @Test
+    void scalarsKeepTheirTypesAndPlainDocumentsReadAsBefore() throws Exception {
+        JsonNode tree = YamlTree.read("""
+                name: floci
+                port: 4566
+                ratio: 1.5
+                enabled: true
+                nothing: null
+                tag: "1.6.0"
+                list: [1, "two", {three: 3}]
+                anchored: &s shared
+                again: *s
+                """);
+
+        assertEquals("floci", tree.path("name").asText());
+        assertTrue(tree.path("port").isIntegralNumber());
+        assertEquals(4566, tree.path("port").asInt());
+        assertEquals(1.5, tree.path("ratio").asDouble());
+        assertTrue(tree.path("enabled").isBoolean());
+        assertTrue(tree.path("nothing").isNull());
+        assertTrue(tree.path("tag").isTextual());
+        assertEquals(3, tree.path("list").get(2).path("three").asInt());
+        assertEquals("shared", tree.path("again").asText());
+    }
+
+    @Test
+    void anAliasWithoutItsAnchorIsAParseError() {
+        assertThrows(IOException.class, () -> YamlTree.read("services:\n  floci: *missing\n"));
+    }
+
+    @Test
+    void anEmptyDocumentIsMissing() throws Exception {
+        assertTrue(YamlTree.read("").isMissingNode());
+        assertTrue(YamlTree.read("# only a comment\n").isMissingNode());
+    }
+
+    /** An anchor on a plain value, such as a shared image tag, resolves like any other. */
+    @Test
+    void anAnchorOnAScalarResolves() throws Exception {
+        ComposeCheck.Report r = aws("""
+                x-image: &image floci/floci:1.6.0
+                x-port: &port "4566:4566"
+                services:
+                  floci:
+                    image: *image
+                    ports: [*port]
+                    volumes: ["/var/run/docker.sock:/var/run/docker.sock"]
+                """);
+
+        assertEquals("floci", r.service());
+        assertEquals(List.of(), r.errors());
+        assertEquals(List.of(), r.warnings());
+    }
+
+    /** Through the command: the file from the report exits 0. */
+    @Test
+    void theCommandAcceptsAComposeFileWithAnchors() throws Exception {
+        Path file = Files.writeString(tempDir.resolve("compose.yml"), """
+                x-floci: &floci
+                  image: floci/floci:latest
+                  volumes: &sock
+                    - /var/run/docker.sock:/var/run/docker.sock
+                services:
+                  floci:
+                    <<: *floci
+                    ports: ["4566:4566"]
+                  worker:
+                    image: busybox
+                    volumes: *sock
+                """);
+
+        Run r = run("config", "validate", "-f", file.toString(), "-o", "json");
+
+        assertEquals(0, r.exit(), r.out() + r.err());
+        JsonNode json = new ObjectMapper().readTree(r.out());
+        assertTrue(json.path("valid").asBoolean(), r.out());
+        assertEquals("floci", json.path("service").asText());
+        assertEquals(0, json.path("errors").size());
     }
 
     // ---- the command ---------------------------------------------------------------------------
