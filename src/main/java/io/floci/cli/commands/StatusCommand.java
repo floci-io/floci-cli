@@ -2,6 +2,7 @@ package io.floci.cli.commands;
 
 import io.floci.cli.GlobalOptions;
 import io.floci.cli.ProductProfile;
+import io.floci.cli.ServerCompatibility;
 import io.floci.cli.docker.DockerClient;
 import io.floci.cli.docker.DockerException;
 import io.floci.cli.http.FlociHttpClient;
@@ -76,6 +77,8 @@ public class StatusCommand implements Callable<Integer> {
             serverEdition = health.edition();
             reachable = true;
         } catch (Exception ignored) {}
+        // On stderr, so structured output stays one document.
+        ServerCompatibility.warning(profile, serverVersion, global.instanceSelector()).ifPresent(printer::warn);
 
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("container", global.container);

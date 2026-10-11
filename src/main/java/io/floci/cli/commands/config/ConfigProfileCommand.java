@@ -12,6 +12,7 @@ import picocli.CommandLine.*;
 import picocli.CommandLine.Model.CommandSpec;
 
 import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -19,6 +20,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Callable;
+import java.util.function.UnaryOperator;
 
 @Command(
         name = "profile",
@@ -45,15 +47,23 @@ public class ConfigProfileCommand implements Callable<Integer> {
 
     /** Test seam: a store pointed at a temporary profiles directory. */
     public ConfigProfileCommand(ProductProfile profile, ProfileStore store) {
+        this(profile, store, System::getenv);
+    }
+
+    /** Test seam: {@code env} answers the {@code VISUAL}/{@code EDITOR} lookup that {@code edit} makes. */
+    public ConfigProfileCommand(ProductProfile profile, ProfileStore store, UnaryOperator<String> env) {
         this.profile = profile;
         this.store = store;
+        this.env = env;
         this.global = new GlobalOptions(profile);
     }
 
-    @Parameters(index = "0", description = "Action: list, show, create, delete", paramLabel = "list|show|create|delete")
+    private final UnaryOperator<String> env;
+
+    @Parameters(index = "0", description = "Action: list, show, create, edit, delete", paramLabel = "list|show|create|edit|delete")
     String action;
 
-    @Parameters(index = "1", description = "Profile name (required for show, create, delete)", arity = "0..1", paramLabel = "<name>")
+    @Parameters(index = "1", description = "Profile name (required for show, create, edit, delete)", arity = "0..1", paramLabel = "<name>")
     String name;
 
     // create only. With --container they describe one instance, so several profiles can run the
@@ -85,9 +95,10 @@ public class ConfigProfileCommand implements Callable<Integer> {
                 case "list" -> listProfiles(printer, store);
                 case "show" -> showProfile(printer, store);
                 case "create" -> createProfile(printer, store);
+                case "edit" -> editProfile(printer, store);
                 case "delete" -> deleteProfile(printer, store);
                 default -> {
-                    printer.error("Unknown action '" + action + "'.\nUse one of: list, show, create, delete.");
+                    printer.error("Unknown action '" + action + "'.\nUse one of: list, show, create, edit, delete.");
                     yield 1;
                 }
             };
@@ -167,6 +178,124 @@ public class ConfigProfileCommand implements Callable<Integer> {
             printer.error("Could not read profile: " + e.getMessage(), "Fix or delete the profile file, then re-run the command.");
             return 1;
         }
+    }
+
+    /**
+     * Opens the profile's file in the user's editor, then reads it back. The file is the one
+     * the profile is read from ({@code .yaml} or {@code .yml}); a profile that does not exist is
+     * not created here, since {@code create} is what writes the product's defaults into it.
+     */
+    private int editProfile(Printer printer, ProfileStore store) {
+        if (name == null) { printer.error(nameRequired()); return 1; }
+        String prefix = this.profile.commandPrefix() + " config profile ";
+        // Asked of the file, not of its contents: a profile that no longer parses is exactly the
+        // one that has to be opened to be repaired.
+        Path file = store.existingFile(name);
+        if (!Files.exists(file)) {
+            printer.error("Profile '" + name + "' not found.\nRun '" + prefix + "create " + name + "' to create it first.");
+            return 1;
+        }
+
+        List<String> editor = editorCommand(env.apply("VISUAL"), env.apply("EDITOR"));
+        if (editor.isEmpty()) {
+            printer.error("No editor is set, so " + file + " was not opened.\n"
+                    + "Set EDITOR (for example 'export EDITOR=vi'), or edit the file yourself.");
+            return 1;
+        }
+        List<String> command = new ArrayList<>(editor);
+        command.add(file.toString());
+        int exit;
+        try {
+            exit = new ProcessBuilder(command).inheritIO().start().waitFor();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            printer.error("Interrupted while " + editor.get(0) + " was open.\nRe-run '" + prefix + "edit " + name + "'.");
+            return 1;
+        } catch (IOException e) {
+            printer.error("Could not start the editor '" + String.join(" ", editor) + "': " + e.getMessage(),
+                    "Set EDITOR to a command on your PATH, or edit " + file + " yourself.");
+            return 1;
+        }
+        if (exit != 0) {
+            printer.error("The editor '" + String.join(" ", editor) + "' exited with code " + exit + ".\n"
+                    + "Re-run '" + prefix + "edit " + name + "', or edit " + file + " yourself.");
+            return 1;
+        }
+
+        // Read it back: a typo that breaks the YAML should surface now, not on the next start.
+        try {
+            var edited = store.get(name);
+            if (edited.isEmpty()) {
+                printer.error("Profile '" + name + "' is gone after the edit.\nRun '" + prefix + "create " + name + "' to create it again.");
+                return 1;
+            }
+            ProfileDefaultValueProvider.warnAboutUnknownKeys(store, name, edited.get());
+        } catch (IOException e) {
+            String reason = e.getMessage() == null ? "unreadable" : e.getMessage().lines().findFirst().orElse("unreadable");
+            printer.error("Profile '" + name + "' is no longer valid: " + reason + "\n"
+                    + "Re-run '" + prefix + "edit " + name + "' to fix it.");
+            return 1;
+        }
+        printer.println("Profile '" + name + "' saved " + Ansi.gray("(" + file + ")"));
+        return 0;
+    }
+
+    /**
+     * The editor to run, as a command and its arguments: {@code VISUAL} first, then
+     * {@code EDITOR}, as other tools do. Empty when neither is set.
+     */
+    public static List<String> editorCommand(String visual, String editor) {
+        String chosen = visual != null && !visual.isBlank() ? visual : editor;
+        if (chosen == null || chosen.isBlank()) return List.of();
+        return words(chosen);
+    }
+
+    /**
+     * {@code line} split into words the way a shell would for a simple command: whitespace
+     * separates, and single and double quotes group (a path with spaces). A backslash is an
+     * escape only in front of a space or a quote; anywhere else it is an ordinary character, so
+     * a Windows path ({@code C:\Windows\System32\notepad.exe}, {@code \\server\share\edit})
+     * comes through intact. Nothing is expanded; the words go straight to the process, never
+     * through a shell.
+     */
+    static List<String> words(String line) {
+        List<String> words = new ArrayList<>();
+        StringBuilder word = new StringBuilder();
+        boolean inWord = false;
+        char quote = 0;
+        for (int i = 0; i < line.length(); i++) {
+            char c = line.charAt(i);
+            if (quote != 0) {
+                if (c == quote) {
+                    quote = 0;
+                } else if (c == '\\' && quote == '"' && i + 1 < line.length() && line.charAt(i + 1) == '"') {
+                    word.append(line.charAt(++i));
+                } else {
+                    word.append(c);
+                }
+            } else if (c == '\'' || c == '"') {
+                quote = c;
+                inWord = true;
+            } else if (c == '\\' && i + 1 < line.length() && escapable(line.charAt(i + 1))) {
+                word.append(line.charAt(++i));
+                inWord = true;
+            } else if (Character.isWhitespace(c)) {
+                if (inWord) {
+                    words.add(word.toString());
+                    word.setLength(0);
+                    inWord = false;
+                }
+            } else {
+                word.append(c);
+                inWord = true;
+            }
+        }
+        if (inWord) words.add(word.toString());
+        return List.copyOf(words);
+    }
+
+    private static boolean escapable(char next) {
+        return Character.isWhitespace(next) || next == '"' || next == '\'';
     }
 
     private int createProfile(Printer printer, ProfileStore store) {

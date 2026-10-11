@@ -51,7 +51,7 @@ public class ConfigShowCommand implements Callable<Integer> {
         data.put("profile", global.profile != null ? global.profile : "default");
         data.put("endpoint", global.endpoint);
         data.put("container", global.container);
-        data.put("output", global.output != null ? global.output.name() : "text");
+        data.put("output", global.format() != null ? global.format().name() : "text");
 
         // image/port/persistDir/services have no global option, so they are read back from the
         // profile itself — they only take effect on 'start'.

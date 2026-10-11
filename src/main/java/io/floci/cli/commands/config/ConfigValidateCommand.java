@@ -6,6 +6,7 @@ import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import io.floci.cli.GlobalOptions;
 import io.floci.cli.ProductProfile;
 import io.floci.cli.output.Ansi;
+import io.floci.cli.output.Glyphs;
 import io.floci.cli.output.OutputFormat;
 import io.floci.cli.output.Printer;
 import picocli.CommandLine.*;
@@ -102,13 +103,13 @@ public class ConfigValidateCommand implements Callable<Integer> {
         printer.println("");
 
         for (String issue : report.errors()) {
-            printer.println("  " + Ansi.red("✗") + "  " + issue);
+            printer.println("  " + Ansi.red(Glyphs.fail()) + "  " + issue);
         }
         for (String warn : report.warnings()) {
-            printer.println("  " + Ansi.yellow("⚠") + "  " + warn);
+            printer.println("  " + Ansi.yellow(Glyphs.warn()) + "  " + warn);
         }
         if (report.errors().isEmpty() && report.warnings().isEmpty()) {
-            printer.println("  " + Ansi.green("✓") + "  Compose file looks good");
+            printer.println("  " + Ansi.green(Glyphs.ok()) + "  Compose file looks good");
         }
 
         printer.println("");
