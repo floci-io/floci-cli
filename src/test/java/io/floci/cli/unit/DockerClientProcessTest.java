@@ -1,5 +1,7 @@
 package io.floci.cli.unit;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.floci.cli.GlobalOptions;
 import io.floci.cli.docker.DockerClient;
 import io.floci.cli.docker.DockerException;
@@ -270,5 +272,75 @@ class DockerClientProcessTest {
 
         assertTrue(errBuf.toString().contains("+ docker rm"), errBuf.toString());
         assertTrue(errBuf.toString().contains("floci-x"), errBuf.toString());
+    }
+
+    private DockerClient dockerPrinting(String inspectJson) throws Exception {
+        Path json = Files.createTempFile(tempDir, "inspect", ".json");
+        Files.writeString(json, inspectJson);
+        Path fakeDocker = Files.createTempFile(tempDir, "docker", "");
+        Files.writeString(fakeDocker, "#!/bin/sh\ncat '" + json + "'\n");
+        assertTrue(fakeDocker.toFile().setExecutable(true));
+        return new DockerClient(fakeDocker.toString());
+    }
+
+    /** BL-046: container details come from the inspect document, not from a delimiter-split template. */
+    @Test
+    @DisabledOnOs(OS.WINDOWS)
+    void containerDetailsAreReadFromTheInspectDocument() throws Exception {
+        DockerClient docker = dockerPrinting("""
+                {"Id":"0123abcd","Name":"/floci-team-b","Config":{"Image":"floci/floci:1.6.0"},
+                 "State":{"Status":"running"},
+                 "NetworkSettings":{"Ports":{"4566/tcp":[{"HostIp":"0.0.0.0","HostPort":"14566"},{"HostIp":"::","HostPort":"14566"}],
+                                             "8080/tcp":null}}}
+                """);
+
+        DockerClient.ContainerInfo info = docker.inspectContainer("floci-team-b").orElseThrow();
+
+        assertEquals("0123abcd", info.id());
+        assertEquals("floci-team-b", info.name());
+        assertEquals("floci/floci:1.6.0", info.image());
+        assertEquals("running", info.state());
+        assertEquals("14566->4566/tcp", info.ports());
+    }
+
+    /** A value with the old delimiter in it cannot shift the fields any more. */
+    @Test
+    @DisabledOnOs(OS.WINDOWS)
+    void aPipeInAValueDoesNotShiftTheFields() throws Exception {
+        DockerClient docker = dockerPrinting("""
+                {"Id":"0123abcd","Name":"/floci","Config":{"Image":"registry.local/team|floci:latest"},
+                 "State":{"Status":"exited"},"NetworkSettings":{"Ports":{}}}
+                """);
+
+        DockerClient.ContainerInfo info = docker.inspectContainer("floci").orElseThrow();
+
+        assertEquals("registry.local/team|floci:latest", info.image());
+        assertEquals("exited", info.state());
+        assertEquals("", info.ports());
+    }
+
+    @Test
+    void publishedPortsListEveryBindingAndSkipWhatIsNotPublished() throws Exception {
+        JsonNode ports = new ObjectMapper().readTree("""
+                {"4566/tcp":[{"HostIp":"","HostPort":"14566"}],"8080/tcp":null,"9000/tcp":[],
+                 "4510/tcp":[{"HostIp":"","HostPort":"24510"}]}
+                """);
+
+        assertEquals("14566->4566/tcp 24510->4510/tcp", DockerClient.publishedPorts(ports));
+        assertEquals("", DockerClient.publishedPorts(new ObjectMapper().readTree("{}")));
+    }
+
+    @Test
+    @DisabledOnOs(OS.WINDOWS)
+    void aMissingContainerIsEmptyAndGarbageIsReportedWithANextStep() throws Exception {
+        Path missing = Files.createTempFile(tempDir, "docker", "");
+        Files.writeString(missing, "#!/bin/sh\necho 'Error response from daemon: No such container: floci' >&2\nexit 1\n");
+        assertTrue(missing.toFile().setExecutable(true));
+
+        assertTrue(new DockerClient(missing.toString()).inspectContainer("floci").isEmpty());
+
+        DockerException e = assertThrows(DockerException.class, () -> dockerPrinting("not json").inspectContainer("floci"));
+        assertTrue(e.getMessage().contains("Could not read the details of container 'floci'"), e.getMessage());
+        assertTrue(e.getMessage().contains("docker info"), e.getMessage());
     }
 }
