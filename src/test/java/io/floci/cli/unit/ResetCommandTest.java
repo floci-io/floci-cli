@@ -13,6 +13,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import picocli.CommandLine;
 
@@ -20,6 +21,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.OutputStream;
 import java.io.PrintStream;
 import java.net.InetSocketAddress;
+import java.net.ServerSocket;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -165,6 +167,120 @@ class ResetCommandTest {
 
         assertEquals("http://remote-host:4566", target.endpoint());
         assertNull(target.error());
+    }
+
+    private ResetCommand.Target targetWithProfile(DockerClient docker, String yaml, String... args) throws Exception {
+        Files.createDirectories(tempDir);
+        Files.writeString(tempDir.resolve("p.yaml"), yaml);
+        ResetCommand reset = new ResetCommand(ProductProfile.AWS, docker, NOBODY);
+        List<String> all = new ArrayList<>(List.of("--profile", "p"));
+        all.addAll(List.of(args));
+        new CommandLine(reset)
+                .setDefaultValueProvider(new ProfileDefaultValueProvider(new ProfileStore(tempDir)))
+                .parseArgs(all.toArray(String[]::new));
+        return reset.target();
+    }
+
+    /**
+     * BL-084: an endpoint from a profile names a server just as a typed one does. A container that
+     * happens to run locally under the default name must not take its place.
+     */
+    @Test
+    void anEndpointFromAProfileIsNotReplacedByTheLocalDefaultContainer() throws Exception {
+        DockerClient local = dockerWith("floci", "running", "4566->4566/tcp");
+
+        ResetCommand.Target target = targetWithProfile(local, "endpoint: http://remote-host:4566\n");
+
+        assertNull(target.error(), target.error());
+        assertEquals("http://remote-host:4566", target.endpoint());
+    }
+
+    /** The same server is reset whether or not something runs locally under the default name. */
+    @Test
+    void anEndpointFromAProfileResolvesTheSameWithOrWithoutALocalContainer() throws Exception {
+        String yaml = "endpoint: http://localhost:14566\n";
+
+        ResetCommand.Target running = targetWithProfile(dockerWith("floci", "running", "4566->4566/tcp"), yaml);
+        ResetCommand.Target absent = targetWithProfile(dockerWith("something-else", "running", ""), yaml);
+        ResetCommand.Target stopped = targetWithProfile(dockerWith("floci", "exited", ""), yaml);
+
+        assertEquals("http://localhost:14566", running.endpoint());
+        assertEquals(running, absent);
+        assertEquals(running, stopped);
+    }
+
+    /** A profile that names a container is found through the container, endpoint or not. */
+    @Test
+    void aProfileContainerStillDecidesOverItsEndpoint() throws Exception {
+        ResetCommand.Target target = targetWithProfile(dockerWith("floci-b", "running", "24566->4566/tcp"),
+                "container: floci-b\nendpoint: http://localhost:14566\n");
+
+        assertEquals("http://localhost:24566", target.endpoint());
+    }
+
+    /** A typed flag wins over the profile's endpoint, as everywhere else. */
+    @Test
+    void typedFlagsWinOverAProfilesEndpoint() throws Exception {
+        String yaml = "endpoint: http://remote-host:4566\n";
+
+        ResetCommand.Target typedEndpoint = targetWithProfile(dockerWith("floci", "running", "4566->4566/tcp"), yaml,
+                "--endpoint", "http://other-host:4566");
+        ResetCommand.Target typedContainer = targetWithProfile(dockerWith("floci-b", "running", "24566->4566/tcp"), yaml,
+                "--container", "floci-b");
+
+        assertEquals("http://other-host:4566", typedEndpoint.endpoint());
+        assertEquals("http://localhost:24566", typedContainer.endpoint());
+    }
+
+    /** The environment's endpoint counts the same way; what matters is that it is not the default. */
+    @ParameterizedTest
+    @CsvSource({
+            "http://remote-host:4566, true",
+            "http://localhost:14566, true",
+            "https://localhost:4566, true",
+            "http://localhost:4566, false",
+            "http://localhost:4566/, false",
+            "' http://localhost:4566// ', false"})
+    void anEndpointOtherThanTheDefaultNamesAServer(String endpoint, boolean names) {
+        assertEquals(names, ResetCommand.namesAServer(endpoint, ProductProfile.AWS));
+    }
+
+    @Test
+    void eachProductHasItsOwnDefaultEndpoint() {
+        assertFalse(ResetCommand.namesAServer("http://localhost:4588", ProductProfile.GCP));
+        assertTrue(ResetCommand.namesAServer("http://localhost:4566", ProductProfile.GCP));
+        assertFalse(ResetCommand.namesAServer(null, ProductProfile.OCI));
+    }
+
+    /** End to end with --yes: the request goes to the profile's server, not to the local container's port. */
+    @Test
+    void yesWithAProfileEndpointPostsToThatEndpoint() throws Exception {
+        Files.createDirectories(tempDir);
+        Files.writeString(tempDir.resolve("p.yaml"), "endpoint: http://127.0.0.1:" + server.getAddress().getPort() + "\n");
+        // A local default container on another port: resetting it would hit nothing and fail.
+        int elsewhere;
+        try (ServerSocket socket = new ServerSocket(0)) {
+            elsewhere = socket.getLocalPort();
+        }
+        ResetCommand reset = new ResetCommand(ProductProfile.AWS,
+                dockerWith("floci", "running", elsewhere + "->4566/tcp"), NOBODY);
+        PrintStream out = System.out;
+        PrintStream err = System.err;
+        ByteArrayOutputStream errBuf = new ByteArrayOutputStream();
+        System.setOut(new PrintStream(new ByteArrayOutputStream()));
+        System.setErr(new PrintStream(errBuf));
+        int exit;
+        try {
+            exit = new CommandLine(reset)
+                    .setDefaultValueProvider(new ProfileDefaultValueProvider(new ProfileStore(tempDir)))
+                    .execute("--yes", "--profile", "p");
+        } finally {
+            System.setOut(out);
+            System.setErr(err);
+        }
+
+        assertEquals(0, exit, errBuf.toString());
+        assertEquals(List.of("POST /_floci/state/reset"), requests);
     }
 
     @Test

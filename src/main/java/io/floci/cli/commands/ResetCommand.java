@@ -83,13 +83,19 @@ public class ResetCommand implements Callable<Integer> {
     /**
      * Where this reset acts. Reset deletes data, so unlike the read-only commands it never
      * guesses: an {@code --endpoint} the user typed is used as given, and a container the user
-     * chose must be found running. Falling back to the configured endpoint, as
-     * {@link GlobalOptions#resolvedEndpoint} does, is right only for the default container: there
-     * the configured endpoint names the same default instance.
+     * chose must be found running.
+     *
+     * <p>An endpoint that a profile or {@code <PREFIX>_ENDPOINT} supplies names a server just as
+     * a typed one does. With no container chosen it is used as given too: looking up the default
+     * container instead, as {@link GlobalOptions#resolvedEndpoint} does, would reset whatever
+     * runs locally under the default name rather than the server the user pointed at. Only when
+     * nothing at all was selected is the default container looked up, falling back to the
+     * default endpoint, which names the same default instance.
      */
     public Target target() {
         if (global.typed("--endpoint")) return new Target(global.endpoint, null);
         boolean chosen = global.typed("--container") || !profile.defaultContainer().equals(global.container);
+        if (!chosen && namesAServer(global.endpoint, profile)) return new Target(global.endpoint, null);
         String how = "\nRun '" + profile.commandPrefix() + " status" + global.instanceSelector()
                 + "' to check it, or pass --endpoint <url> to name the server to reset.";
         Optional<DockerClient.ContainerInfo> info;
@@ -119,6 +125,21 @@ public class ResetCommand implements Callable<Integer> {
                     + "' publishes no port for the emulator, so nothing was reset." + how);
         }
         return new Target(published.orElse(global.endpoint), null);
+    }
+
+    /**
+     * Whether {@code endpoint} is something other than the product's default, that is, whether a
+     * profile or the environment pointed this command at a particular server. A trailing slash
+     * does not make it a different one.
+     */
+    public static boolean namesAServer(String endpoint, ProductProfile product) {
+        return endpoint != null && !withoutTrailingSlashes(endpoint).equals(product.defaultEndpoint());
+    }
+
+    private static String withoutTrailingSlashes(String url) {
+        String trimmed = url.strip();
+        while (trimmed.endsWith("/")) trimmed = trimmed.substring(0, trimmed.length() - 1);
+        return trimmed;
     }
 
     @Override

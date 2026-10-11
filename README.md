@@ -724,7 +724,9 @@ It calls the emulator's `POST <prefix>/state/reset`. The AWS, GCP and OCI emulat
 server without it (currently floci-az) the command says reset is not available and exits 1. Without
 `--yes` and with no terminal to ask on, it exits 2.
 
-Reset never guesses which server to wipe. An `--endpoint` you type is used as given. A container you
+Reset never guesses which server to wipe. An `--endpoint` you type is used as given, and so is an
+endpoint that a profile or `FLOCI_ENDPOINT` supplies when no container is selected: a container
+that happens to run locally under the default name does not take its place. A container you
 select (`--container`, a profile, or `FLOCI_CONTAINER`) has to be running: if it is missing or
 stopped, nothing is reset and the command exits 1 instead of falling back to the default instance.
 
