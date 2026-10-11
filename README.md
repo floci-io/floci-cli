@@ -844,6 +844,8 @@ floci completion bash >> ~/.bashrc
 floci completion zsh  >> ~/.zshrc
 ```
 
+Completion scripts are generated for bash and zsh. Any other shell name is a usage error (exit 2).
+
 ### `floci update`
 
 Self-update the CLI in place: downloads the release binary from GitHub, verifies its

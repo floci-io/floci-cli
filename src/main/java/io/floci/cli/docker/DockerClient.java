@@ -67,18 +67,10 @@ public class DockerClient {
     private static final ObjectMapper JSON = new ObjectMapper();
 
     public Optional<RunSettings> inspectRunSettings(String name, int containerPort) throws DockerException {
-        String out;
+        Optional<JsonNode> document = inspectDocument(name);
+        if (document.isEmpty()) return Optional.empty();
         try {
-            out = run("docker", "container", "inspect", "--format", "{{json .}}", "--", name);
-        } catch (DockerException e) {
-            if (e.getMessage() != null && e.getMessage().toLowerCase().contains("no such")) {
-                return Optional.empty();
-            }
-            throw e;
-        }
-        if (out.isBlank()) return Optional.empty();
-        try {
-            JsonNode c = JSON.readTree(out);
+            JsonNode c = document.get();
             String image = textOrNull(c.path("Config").path("Image"));
             Integer hostPort = null;
             JsonNode binding = c.path("HostConfig").path("PortBindings").path(containerPort + "/tcp");
@@ -133,25 +125,55 @@ public class DockerClient {
     }
 
     public Optional<ContainerInfo> inspectContainer(String name) throws DockerException {
+        Optional<JsonNode> document = inspectDocument(name);
+        if (document.isEmpty()) return Optional.empty();
+        JsonNode c = document.get();
+        String reported = c.path("Name").asText("").replaceFirst("^/", "");
+        return Optional.of(new ContainerInfo(
+                c.path("Id").asText(""),
+                reported.isBlank() ? name : reported,
+                c.path("Config").path("Image").asText(""),
+                c.path("State").path("Status").asText(""),
+                publishedPorts(c.path("NetworkSettings").path("Ports"))));
+    }
+
+    /**
+     * The published ports of an inspect document as {@code "14566->4566/tcp 18080->8080/tcp"}:
+     * host port, then the container side. A port that is exposed but not published has no
+     * binding and is left out.
+     */
+    public static String publishedPorts(JsonNode ports) {
+        StringBuilder published = new StringBuilder();
+        for (var port : ports.properties()) {
+            JsonNode bindings = port.getValue();
+            if (!bindings.isArray() || bindings.isEmpty()) continue;
+            String hostPort = bindings.get(0).path("HostPort").asText("");
+            if (hostPort.isBlank()) continue;
+            if (!published.isEmpty()) published.append(' ');
+            published.append(hostPort).append("->").append(port.getKey());
+        }
+        return published.toString();
+    }
+
+    // The container's whole inspect document, or empty when there is no such container. One
+    // JSON read serves every caller; a field-by-field Go template had to be split on a
+    // delimiter, which a value could contain.
+    private Optional<JsonNode> inspectDocument(String name) throws DockerException {
+        String out;
         try {
-            String out = run("docker", "container", "inspect",
-                    "--format",
-                    "{{.Id}}|{{.Name}}|{{.Config.Image}}|{{.State.Status}}|" +
-                            "{{range $p, $b := .NetworkSettings.Ports}}{{if $b}}{{(index $b 0).HostPort}}->{{$p}} {{end}}{{end}}",
-                    "--", name);
-            if (out.isBlank()) return Optional.empty();
-            String[] parts = out.trim().split("\\|", -1);
-            return Optional.of(new ContainerInfo(
-                    parts.length > 0 ? parts[0] : "",                       // id
-                    parts.length > 1 ? parts[1].replaceFirst("^/", "") : name,
-                    parts.length > 2 ? parts[2] : "",                       // image
-                    parts.length > 3 ? parts[3] : "",                       // status
-                    parts.length > 4 ? parts[4].trim() : ""));              // ports
+            out = run("docker", "container", "inspect", "--format", "{{json .}}", "--", name);
         } catch (DockerException e) {
             if (e.getMessage() != null && e.getMessage().toLowerCase().contains("no such")) {
                 return Optional.empty();
             }
             throw e;
+        }
+        if (out.isBlank()) return Optional.empty();
+        try {
+            return Optional.of(JSON.readTree(out));
+        } catch (Exception e) {
+            throw new DockerException("Could not read the details of container '" + name + "': " + e.getMessage()
+                    + "\n" + CHECK_DOCKER);
         }
     }
 
