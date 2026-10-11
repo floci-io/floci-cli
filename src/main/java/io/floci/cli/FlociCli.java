@@ -12,6 +12,7 @@ import io.floci.cli.config.ProfileDefaultValueProvider;
 import io.floci.cli.config.ProfileNotFoundException;
 import io.floci.cli.config.ProfileStore;
 import io.floci.cli.output.Ansi;
+import io.floci.cli.output.Glyphs;
 import io.floci.cli.update.UpdateNotifier;
 import picocli.CommandLine;
 import picocli.CommandLine.*;
@@ -103,7 +104,7 @@ public class FlociCli implements Runnable {
         if (notify) {
             UpdateNotifier.pendingNotice(CliVersion.CLI_VERSION).ifPresent(latest ->
                     System.err.println(Ansi.yellow("A new release of floci is available: "
-                            + CliVersion.CLI_VERSION + " → " + latest + "\n"
+                            + CliVersion.CLI_VERSION + " " + Glyphs.arrow() + " " + latest + "\n"
                             + "Run 'floci update' to install it") + "\n"));
             UpdateNotifier.refreshInBackground();
         }

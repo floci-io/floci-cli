@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.floci.cli.CliVersion;
 import io.floci.cli.output.Ansi;
+import io.floci.cli.output.Glyphs;
 import io.floci.cli.output.OutputFormat;
 import io.floci.cli.output.Printer;
 import io.floci.cli.update.ReleaseChannel;
@@ -109,11 +110,11 @@ public class UpdateCommand implements Callable<Integer> {
             // (0.1.9-rc.1) must not be silently downgraded to the latest stable (0.1.8).
             // Pinned --version keeps exact equality so deliberate downgrades still work.
             if (pinned ? target.equals(current) : !Version.isNewer(target, current)) {
-                printer.println(Ansi.green("✓") + " floci " + current + " is up to date");
+                printer.println(Ansi.green(Glyphs.ok()) + " floci " + current + " is up to date");
                 return 0;
             }
 
-            printer.println("update available: " + current + " → " + Ansi.bold(target));
+            printer.println("update available: " + current + " " + Glyphs.arrow() + " " + Ansi.bold(target));
             if (check) {
                 printer.println(Ansi.gray(installHint()));
                 // Non-zero so scripts can gate on staleness: floci update --check || floci update
@@ -132,13 +133,13 @@ public class UpdateCommand implements Callable<Integer> {
                 Path fresh = work.resolve(asset);
                 fetchFile(ReleaseChannel.assetUrl(downloadBase, target, asset), fresh);
                 verifyChecksum(fresh, asset, fetchString(ReleaseChannel.assetUrl(downloadBase, target, "sha256sums.txt")));
-                printer.println(Ansi.green("✓") + " checksum verified");
+                printer.println(Ansi.green(Glyphs.ok()) + " checksum verified");
                 replaceAtomically(fresh, binary);
             } finally {
                 deleteRecursively(work);
             }
 
-            printer.println(Ansi.green("✓") + " updated: " + current + " → " + target
+            printer.println(Ansi.green(Glyphs.ok()) + " updated: " + current + " " + Glyphs.arrow() + " " + target
                     + Ansi.gray("  (" + binary + ")"));
             return 0;
         } catch (UpdateException e) {
@@ -314,7 +315,7 @@ public class UpdateCommand implements Callable<Integer> {
     private String fetchString(String url) throws IOException, InterruptedException {
         HttpResponse<String> resp = http().send(get(url), HttpResponse.BodyHandlers.ofString());
         if (resp.statusCode() != 200) {
-            throw new IOException("GET " + url + " → HTTP " + resp.statusCode());
+            throw new IOException("GET " + url + " " + Glyphs.arrow() + " HTTP " + resp.statusCode());
         }
         if (resp.body().isBlank()) {
             // GitHub's CDN can intermittently return 200 with an empty body (see install.sh).
@@ -326,7 +327,7 @@ public class UpdateCommand implements Callable<Integer> {
     private void fetchFile(String url, Path dest) throws IOException, InterruptedException {
         HttpResponse<Path> resp = http().send(get(url), HttpResponse.BodyHandlers.ofFile(dest));
         if (resp.statusCode() != 200) {
-            throw new UpdateException("download failed: " + url + " → HTTP " + resp.statusCode()
+            throw new UpdateException("download failed: " + url + " " + Glyphs.arrow() + " HTTP " + resp.statusCode()
                     + (resp.statusCode() == 404 ? " (does that release exist?)" : ""));
         }
         if (Files.size(dest) == 0) {

@@ -2,6 +2,7 @@ package io.floci.cli;
 
 import io.floci.cli.docker.DockerClient;
 import io.floci.cli.output.Ansi;
+import io.floci.cli.output.Glyphs;
 import io.floci.cli.output.OutputFormat;
 import io.floci.cli.output.Printer;
 import picocli.CommandLine.Model.CommandSpec;
@@ -61,6 +62,9 @@ public class GlobalOptions {
             paramLabel = "text|json|yaml")
     public OutputFormat output;
 
+    @Option(names = {"--json"}, description = "Shorthand for --output json")
+    public boolean json;
+
     @Option(names = {"--quiet", "-q"}, description = "Suppress non-error output")
     public boolean quiet;
 
@@ -69,6 +73,9 @@ public class GlobalOptions {
 
     @Option(names = {"--no-color"}, description = "Disable ANSI colors")
     public boolean noColor;
+
+    @Option(names = {"--no-emoji"}, description = "Plain ASCII marks instead of Unicode ones (the default when output is piped)")
+    public boolean noEmoji;
 
     public GlobalOptions() {
         this(ProductProfile.AWS);
@@ -131,7 +138,23 @@ public class GlobalOptions {
         if (verbose) {
             System.setProperty(VERBOSE_PROPERTY, "true");
         }
-        return new Printer(System.out, System.err, output, quiet);
+        if (plainGlyphs(noEmoji, isStdoutTty(), System.getenv("NO_COLOR") != null)) {
+            Glyphs.plain();
+        }
+        return new Printer(System.out, System.err, format(), quiet);
+    }
+
+    /** The output format in effect: {@code --json} is {@code --output json} and wins over it. */
+    public OutputFormat format() {
+        return json ? OutputFormat.json : output;
+    }
+
+    /**
+     * Whether marks are printed as plain ASCII: on request, when nobody is looking at a terminal
+     * (a pipe, a file, CI logs), or when NO_COLOR asks for undecorated output.
+     */
+    public static boolean plainGlyphs(boolean noEmoji, boolean terminal, boolean noColorEnv) {
+        return noEmoji || !terminal || noColorEnv;
     }
 
     // Inspects the container and derives the endpoint from its host port mapping.

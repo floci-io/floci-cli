@@ -7,6 +7,7 @@ import io.floci.cli.docker.DockerException;
 import io.floci.cli.http.FlociException;
 import io.floci.cli.http.FlociHttpClient;
 import io.floci.cli.output.Ansi;
+import io.floci.cli.output.Glyphs;
 import io.floci.cli.output.OutputFormat;
 import io.floci.cli.output.Printer;
 import picocli.CommandLine.*;
@@ -166,7 +167,7 @@ public class ResetCommand implements Callable<Integer> {
             printer.structured(out);
             return 0;
         }
-        printer.println(Ansi.green("✓") + " " + profile.displayName() + " state reset" + Ansi.gray("  (" + effectiveEndpoint + ")"));
+        printer.println(Ansi.green(Glyphs.ok()) + " " + profile.displayName() + " state reset" + Ansi.gray("  (" + effectiveEndpoint + ")"));
         return 0;
     }
 }

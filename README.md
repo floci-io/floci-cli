@@ -312,15 +312,21 @@ All commands support `--help`.
 
 ## Global Flags
 
+Every tree takes the same flags; only the defaults differ. Marks are plain ASCII without
+`--no-emoji` too whenever the output is not a terminal (a pipe, a file, CI logs) or `NO_COLOR` is
+set. `--json` wins when it is combined with `--output`.
+
 ### AWS global flags
 
 ```
 --endpoint <url>            Floci server URL     (default: http://localhost:4566, env: FLOCI_ENDPOINT)
 --container <name>          Container name       (default: floci, env: FLOCI_CONTAINER)
 --output|-o text|json|yaml  Output format        (default: text)
+--json                      Shorthand for --output json
 --quiet, -q                 Suppress non-error output
 --verbose, -v               Debug logging to stderr
 --no-color                  Disable ANSI colors
+--no-emoji                  Plain ASCII marks (+ ! x ->) instead of Unicode ones
 --profile <name>            Load settings from ~/.floci/profiles/<name>.yaml
 ```
 
@@ -332,9 +338,11 @@ Explicit flags override the profile; the profile overrides the environment varia
 --endpoint <url>            Floci GCP server URL    (default: http://localhost:4588, env: FLOCI_GCP_ENDPOINT)
 --container <name>          Container name          (default: floci-gcp, env: FLOCI_GCP_CONTAINER)
 --output|-o text|json|yaml  Output format           (default: text)
+--json                      Shorthand for --output json
 --quiet, -q                 Suppress non-error output
 --verbose, -v               Debug logging to stderr
 --no-color                  Disable ANSI colors
+--no-emoji                  Plain ASCII marks (+ ! x ->) instead of Unicode ones
 --profile <name>            Load settings from ~/.floci/profiles/<name>.yaml
 ```
 
@@ -346,9 +354,11 @@ Explicit flags override the profile; the profile overrides the environment varia
 --endpoint <url>            Floci Azure server URL  (default: http://localhost:4577, env: FLOCI_AZ_ENDPOINT)
 --container <name>          Container name          (default: floci-az, env: FLOCI_AZ_CONTAINER)
 --output|-o text|json|yaml  Output format           (default: text)
+--json                      Shorthand for --output json
 --quiet, -q                 Suppress non-error output
 --verbose, -v               Debug logging to stderr
 --no-color                  Disable ANSI colors
+--no-emoji                  Plain ASCII marks (+ ! x ->) instead of Unicode ones
 --profile <name>            Load settings from ~/.floci/profiles/<name>.yaml
 ```
 
@@ -360,9 +370,11 @@ Explicit flags override the profile; the profile overrides the environment varia
 --endpoint <url>            Floci OCI server URL    (default: http://localhost:4599, env: FLOCI_OCI_ENDPOINT)
 --container <name>          Container name          (default: floci-oci, env: FLOCI_OCI_CONTAINER)
 --output|-o text|json|yaml  Output format           (default: text)
+--json                      Shorthand for --output json
 --quiet, -q                 Suppress non-error output
 --verbose, -v               Debug logging to stderr
 --no-color                  Disable ANSI colors
+--no-emoji                  Plain ASCII marks (+ ! x ->) instead of Unicode ones
 --profile <name>            Load settings from ~/.floci/profiles/<name>.yaml
 ```
 
@@ -678,6 +690,10 @@ floci version                     # CLI version, server version, image digest
 floci version -o json
 ```
 
+`floci version` and `floci status` warn on stderr when the AWS server is older than 1.5.0, the
+oldest version this CLI supports. The GCP, Azure and OCI emulators are versioned separately and
+have no minimum yet.
+
 ### `floci services` / `floci gcp services` / `floci az services` / `floci oci services`
 
 ```sh
@@ -710,6 +726,7 @@ floci config profile list                  # list saved profiles: container, por
 floci config profile create <name>         # create a new profile with the tree's defaults
 floci config profile create <name> --container <c> --port <p> --persist <dir> --services <csv> --image <img> --namespace <ns>
 floci config profile show <name>           # show a profile
+floci config profile edit <name>           # open the profile in $VISUAL or $EDITOR, then check it still reads
 floci config profile delete <name>         # delete a profile
 floci config validate -f docker-compose.yml  # validate a Compose file
 ```

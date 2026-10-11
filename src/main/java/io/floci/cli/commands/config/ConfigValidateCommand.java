@@ -3,6 +3,7 @@ package io.floci.cli.commands.config;
 import io.floci.cli.GlobalOptions;
 import io.floci.cli.ProductProfile;
 import io.floci.cli.output.Ansi;
+import io.floci.cli.output.Glyphs;
 import io.floci.cli.output.Printer;
 import picocli.CommandLine.*;
 
@@ -88,13 +89,13 @@ public class ConfigValidateCommand implements Callable<Integer> {
         }
 
         for (String issue : issues) {
-            printer.println("  " + Ansi.red("✗") + "  " + issue);
+            printer.println("  " + Ansi.red(Glyphs.fail()) + "  " + issue);
         }
         for (String warn : warnings) {
-            printer.println("  " + Ansi.yellow("⚠") + "  " + warn);
+            printer.println("  " + Ansi.yellow(Glyphs.warn()) + "  " + warn);
         }
         if (issues.isEmpty() && warnings.isEmpty()) {
-            printer.println("  " + Ansi.green("✓") + "  Compose file looks good");
+            printer.println("  " + Ansi.green(Glyphs.ok()) + "  Compose file looks good");
         }
 
         printer.println("");

@@ -15,7 +15,8 @@ public class ImageVersionCheck implements Check {
 
     private final String image;
     private final DockerClient docker;
-    private static final String MIN_VERSION = "1.5.0";
+    /** The oldest server version this CLI supports. */
+    public static final String MIN_VERSION = "1.5.0";
 
     public ImageVersionCheck() {
         this("floci/floci");
