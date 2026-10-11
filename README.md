@@ -718,6 +718,20 @@ Each product tree has its own `config show|validate|profile` (`floci gcp config 
 uses that product's defaults; `config default-product` is available through bare `floci config`
 and `floci aws config`, but not through the GCP, Azure, or OCI config trees.
 
+`config validate` reads the Compose file and checks the service that runs the emulator (found by
+its image; a file with a single service is checked whatever its image is):
+
+| Check | Result when it fails |
+|---|---|
+| The emulator port is mapped (`"4566:4566"`, `"5566:4566"`, `"127.0.0.1:5566:4566"`, a range, or the long form; any host port works) | error |
+| `/var/run/docker.sock` is mounted | error where the product needs it, otherwise a warning |
+| The volume at `/app/data` is writable and not bound to a file | error |
+| A volume at `/app/data` comes with `<PREFIX>_STORAGE_MODE=persistent`, and the other way round | warning |
+| The image tag is not older than the oldest version this CLI supports (AWS tree) | warning |
+
+It exits 1 when there is an error and 0 otherwise. `-o json` and `-o yaml` print
+`file`, `service`, `valid`, `errors` and `warnings`.
+
 #### Profiles
 
 Profiles are stored in `~/.floci/profiles/<name>.yaml`. Pass `--profile <name>` to any command to
