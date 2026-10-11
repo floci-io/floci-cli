@@ -26,7 +26,7 @@ public class ConfigDefaultProductCommand implements Callable<Integer> {
     public Integer call() {
         Printer printer = global.printer();
         if (!"aws".equals(product) && !"az".equals(product) && !"gcp".equals(product) && !"oci".equals(product)) {
-            printer.error("Unknown product '" + product + "'. Use: aws, az, gcp, oci");
+            printer.error("Unknown product '" + product + "'.\nUse one of: aws, az, gcp, oci.");
             return 1;
         }
         GlobalConfigStore store = new GlobalConfigStore();
@@ -37,7 +37,8 @@ public class ConfigDefaultProductCommand implements Callable<Integer> {
             printer.println(Ansi.gray("Config saved to: " + store.configFilePath()));
             return 0;
         } catch (IOException e) {
-            printer.error("Could not save config: " + e.getMessage());
+            printer.error("Could not save config: " + e.getMessage(),
+                    "Check that " + store.configFilePath().getParent() + " is writable and re-run the command.");
             return 1;
         }
     }

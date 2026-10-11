@@ -57,7 +57,7 @@ public class StopCommand implements Callable<Integer> {
                 return 0;
             }
         } catch (DockerException e) {
-            printer.error("Failed to inspect container: " + e.getMessage());
+            printer.error("Failed to inspect container: " + e.withNextStep(DockerClient.CHECK_DOCKER));
             return 1;
         }
 
@@ -66,7 +66,7 @@ public class StopCommand implements Callable<Integer> {
             docker.stopContainer(global.container, timeout);
             printer.println(Ansi.green("Stopped."));
         } catch (DockerException e) {
-            printer.error("Failed to stop container: " + e.getMessage());
+            printer.error("Failed to stop container: " + e.withNextStep(DockerClient.CHECK_DOCKER));
             return 1;
         }
 
@@ -75,7 +75,7 @@ public class StopCommand implements Callable<Integer> {
                 docker.removeContainer(global.container);
                 printer.println("Container removed.");
             } catch (DockerException e) {
-                printer.error("Failed to remove container: " + e.getMessage());
+                printer.error("Failed to remove container: " + e.withNextStep(DockerClient.CHECK_DOCKER));
                 return 1;
             }
         }

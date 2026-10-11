@@ -51,7 +51,8 @@ public class SnapshotLoadCommand implements Callable<Integer> {
                 printer.error("Snapshot API not available on this server version.\n" +
                         "Track progress: " + profile.serverRepo() + "/issues");
             } else {
-                printer.error("Failed to load snapshot: " + e.getMessage());
+                printer.error("Failed to load snapshot: " + e.getMessage(),
+                        "Run '" + profile.commandPrefix() + " status" + global.instanceSelector() + "' to check the emulator.");
             }
             return 1;
         }

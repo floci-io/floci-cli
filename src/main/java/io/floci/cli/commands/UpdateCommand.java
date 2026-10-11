@@ -142,10 +142,10 @@ public class UpdateCommand implements Callable<Integer> {
                     + Ansi.gray("  (" + binary + ")"));
             return 0;
         } catch (UpdateException e) {
-            printer.error(e.getMessage());
+            printer.error(e.getMessage(), "To reinstall instead, see https://floci.io.");
             return check ? 2 : 1; // --check keeps 1 for "update available"
         } catch (Exception e) {
-            printer.error("update failed: " + e.getMessage() + "\nCheck your network connection and re-run 'floci update'.");
+            printer.error("update failed: " + e.getMessage(), "Check your network connection and re-run 'floci update'.");
             return check ? 2 : 1;
         }
     }

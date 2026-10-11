@@ -103,4 +103,16 @@ class SnapshotCommandsTest {
 
         assertTrue(r[2].contains("Snapshot API not available"), r[2]);
     }
+
+    /** The hint has to check the instance that failed, not the default one. */
+    @ParameterizedTest
+    @CsvSource({"list,", "delete, nightly", "save, nightly", "load, nightly"})
+    void aFailedSnapshotCallPointsAtTheSameInstance(String command, String name) {
+        status = 500;
+
+        String[] r = name == null ? run("snapshot", command) : run("snapshot", command, name);
+
+        assertEquals("1", r[0]);
+        assertTrue(r[2].contains("floci status --container floci-snapshot-test-none"), r[2]);
+    }
 }

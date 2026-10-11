@@ -331,7 +331,11 @@ public class StartCommand implements Callable<Integer> {
                 printer.error("docker binary not found in PATH.\nInstall Docker Desktop from https://docs.docker.com/get-docker/");
                 return 1;
             }
-            printer.error("Failed to inspect container: " + e.getMessage() + socketGuidance(daemon));
+            // The socket guidance, when there is any, is the next step; otherwise the general one.
+            String guidance = socketGuidance(daemon);
+            printer.error("Failed to inspect container: " + (guidance.isEmpty()
+                    ? e.withNextStep(DockerClient.CHECK_DOCKER)
+                    : e.getMessage().strip() + guidance));
             return 1;
         }
 
@@ -360,7 +364,8 @@ public class StartCommand implements Callable<Integer> {
             String id = docker.startContainer(args);
             printer.println(Ansi.green("Container started") + " (" + id.substring(0, Math.min(12, id.length())) + ")");
         } catch (DockerException e) {
-            printer.error("Failed to start container: " + e.getMessage());
+            printer.error("Failed to start container: " + e.getMessage(),
+                    "Run '" + profile.commandPrefix() + " doctor' to check Docker, the image and the port.");
             return 1;
         }
 
