@@ -98,6 +98,10 @@ public class ProfileStore {
     // The one read path, so list and show agree on a profile's name.
     private static Profile read(Path file) throws IOException {
         Profile profile = YAML.readValue(file.toFile(), Profile.class);
+        // 'null' and '~' are valid YAML for "nothing": a document, but not a profile.
+        if (profile == null) {
+            throw new IOException(file + " holds no settings: it has to be a mapping, like 'port: 4566'");
+        }
         // Hand-written files often omit 'name:'; the file name is the name.
         if (profile.name == null || profile.name.isBlank()) {
             profile.name = nameOf(file);

@@ -12,6 +12,7 @@ import picocli.CommandLine.*;
 import picocli.CommandLine.Model.CommandSpec;
 
 import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -187,16 +188,12 @@ public class ConfigProfileCommand implements Callable<Integer> {
     private int editProfile(Printer printer, ProfileStore store) {
         if (name == null) { printer.error(nameRequired()); return 1; }
         String prefix = this.profile.commandPrefix() + " config profile ";
-        Path file;
-        try {
-            if (store.get(name).isEmpty()) {
-                printer.error("Profile '" + name + "' not found.\nRun '" + prefix + "create " + name + "' to create it first.");
-                return 1;
-            }
-            file = store.existingFile(name);
-        } catch (IOException e) {
-            // Unreadable as it stands: opening it is exactly how the user fixes that.
-            file = store.existingFile(name);
+        // Asked of the file, not of its contents: a profile that no longer parses is exactly the
+        // one that has to be opened to be repaired.
+        Path file = store.existingFile(name);
+        if (!Files.exists(file)) {
+            printer.error("Profile '" + name + "' not found.\nRun '" + prefix + "create " + name + "' to create it first.");
+            return 1;
         }
 
         List<String> editor = editorCommand(env.apply("VISUAL"), env.apply("EDITOR"));

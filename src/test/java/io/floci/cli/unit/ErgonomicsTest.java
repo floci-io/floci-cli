@@ -252,6 +252,37 @@ class ErgonomicsTest {
         assertTrue(r.err().contains("floci config profile edit dev"), r.err());
     }
 
+    /** A profile that does not parse, or holds YAML's "nothing", can still be opened and repaired. */
+    @ParameterizedTest
+    @ValueSource(strings = {"port: [unterminated\n", "null\n", "~\n", "- a list\n"})
+    @DisabledOnOs(OS.WINDOWS)
+    void aBrokenProfileCanBeOpenedAndRepaired(String broken) throws Exception {
+        Path file = Files.createDirectories(tempDir.resolve("profiles")).resolve("dev.yaml");
+        Files.writeString(file, broken);
+        Path editor = editorThat("echo 'port: 14566' > \"$1\"");
+
+        Run r = edit(Map.of("EDITOR", editor.toString()), "dev");
+
+        assertEquals(0, r.exit(), r.err());
+        assertEquals(14566, store().get("dev").orElseThrow().port);
+    }
+
+    /** Saving YAML's "nothing" is reported like any other file that is no longer a profile. */
+    @ParameterizedTest
+    @ValueSource(strings = {"null", "~"})
+    @DisabledOnOs(OS.WINDOWS)
+    void anEditThatLeavesNothingIsReported(String nothing) throws Exception {
+        store().save(new Profile(ProductProfile.AWS, "dev"));
+        Path editor = editorThat("echo '" + nothing + "' > \"$1\"");
+
+        Run r = edit(Map.of("EDITOR", editor.toString()), "dev");
+
+        assertEquals(1, r.exit());
+        assertTrue(r.err().contains("Profile 'dev' is no longer valid"), r.err());
+        assertTrue(r.err().contains("holds no settings"), r.err());
+        assertFalse(r.err().contains("Exception"), r.err());
+    }
+
     @Test
     @DisabledOnOs(OS.WINDOWS)
     void anEditorThatFailsIsReported() throws Exception {
