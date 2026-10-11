@@ -2,12 +2,14 @@ package io.floci.cli.unit;
 
 import io.floci.cli.FlociCli;
 import io.floci.cli.config.ProfileStore;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
+import java.nio.file.Files;
 import java.nio.file.Path;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -45,17 +47,33 @@ class ExitCodeTableTest {
     void theDocumentedCode(int expected, String commandLine) {
         PrintStream out = System.out;
         PrintStream err = System.err;
+        // Commands that manage profiles build their own store under the home directory. It is
+        // pointed at the temporary one, so the developer's saved profiles cannot change a result.
+        String home = System.getProperty("user.home");
+        System.setProperty("user.home", tempDir.toString());
         System.setOut(new PrintStream(new ByteArrayOutputStream()));
         ByteArrayOutputStream errBuf = new ByteArrayOutputStream();
         System.setErr(new PrintStream(errBuf));
         int exit;
         try {
-            exit = FlociCli.buildCommandLine(new ProfileStore(tempDir)).execute(commandLine.split(" "));
+            ProfileStore store = new ProfileStore(tempDir.resolve(".floci").resolve("profiles"));
+            exit = FlociCli.buildCommandLine(store).execute(commandLine.split(" "));
         } finally {
             System.setOut(out);
             System.setErr(err);
+            System.setProperty("user.home", home);
         }
 
         assertEquals(expected, exit, commandLine + "\n" + errBuf);
+    }
+
+    /** The guard on the test itself: a profile saved in the real home directory is not visible here. */
+    @Test
+    void profileCommandsSeeOnlyTheTemporaryHome() throws Exception {
+        Path profiles = Files.createDirectories(tempDir.resolve(".floci").resolve("profiles"));
+        Files.writeString(profiles.resolve("only-here.yaml"), "port: 4599\n");
+
+        theDocumentedCode(0, "config profile show only-here");
+        theDocumentedCode(1, "config profile show not-here");
     }
 }
