@@ -270,6 +270,34 @@ class ResetCommandTest {
         assertEquals(same, ResetCommand.sameServer("http://localhost:14566", endpoint, remote));
     }
 
+    /** Docker on this machine reached over TCP is local: its published ports are this machine's. */
+    @ParameterizedTest
+    @CsvSource({
+            "tcp://127.0.0.1:2375, false",
+            "tcp://localhost:2375, false",
+            "tcp://[::1]:2376, false",
+            "unix:///var/run/docker.sock, false",
+            "tcp://remote-host:2375, true",
+            "ssh://deploy@remote-host, true",
+            "tcp://192.168.1.20:2375, true"})
+    void onlyADaemonOnAnotherMachineIsRemote(String dockerHost, boolean remote) {
+        assertEquals(remote, ResetCommand.isRemote(DockerClient.parseDockerHost(dockerHost, null, "Linux")));
+    }
+
+    @Test
+    void aLocalTcpDaemonResetsItsContainerLikeASocketOne() throws Exception {
+        DockerHost localTcp = DockerClient.parseDockerHost("tcp://127.0.0.1:2375", null, "Linux");
+
+        ResetCommand.Target plain = targetOf(dockerWith("floci", "running", "4566->4566/tcp", localTcp));
+        ResetCommand.Target withProfile = targetWithProfile(dockerWith("floci", "running", "14566->4566/tcp", localTcp),
+                "container: floci\nport: 14566\nendpoint: http://localhost:14566\n");
+
+        assertEquals("http://localhost:4566", plain.endpoint());
+        assertNull(withProfile.error(), withProfile.error());
+        assertEquals("http://localhost:14566", withProfile.endpoint());
+        assertTrue(ResetCommand.sameServer("http://localhost:14566", "http://localhost:14566", localTcp));
+    }
+
     /** A profile for an instance on a remote Docker host: its endpoint and its container are one server. */
     @Test
     void aRemoteInstanceWhoseEndpointMatchesIsReset() throws Exception {

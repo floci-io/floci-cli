@@ -155,7 +155,7 @@ public class ResetCommand implements Callable<Integer> {
         }
 
         DockerClient.DockerHost daemon = docker.daemonHost();
-        boolean remote = daemon.kind() == DockerClient.Kind.TCP;
+        boolean remote = isRemote(daemon);
         if (endpointNamed && !typedContainer) {
             // A container and an endpoint were both configured: they have to be one server.
             if (sameServer(published.get(), global.endpoint, daemon)) return new Target(global.endpoint, null);
@@ -184,28 +184,48 @@ public class ResetCommand implements Callable<Integer> {
     }
 
     private static String whereItRuns(String published, DockerClient.DockerHost daemon) {
-        return daemon.kind() == DockerClient.Kind.TCP
+        return isRemote(daemon)
                 ? "port " + URI.create(published).getPort() + " of the remote Docker host " + daemon.raw()
                 : published;
     }
 
     /**
+     * Whether the daemon runs on another machine. Docker reached over TCP or SSH usually does,
+     * but {@code tcp://127.0.0.1:2375} is this machine's daemon on a socket of another kind, and
+     * its published ports are local like any other's.
+     */
+    public static boolean isRemote(DockerClient.DockerHost daemon) {
+        if (daemon.kind() != DockerClient.Kind.TCP) return false;
+        try {
+            String host = URI.create(daemon.raw()).getHost();
+            return host == null || !thisMachine(host);
+        } catch (IllegalArgumentException | NullPointerException e) {
+            return true; // cannot tell: the careful answer
+        }
+    }
+
+    private static boolean thisMachine(String host) {
+        String name = host.toLowerCase(Locale.ROOT);
+        return name.equals("localhost") || name.equals("127.0.0.1") || name.equals("[::1]") || name.equals("::1")
+                || name.equals("0.0.0.0") || name.equals("localhost.floci.io");
+    }
+
+    /**
      * Whether {@code configured} is the server a container publishes at {@code published}
-     * ({@code http://localhost:<port>} as docker reports it). The port has to match. For a local
-     * daemon the configured host has to mean this machine; for a remote one it has to be the
-     * daemon's host, since that is where the port was published.
+     * ({@code http://localhost:<port>} as docker reports it). The port has to match. For a daemon
+     * on this machine the configured host has to mean this machine; for a remote one it has to be
+     * the daemon's host, since that is where the port was published.
      */
     public static boolean sameServer(String published, String configured, DockerClient.DockerHost daemon) {
         try {
             URI there = URI.create(withoutTrailingSlashes(configured));
             if (URI.create(published).getPort() != there.getPort()) return false;
-            String host = there.getHost() == null ? "" : there.getHost().toLowerCase(Locale.ROOT);
-            if (daemon.kind() == DockerClient.Kind.TCP) {
+            String host = there.getHost() == null ? "" : there.getHost();
+            if (isRemote(daemon)) {
                 String daemonHost = URI.create(daemon.raw()).getHost();
                 return daemonHost != null && daemonHost.equalsIgnoreCase(host);
             }
-            return host.equals("localhost") || host.equals("127.0.0.1") || host.equals("[::1]")
-                    || host.equals("::1") || host.equals("0.0.0.0") || host.equals("localhost.floci.io");
+            return thisMachine(host);
         } catch (IllegalArgumentException | NullPointerException e) {
             return false;
         }

@@ -733,10 +733,11 @@ Reset never guesses which server to wipe:
   container that happens to run locally under the default name never takes its place.
 - When both a container and an endpoint are configured, they have to be the same server. If they
   are not, nothing is reset and you are asked to pass `--endpoint` or `--container`.
-- A container on a remote Docker host (`DOCKER_HOST=tcp://...` or `ssh://...`) is only reset
-  through an endpoint, since its published port is not on this machine.
+- A container on a remote Docker host (`DOCKER_HOST=tcp://other-host:...` or `ssh://...`) is only
+  reset through an endpoint, since its published port is not on this machine. A daemon on this
+  machine reached over TCP (`tcp://127.0.0.1:2375`) is local.
 
-In each of those cases the command exits 1 without sending anything.
+When reset refuses to choose a server, the command exits 1 without sending anything.
 
 ### `floci config`
 
