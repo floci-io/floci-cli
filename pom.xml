@@ -50,6 +50,14 @@
             <artifactId>jackson-dataformat-yaml</artifactId>
             <version>${jackson.version}</version>
         </dependency>
+        <!-- Already on the classpath through jackson-dataformat-yaml, which is built on it; declared
+             because config validate uses it directly to resolve anchors and merge keys. Keep the
+             version the one Jackson's YAML module brings in. -->
+        <dependency>
+            <groupId>org.yaml</groupId>
+            <artifactId>snakeyaml</artifactId>
+            <version>2.3</version>
+        </dependency>
 
         <!-- Testing -->
         <dependency>

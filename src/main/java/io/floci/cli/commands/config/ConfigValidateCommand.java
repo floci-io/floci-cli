@@ -1,8 +1,6 @@
 package io.floci.cli.commands.config;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import io.floci.cli.GlobalOptions;
 import io.floci.cli.ProductProfile;
 import io.floci.cli.output.Ansi;
@@ -26,8 +24,6 @@ import java.util.concurrent.Callable;
         mixinStandardHelpOptions = true
 )
 public class ConfigValidateCommand implements Callable<Integer> {
-
-    private static final ObjectMapper YAML = new ObjectMapper(new YAMLFactory());
 
     protected final ProductProfile profile;
     private final boolean dockerSockRequired;
@@ -72,7 +68,7 @@ public class ConfigValidateCommand implements Callable<Integer> {
         JsonNode compose = null;
         String unreadable = null;
         try {
-            compose = YAML.readTree(content);
+            compose = YamlTree.read(content);
             if (compose == null || !compose.isObject()) {
                 unreadable = "Could not read " + composeFile + " as a Compose file: it has no top-level mapping";
             }
