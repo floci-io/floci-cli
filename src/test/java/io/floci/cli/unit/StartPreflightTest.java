@@ -11,6 +11,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.DisabledOnOs;
 import org.junit.jupiter.api.condition.OS;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import picocli.CommandLine;
 
 import java.io.ByteArrayOutputStream;
@@ -66,7 +68,7 @@ class StartPreflightTest {
         }
 
         @Override
-        public String startContainer(List<String> args) {
+        public String startContainer(List<String> args) throws DockerException {
             runArgs.addAll(args);
             calls.add("run");
             return "0123456789abcdef";
@@ -270,6 +272,29 @@ class StartPreflightTest {
         assertTrue(r.err().contains("Cannot connect to the Docker daemon"), r.err());
         assertTrue(r.err().contains("docker.sock not found"), r.err());
         assertEquals(List.of(), docker.calls);
+    }
+
+    /**
+     * BL-096: docker's own error is often several lines. The next step must still follow it; a
+     * second line of docker output is not advice.
+     */
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "docker: Error response from daemon: driver failed programming external connectivity.",
+            "docker: Error response from daemon: Conflict.\nRun 'docker run --help' for more information.\n"})
+    void aFailedDockerRunKeepsItsNextStep(String dockerOutput) {
+        FakeDocker docker = new FakeDocker(REMOTE) {
+            @Override
+            public String startContainer(List<String> args) throws DockerException {
+                throw DockerException.ofOutput(dockerOutput);
+            }
+        };
+
+        Out r = start(docker, "--container", "floci-gcp-preflight", "--detach");
+
+        assertEquals(1, r.exit());
+        assertTrue(r.err().contains("Failed to start container: docker: Error response from daemon"), r.err());
+        assertTrue(r.err().strip().endsWith("Run 'floci gcp doctor' to check Docker, the image and the port."), r.err());
     }
 
     /** A context selected with DOCKER_CONTEXT or 'docker context use' is not in the environment: docker is asked. */

@@ -4,6 +4,7 @@ import io.floci.cli.GlobalOptions;
 import io.floci.cli.config.GlobalConfigStore;
 import io.floci.cli.output.Ansi;
 import io.floci.cli.output.Printer;
+import io.floci.cli.util.Causes;
 import picocli.CommandLine.*;
 
 import java.io.IOException;
@@ -37,7 +38,7 @@ public class ConfigDefaultProductCommand implements Callable<Integer> {
             printer.println(Ansi.gray("Config saved to: " + store.configFilePath()));
             return 0;
         } catch (IOException e) {
-            printer.error("Could not save config: " + e.getMessage(),
+            printer.error("Could not save config: " + Causes.firstLine(e),
                     "Check that " + store.configFilePath().getParent() + " is writable and re-run the command.");
             return 1;
         }

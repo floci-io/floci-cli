@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import io.floci.cli.util.Causes;
 import org.yaml.snakeyaml.DumperOptions;
 import org.yaml.snakeyaml.LoaderOptions;
 import org.yaml.snakeyaml.Yaml;
@@ -85,8 +86,7 @@ public final class YamlTree {
             Iterator<Object> documents = reader.loadAll(yaml).iterator();
             first = documents.hasNext() ? documents.next() : null;
         } catch (YAMLException | IllegalArgumentException e) {
-            String reason = e.getMessage() == null ? "not valid YAML" : e.getMessage().lines().findFirst().orElse("not valid YAML");
-            throw new IOException(reason);
+            throw new IOException(Causes.firstLine(e));
         }
         return first == null ? NODES.missingNode() : tree(first, new int[] {MAX_NODES}, 0);
     }
