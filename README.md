@@ -313,9 +313,15 @@ All commands support `--help`.
 ## Global Flags
 
 Every tree takes the same flags; only the defaults differ. With `--json` (or `-o json`, `-o yaml`)
-a command prints one document on stdout and nothing else; when it fails, the error is on stderr
-and stdout is empty. Two commands print text whatever the format, because their output is not a
-document: `logs` (the container's own output) and `completion` (a script). `env` prints shell
+a command prints one document on stdout and nothing else. When a command cannot do what it was
+asked, the error is on stderr and stdout is empty. Exit `1` does not always mean that, though:
+`doctor`, `status` and `config validate` answer a question, and `start` and `restart` report on a
+container they did create, so each still prints its document when the answer is "no" (a failed
+check, an instance that is down, a file with errors, a start that never became ready). `wait`
+prints nothing when it times out. Read the exit code first, then the document.
+
+Two commands print text whatever the format, because their output is not a document: `logs` (the
+container's own output) and `completion` (a script). `env` prints shell
 code in text mode and the variables as a map in JSON or YAML. Marks are plain ASCII without
 `--no-emoji` too whenever the output is not a terminal (a pipe, a file, CI logs) or `NO_COLOR` is
 set. `--json` wins when it is combined with `--output`.
