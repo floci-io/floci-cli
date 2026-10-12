@@ -187,8 +187,13 @@ public class StartCommand implements Callable<Integer> {
         return preparePersistDir(docker.daemonHost());
     }
 
-    /** {@link #preparePersistDir()} for a daemon reached through {@code daemon}; the test seam. */
-    public String preparePersistDir(DockerClient.DockerHost daemon) {
+    /**
+     * Why the {@code --persist} value cannot be used at all, or {@code null}. This is about the
+     * value, not about the file system: a path this machine cannot parse, or a relative one for
+     * a remote daemon. Callers report it as a usage error (exit 2); a directory that is fine as a
+     * value but cannot be created is {@link #preparePersistDir}'s to report (exit 1).
+     */
+    public String persistPathError(DockerClient.DockerHost daemon) {
         if (persistDir == null || persistDir.isBlank()) return null;
         // A remote daemon reads the bind source on its own machine, where this CLI can neither
         // create nor check it; it is passed on untouched (bindSource), so nothing here can fail
@@ -199,14 +204,29 @@ public class StartCommand implements Callable<Integer> {
                     : "With a remote Docker daemon, --persist must be an absolute path on the daemon's machine, but was '"
                             + persistDir + "'.\nPass an absolute path, for example /srv/floci-data.";
         }
-        Path path;
         try {
-            path = Path.of(persistPath());
+            Path.of(persistPath());
+            return null;
         } catch (InvalidPathException e) {
             // Names persistDir as given: resolving it is what failed.
             return "Invalid persist directory '" + persistDir + "': " + e.getReason()
                     + ".\nPass a --persist path that is valid on this system.";
         }
+    }
+
+    /** {@link #persistPathError(DockerClient.DockerHost)} for the daemon docker resolved. */
+    public String persistPathError() {
+        return persistPathError(docker.daemonHost());
+    }
+
+    /** {@link #preparePersistDir()} for a daemon reached through {@code daemon}; the test seam. */
+    public String preparePersistDir(DockerClient.DockerHost daemon) {
+        if (persistDir == null || persistDir.isBlank()) return null;
+        String rejected = persistPathError(daemon);
+        if (rejected != null) return rejected;
+        // A remote daemon creates the directory on its own machine.
+        if (daemon.kind() == DockerClient.Kind.TCP) return null;
+        Path path = Path.of(persistPath());
         try {
             Files.createDirectories(path);
             return null;
@@ -314,6 +334,11 @@ public class StartCommand implements Callable<Integer> {
         // whether the daemon docker will talk to is on this machine.
         DockerClient.DockerHost daemon = docker.daemonHost();
 
+        String rejected = persistPathError(daemon);
+        if (rejected != null) {
+            printer.error(rejected);
+            return ExitCode.USAGE;
+        }
         String unwritable = preparePersistDir(daemon);
         if (unwritable != null) {
             printer.error(unwritable);
@@ -377,8 +402,10 @@ public class StartCommand implements Callable<Integer> {
             id = docker.startContainer(args);
             progress.accept(Ansi.green("Container started") + " (" + id.substring(0, Math.min(12, id.length())) + ")");
         } catch (DockerException e) {
-            printer.error("Failed to start container: " + e.getMessage(),
-                    "Run '" + profile.commandPrefix() + " doctor' to check Docker, the image and the port.");
+            // withNextStep, not the two-argument error: docker's own output is often several
+            // lines, which must not be taken for a next step.
+            printer.error("Failed to start container: " + e.withNextStep(
+                    "Run '" + profile.commandPrefix() + " doctor' to check Docker, the image and the port."));
             return 1;
         }
 

@@ -374,4 +374,74 @@ class RestartCommandTest {
         assertTrue(r.err().contains("did not finish within 30s"), r.err());
         assertTrue(r.err().contains("floci restart"), r.err());
     }
+
+    /**
+     * A --persist value that cannot be used is a usage error (exit 2), and restart finds out before
+     * it stops anything: here a relative path, which a remote daemon cannot resolve.
+     */
+    @Test
+    void aPersistPathThatCannotBeUsedExitsTwoBeforeTheStop() {
+        DockerClient.DockerHost remote = new DockerClient.DockerHost(DockerClient.Kind.TCP, null, "tcp://build-host:2375");
+        DockerClient running = new DockerClient() {
+            @Override
+            public Optional<RunSettings> inspectRunSettings(String name, int containerPort) {
+                // What the running container was started with: a relative data directory.
+                return Optional.of(new RunSettings("floci/floci:0.9", 14566, "data", Map.of()));
+            }
+
+            @Override
+            public Optional<ContainerInfo> inspectContainer(String name) {
+                return Optional.of(new ContainerInfo("abc", name, "floci/floci:0.9", "running", "14566->4566/tcp"));
+            }
+        };
+        List<String> ran = new ArrayList<>();
+        RestartCommand restart = new RestartCommand(ProductProfile.AWS, running) {
+            @Override
+            public StartCommand buildStartCommand() throws DockerException {
+                StartCommand real = super.buildStartCommand();
+                return new StartCommand(ProductProfile.AWS) {
+                    @Override
+                    public String validationError() {
+                        return real.validationError();
+                    }
+
+                    @Override
+                    public String persistPathError() {
+                        return real.persistPathError(remote);
+                    }
+
+                    @Override
+                    public String preparePersistDir() {
+                        return real.preparePersistDir(remote);
+                    }
+
+                    @Override
+                    public Integer call() {
+                        ran.add("start");
+                        return 0;
+                    }
+                };
+            }
+
+            @Override
+            public StopCommand buildStopCommand() {
+                return new StopCommand(ProductProfile.AWS) {
+                    @Override
+                    public Integer call() {
+                        ran.add("stop");
+                        return 0;
+                    }
+                };
+            }
+        };
+        new CommandLine(restart)
+                .setDefaultValueProvider(new ProfileDefaultValueProvider(new ProfileStore(tempDir)))
+                .parseArgs();
+
+        Ran r = run(restart);
+
+        assertEquals(2, r.exit());
+        assertEquals(List.of(), ran, "nothing was stopped or started");
+        assertTrue(r.err().contains("--persist must be an absolute path on the daemon's machine"), r.err());
+    }
 }

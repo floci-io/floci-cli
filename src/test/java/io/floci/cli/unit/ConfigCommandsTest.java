@@ -211,7 +211,7 @@ class ConfigCommandsTest {
     void createRefusesAPortOutOfRange() throws Exception {
         Run r = profileCmd(ProductProfile.AZ, "create", "bad", "--port", "70000");
 
-        assertEquals(1, r.exit());
+        assertEquals(2, r.exit(), "a rejected value is a usage error");
         assertTrue(store().get("bad").isEmpty());
     }
 
@@ -498,5 +498,34 @@ class ConfigCommandsTest {
         assertEquals("oci", json.path("defaultProduct").asText());
         assertEquals(config.toString(), json.path("file").asText());
         assertEquals("oci", new GlobalConfigStore(config).getDefaultProduct());
+    }
+
+    /**
+     * BL-096: a profile that does not parse is reported in one line of cause, followed by the next
+     * step. The parser's "at [Source: ...]" line used to stand in for it.
+     */
+    @Test
+    void aBrokenProfileIsReportedWithItsNextStep() throws Exception {
+        writeProfile("broken", "port: [unterminated\n");
+
+        Run show = profileCmd(ProductProfile.AWS, "show", "broken");
+
+        assertEquals(1, show.exit());
+        List<String> lines = show.err().strip().lines().toList();
+        assertEquals(2, lines.size(), show.err());
+        assertTrue(lines.get(0).contains("Could not read profile: "), show.err());
+        assertEquals("Fix or delete the profile file, then re-run the command.", lines.get(1));
+        assertFalse(show.err().contains("[Source"), show.err());
+    }
+
+    @Test
+    void creatingOverABrokenProfileKeepsItsNextStepToo() throws Exception {
+        writeProfile("broken", "port: [unterminated\n");
+
+        Run create = profileCmd(ProductProfile.AWS, "create", "broken");
+
+        assertEquals(1, create.exit());
+        assertTrue(create.err().strip().endsWith("re-run the command."), create.err());
+        assertFalse(create.err().contains("[Source"), create.err());
     }
 }

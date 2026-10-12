@@ -41,6 +41,11 @@ public class SnapshotLoadCommand implements Callable<Integer> {
     @Override
     public Integer call() {
         Printer printer = global.printer();
+        String invalidName = FlociHttpClient.snapshotNameError(name);
+        if (invalidName != null) {
+            printer.error(invalidName);
+            return ExitCode.USAGE;
+        }
         // Resolve the endpoint from the container's port mapping, like status/services/wait do,
         // so a container started with --port <n> is still found without --endpoint.
         String effectiveEndpoint = global.resolvedEndpoint(new DockerClient());

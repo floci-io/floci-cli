@@ -2,6 +2,7 @@ package io.floci.cli.config;
 
 import io.floci.cli.output.Ansi;
 import io.floci.cli.output.OutputFormat;
+import io.floci.cli.util.Causes;
 import picocli.CommandLine;
 import picocli.CommandLine.IDefaultValueProvider;
 import picocli.CommandLine.Model.ArgSpec;
@@ -117,7 +118,7 @@ public class ProfileDefaultValueProvider implements IDefaultValueProvider {
         } catch (IllegalArgumentException e) {
             throw new ProfileNotFoundException(commandLine, e.getMessage());
         } catch (IOException e) {
-            throw invalid(commandLine, name, e.getMessage());
+            throw invalid(commandLine, name, Causes.firstLine(e));
         }
         if (loaded.isEmpty()) {
             throw new ProfileNotFoundException(commandLine,

@@ -1,14 +1,13 @@
 package io.floci.cli.commands.config;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import io.floci.cli.GlobalOptions;
 import io.floci.cli.ProductProfile;
 import io.floci.cli.output.Ansi;
 import io.floci.cli.output.Glyphs;
 import io.floci.cli.output.OutputFormat;
 import io.floci.cli.output.Printer;
+import io.floci.cli.util.Causes;
 import picocli.CommandLine.*;
 
 import java.io.IOException;
@@ -25,8 +24,6 @@ import java.util.concurrent.Callable;
         mixinStandardHelpOptions = true
 )
 public class ConfigValidateCommand implements Callable<Integer> {
-
-    private static final ObjectMapper YAML = new ObjectMapper(new YAMLFactory());
 
     protected final ProductProfile profile;
     private final boolean dockerSockRequired;
@@ -63,7 +60,7 @@ public class ConfigValidateCommand implements Callable<Integer> {
         try {
             content = Files.readString(composeFile);
         } catch (IOException e) {
-            printer.error("Could not read " + composeFile + ": " + e.getMessage(),
+            printer.error("Could not read " + composeFile + ": " + Causes.firstLine(e),
                     "Check the file's permissions, or pass another with --file.");
             return 1;
         }
@@ -71,13 +68,12 @@ public class ConfigValidateCommand implements Callable<Integer> {
         JsonNode compose = null;
         String unreadable = null;
         try {
-            compose = YAML.readTree(content);
+            compose = YamlTree.read(content);
             if (compose == null || !compose.isObject()) {
                 unreadable = "Could not read " + composeFile + " as a Compose file: it has no top-level mapping";
             }
         } catch (IOException e) {
-            String reason = e.getMessage() == null ? "unreadable" : e.getMessage().lines().findFirst().orElse("unreadable");
-            unreadable = "Could not read " + composeFile + " as YAML: " + reason;
+            unreadable = "Could not read " + composeFile + " as YAML: " + Causes.firstLine(e);
         }
         if (unreadable != null) {
             // Structured output always carries the report, so a script reading it gets 'valid: false'
