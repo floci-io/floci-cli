@@ -207,7 +207,7 @@ class ConfigCommandsTest {
     void createRefusesAPortOutOfRange() throws Exception {
         Run r = profileCmd(ProductProfile.AZ, "create", "bad", "--port", "70000");
 
-        assertEquals(1, r.exit());
+        assertEquals(2, r.exit(), "a rejected value is a usage error");
         assertTrue(store().get("bad").isEmpty());
     }
 

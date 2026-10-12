@@ -173,7 +173,7 @@ class StartPreflightTest {
         FakeDocker refused = new FakeDocker(REMOTE);
         Out relative = start(refused, "--persist", "data", "--container", "floci-gcp-preflight", "--detach");
 
-        assertEquals(1, relative.exit());
+        assertEquals(2, relative.exit(), "a rejected value is a usage error");
         assertTrue(relative.err().contains("must be an absolute path on the daemon's machine"), relative.err());
         assertEquals(List.of(), refused.calls);
     }

@@ -28,7 +28,7 @@ public class ConfigDefaultProductCommand implements Callable<Integer> {
         Printer printer = global.printer();
         if (!"aws".equals(product) && !"az".equals(product) && !"gcp".equals(product) && !"oci".equals(product)) {
             printer.error("Unknown product '" + product + "'.\nUse one of: aws, az, gcp, oci.");
-            return 1;
+            return ExitCode.USAGE; // a value the command cannot accept, like any other bad argument
         }
         GlobalConfigStore store = new GlobalConfigStore();
         try {
