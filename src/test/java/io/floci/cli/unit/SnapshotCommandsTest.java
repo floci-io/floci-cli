@@ -1,5 +1,8 @@
 package io.floci.cli.unit;
 
+import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpServer;
 import io.floci.cli.FlociCli;
 import io.floci.cli.config.ProfileStore;
@@ -114,5 +117,30 @@ class SnapshotCommandsTest {
 
         assertEquals("1", r[0]);
         assertTrue(r[2].contains("floci status --container floci-snapshot-test-none"), r[2]);
+    }
+
+    /** BL-091: with --json a snapshot action prints one document saying what it did and where. */
+    @ParameterizedTest
+    @CsvSource({"save, saved", "load, loaded", "delete, deleted"})
+    void aSnapshotActionReportsItselfAsJson(String command, String action) throws Exception {
+        status = 200;
+
+        String[] r = run("snapshot", command, "nightly", "--json");
+
+        assertEquals("0", r[0], r[2]);
+        JsonNode json = new ObjectMapper().enable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS).readTree(r[1]);
+        assertEquals("nightly", json.path("snapshot").asText());
+        assertEquals(action, json.path("action").asText());
+        assertEquals("http://127.0.0.1:" + server.getAddress().getPort(), json.path("endpoint").asText());
+    }
+
+    @Test
+    void aSnapshotActionInTextIsUnchanged() {
+        status = 200;
+
+        String[] r = run("snapshot", "save", "nightly");
+
+        assertEquals("0", r[0], r[2]);
+        assertTrue(r[1].contains("Snapshot saved: nightly"), r[1]);
     }
 }

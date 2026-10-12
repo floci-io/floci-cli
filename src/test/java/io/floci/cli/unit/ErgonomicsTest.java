@@ -161,6 +161,57 @@ class ErgonomicsTest {
         assertTrue(r.out().contains("Profile 'dev' saved"), r.out());
     }
 
+    @Test
+    @DisabledOnOs(OS.WINDOWS)
+    void editReportsItselfAsJsonWhenAsked() throws Exception {
+        store().save(new Profile(ProductProfile.AWS, "dev"));
+        Path editor = editorThat("echo 'port: 14566' >> \"$1\"");
+        ConfigProfileCommand command = new ConfigProfileCommand(ProductProfile.AWS, store(), Map.of("EDITOR", editor.toString())::get);
+
+        Run r = capture(() -> new CommandLine(command).execute("edit", "dev", "--json"));
+
+        assertEquals(0, r.exit(), r.err());
+        assertTrue(r.out().strip().startsWith("{") && r.out().strip().endsWith("}"), r.out());
+        assertTrue(r.out().contains("\"action\" : \"edited\""), r.out());
+        assertFalse(r.out().contains("saved ("), r.out());
+    }
+
+    /**
+     * With structured output the editor's stdout must not be this command's stdout, or whatever
+     * the editor prints lands in front of the result. A real child process shows it: its stdout is
+     * captured in a file here, as a shell redirect would.
+     */
+    @Test
+    @DisabledOnOs(OS.WINDOWS)
+    void anEditorsOutputStaysOffStdoutInStructuredMode() throws Exception {
+        Path noisy = editorThat("echo 'Waiting for your editor to close the file...'");
+        Path captured = tempDir.resolve("stdout.txt");
+        Path errors = tempDir.resolve("stderr.txt");
+
+        ProcessBuilder structured = ConfigProfileCommand.editorProcess(List.of(noisy.toString(), "file"), true);
+        assertNotEquals(ProcessBuilder.Redirect.INHERIT, structured.redirectOutput());
+        assertEquals(ProcessBuilder.Redirect.INHERIT, structured.redirectInput(), "the editor still reads the terminal");
+
+        // The same decision, observed from outside: a shell runs the editor the way the command
+        // would, with fd 1 and fd 2 captured separately.
+        String redirect = structured.redirectOutput().file() == null ? "/dev/null" : structured.redirectOutput().file().toString();
+        Process shell = new ProcessBuilder("sh", "-c", "'" + noisy + "' file >> " + redirect)
+                .redirectOutput(captured.toFile()).redirectError(errors.toFile()).start();
+        assertEquals(0, shell.waitFor());
+
+        assertEquals("", Files.readString(captured), "nothing from the editor on stdout");
+        assertTrue(Files.readString(errors).contains("Waiting for your editor"), "it went to stderr instead");
+    }
+
+    @Test
+    void inTextModeTheEditorSharesTheTerminal() {
+        ProcessBuilder text = ConfigProfileCommand.editorProcess(List.of("vi", "file"), false);
+
+        assertEquals(ProcessBuilder.Redirect.INHERIT, text.redirectOutput());
+        assertEquals(ProcessBuilder.Redirect.INHERIT, text.redirectInput());
+        assertEquals(ProcessBuilder.Redirect.INHERIT, text.redirectError());
+    }
+
     /** VISUAL wins over EDITOR, and a value with arguments is a command line. */
     @Test
     @DisabledOnOs(OS.WINDOWS)
