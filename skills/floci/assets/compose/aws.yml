@@ -1,0 +1,46 @@
+# Floci AWS emulator (floci) with an example app service.
+# Copy what you need into the project's Compose file; see references/docker.md for what to trim.
+# Docs: https://floci.io/floci/configuration/docker-compose/
+
+services:
+  floci:
+    image: floci/floci:latest
+    # The CLI's default container name, so `floci aws status|wait|env|logs` work unchanged.
+    # Rename it (and pass --container) when two projects run on the same host.
+    container_name: floci
+    ports:
+      - "4566:4566"
+    environment:
+      # Other containers reach the emulator by this name, so returned URLs (SQS QueueUrl,
+      # presigned URLs) must use it. Remove when only the host talks to the emulator.
+      FLOCI_HOSTNAME: floci
+      # Keeps the containers this emulator launches (Lambda, ECS, RDS, ...) apart from those
+      # of other emulator instances on the same Docker host.
+      FLOCI_DOCKER_RESOURCE_NAMESPACE: myapp
+      # Lets the app reach child containers (RDS, ElastiCache, ...) by name.
+      FLOCI_SERVICES_DOCKER_NETWORK: myapp-net
+      # Keep state in the volume below. Remove both to start empty every time.
+      FLOCI_STORAGE_MODE: persistent
+    volumes:
+      # Needed by services that run real containers (Lambda, ECS, RDS, ElastiCache, ...).
+      - /var/run/docker.sock:/var/run/docker.sock
+      - floci-data:/app/data
+    # No healthcheck here: the image has one built in.
+
+  app:
+    build: .
+    environment:
+      AWS_ENDPOINT_URL: http://floci:4566
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      AWS_DEFAULT_REGION: us-east-1
+    depends_on:
+      floci:
+        condition: service_healthy
+
+volumes:
+  floci-data:
+
+networks:
+  default:
+    name: myapp-net
