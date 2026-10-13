@@ -103,12 +103,17 @@ floci <tree> stop --remove           # when done, only if you started it
 `floci <tree> env --shell fish | source`, or
 `floci <tree> env --shell powershell | Invoke-Expression`.
 
-Or use the helper, which starts the container only when it is not already running, then waits
-and prints the exports:
+Or use the helper, which starts the container only when none exists, then waits and prints
+the exports:
 
 ```sh
-eval "$(scripts/ensure-running.sh <aws|gcp|az|oci> [profile])"
+exports="$(scripts/ensure-running.sh <aws|gcp|az|oci> [profile])" && eval "$exports"
 ```
+
+Keep the two steps: `eval "$(...)"` in one go succeeds even when the helper fails, and the
+commands after it would run with missing or stale wiring. The helper exits 3 without
+touching anything when the container exists but is stopped, because starting it replaces
+it (rule 6). Tell the user, and re-run with `FLOCI_REPLACE_STOPPED=1` once they agree.
 
 One-time per instance, before using the native CLI:
 - Azure: `floci az setup` (trusts the emulator cert, registers an az cloud, logs in).

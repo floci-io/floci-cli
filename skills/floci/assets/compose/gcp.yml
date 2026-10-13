@@ -6,10 +6,14 @@ services:
   floci-gcp:
     image: floci/floci-gcp:latest
     # The CLI's default container name, so `floci gcp status|wait|env|logs` work unchanged.
-    # Rename it (and pass --container) when two projects run on the same host.
+    # Rename it (and pass --container) when two projects run on the same host. The namespace
+    # and the network name below are per project too: change all three together, or two
+    # projects copied from this file will touch each other's containers.
     container_name: floci-gcp
     ports:
-      - "4588:4588"
+      # Loopback only: the emulator accepts fake credentials, so do not publish it to the
+      # network. Other Compose services reach it by service name, not through this port.
+      - "127.0.0.1:4588:4588"
     environment:
       # Other containers reach the emulator by this name, so returned URLs must use it.
       # Remove both lines when only the host talks to the emulator.

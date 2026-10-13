@@ -30,6 +30,12 @@ Common to all four:
   the vendor CLI inside the image (useful for init scripts); see the docs before relying on
   what they contain.
 - **Fake credentials only**, the same ones `floci <tree> env` exports.
+- **Publish the port on loopback** (`127.0.0.1:4566:4566`, as the templates and the commands
+  below do). The emulator accepts the fake credentials from anyone who can reach the port,
+  so a plain `4566:4566` exposes the user's local resources to the network. Containers on
+  the same Compose network do not use the published port. Drop the `127.0.0.1:` only when
+  the user asks for the emulator to be reachable from another machine, and say what it
+  opens.
 
 Variables you will actually set (`<P>` is the env prefix):
 
@@ -50,18 +56,18 @@ For anything else, read the environment variable page of that emulator (see
 
 ```sh
 # AWS, with child-container support
-docker run -d --name floci -p 4566:4566 \
+docker run -d --name floci -p 127.0.0.1:4566:4566 \
   -v /var/run/docker.sock:/var/run/docker.sock \
   floci/floci:latest
 
 # Same, keeping state in ./floci-data
-docker run -d --name floci -p 4566:4566 \
+docker run -d --name floci -p 127.0.0.1:4566:4566 \
   -v /var/run/docker.sock:/var/run/docker.sock \
   -v "$PWD/floci-data:/app/data" -e FLOCI_STORAGE_MODE=persistent \
   floci/floci:latest
 
 # A second instance on another host port
-docker run -d --name floci-b -p 14566:4566 \
+docker run -d --name floci-b -p 127.0.0.1:14566:4566 \
   -v /var/run/docker.sock:/var/run/docker.sock \
   -e FLOCI_BASE_URL=http://localhost:14566 \
   -e FLOCI_DOCKER_RESOURCE_NAMESPACE=b \
@@ -79,8 +85,9 @@ Wait for readiness without the CLI:
 until [ "$(docker inspect -f '{{.State.Health.Status}}' floci)" = healthy ]; do sleep 1; done
 ```
 
-`floci <tree> start` builds this same command. Prefer it when the CLI is installed: it also
-resolves the Docker socket (Podman, remote daemons), derives the namespace and waits.
+`floci <tree> start` builds this same command, except that it publishes the port on every
+interface. Prefer it when the CLI is installed: it also resolves the Docker socket (Podman,
+remote daemons), derives the namespace and waits.
 
 ## Writing a Compose file
 
@@ -96,12 +103,21 @@ resolves the Docker socket (Podman, remote daemons), derives the namespace and w
    - no need to keep state: drop the data volume and `STORAGE_MODE` together;
    - the namespace line may go only when this is the single emulator instance of that cloud
      on the Docker host (other clouds do not count; each has its own name prefix).
+
+   `myapp` and `myapp-net` are placeholders. Replace them with a name of this project, and
+   when another project on the same host already uses the default `container_name`, rename
+   that too: container name, namespace and network name change together.
 3. **Wire the app** with the service name as host, never `localhost`: inside a container,
    `localhost` is the container itself. Use the fake credentials from the template.
 4. **Several clouds**: start from `multi-cloud.yml` and delete the services not needed. Each
-   emulator keeps its own port, so no remapping is required. That file is the minimal form:
-   for persistence or an app service, copy the `STORAGE_MODE` line, the data volume and the
-   `app` block from the per-cloud template.
+   emulator keeps its own port, so no remapping is required. That file is the minimal form;
+   copy the rest from the per-cloud templates as needed:
+   - persistence: the `STORAGE_MODE` line and the data volume;
+   - an app service: the `app` block;
+   - an app that reaches child containers by name (RDS, ElastiCache, Cloud SQL, OKE, ...):
+     the `SERVICES_DOCKER_NETWORK` line of each AWS, GCP and OCI emulator and the top-level
+     `networks:` block, all with the same network name. Without them the child containers
+     start on Docker's default bridge, where the app cannot resolve them.
 5. **Validate**: `docker compose -f <file> config -q`, and when floci-cli is installed,
    `floci <tree> config validate -f <file>` (checks image, port mapping, socket and
    persistence; it looks at one emulator service per run).

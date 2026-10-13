@@ -6,10 +6,14 @@ services:
   floci-az:
     image: floci/floci-az:latest
     # The CLI's default container name, so `floci az status|wait|env|setup` work unchanged.
-    # Rename it (and pass --container) when two projects run on the same host.
+    # Rename it (and pass --container) when two projects run on the same host. The namespace
+    # below is per project too: change both together, or two projects copied from this
+    # file will touch each other's containers.
     container_name: floci-az
     ports:
-      - "4577:4577"
+      # Loopback only: the emulator accepts fake credentials, so do not publish it to the
+      # network. Other Compose services reach it by service name, not through this port.
+      - "127.0.0.1:4577:4577"
     environment:
       # HTTPS next to HTTP on the same port. Required by the az CLI and `floci az setup`;
       # harmless for apps that use plain HTTP.

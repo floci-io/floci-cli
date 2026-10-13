@@ -29,7 +29,8 @@ import static org.junit.jupiter.api.Assertions.*;
  * and options against the real command tree.
  *
  * <p>Only code is read: fenced blocks and inline code spans in Markdown, backtick spans in the
- * Compose templates, and the command lines of the helper scripts.
+ * Compose templates, and the command lines of the helper scripts. A line that ends in a
+ * backslash is read together with the lines it continues on.
  */
 class SkillDocsTest {
 
@@ -38,6 +39,8 @@ class SkillDocsTest {
     private static final Pattern CODE_SPAN = Pattern.compile("`([^`]+)`");
     private static final Pattern LINK = Pattern.compile("\\]\\(([^)#\\s]+)(?:#[^)]*)?\\)");
     private static final Pattern BUNDLED_PATH = Pattern.compile("`((?:references|scripts|assets)/[\\w./-]+)`");
+    // What may stand in front of the command word: quotes, '$(' and, before those, 'name='.
+    private static final Pattern COMMAND_PREFIX = Pattern.compile("^(?:[A-Za-z_]\\w*=(?=[\"'(`$]))?[\"'(`$]*");
 
     @TempDir
     Path tempDir;
@@ -47,19 +50,53 @@ class SkillDocsTest {
         CommandLine root = FlociCli.buildCommandLine(new ProfileStore(tempDir));
         List<String> problems = new ArrayList<>();
         for (Path file : skillFiles()) {
-            for (String code : codeIn(file)) {
-                String[] tokens = code.trim().split("\\s+");
-                for (int i = 0; i < tokens.length; i++) {
-                    // 'docker run --name floci' names a container; it does not run the CLI.
-                    boolean optionValue = i > 0 && tokens[i - 1].startsWith("-");
-                    if (!optionValue && "floci".equals(tokens[i].replaceFirst("^[\"'(`$]+", ""))) {
-                        check(root, tokens, i + 1, SKILL.relativize(file) + ": " + code.trim(), problems);
-                    }
-                }
-            }
+            String name = file.getFileName().toString();
+            List<String> code = codeIn(name, Files.readAllLines(file, StandardCharsets.UTF_8));
+            problems.addAll(problemsIn(root, SKILL.relativize(file).toString(), code));
         }
         assertTrue(problems.isEmpty(),
                 "The skill names commands or flags the CLI does not have:\n  " + String.join("\n  ", problems));
+    }
+
+    /** The check has to see a command wherever a script can put one, or a broken one passes. */
+    @Test
+    void aWrongCommandIsFoundInEveryFormTheSkillUses() {
+        CommandLine root = FlociCli.buildCommandLine(new ProfileStore(tempDir));
+
+        assertEquals(1, problemsIn(root, "x.sh", codeIn("x.sh", List.of(
+                "floci aws status --no-such-flag"))).size(), "a plain command");
+        assertEquals(1, problemsIn(root, "x.sh", codeIn("x.sh", List.of(
+                "out=\"$(floci aws status --no-such-flag 2>/dev/null || true)\""))).size(), "an assignment");
+        assertEquals(4, problemsIn(root, "x.sh", codeIn("x.sh", List.of(
+                "out=\"$(floci \"$tree\" status --no-such-flag)\""))).size(), "once per tree for $tree");
+        assertEquals(1, problemsIn(root, "x.sh", codeIn("x.sh", List.of(
+                "out=$(floci aws no-such-command)"))).size(), "an unquoted assignment");
+        assertEquals(1, problemsIn(root, "x.sh", codeIn("x.sh", List.of(
+                "floci aws start --detach \\", "  --no-such-flag"))).size(), "a continued line");
+        assertEquals(1, problemsIn(root, "x.md", codeIn("x.md", List.of(
+                "```sh", "floci aws start \\", "  --no-such-flag", "```"))).size(), "a continued line in Markdown");
+        assertEquals(1, problemsIn(root, "x.md", codeIn("x.md", List.of(
+                "Run `floci gcp wait --no-such-flag` first."))).size(), "an inline span");
+
+        assertEquals(List.of(), problemsIn(root, "x.sh", codeIn("x.sh", List.of(
+                "out=\"$(floci \"$tree\" env -o text ${args[@]+\"${args[@]}\"})\"",
+                "docker run -d --name floci \\", "  -e FLOCI_HOSTNAME=floci floci/floci:latest"))),
+                "valid commands, and 'floci' as a container name or a value");
+    }
+
+    private static List<String> problemsIn(CommandLine root, String where, List<String> code) {
+        List<String> problems = new ArrayList<>();
+        for (String line : code) {
+            String[] tokens = line.trim().split("\\s+");
+            for (int i = 0; i < tokens.length; i++) {
+                // 'docker run --name floci' names a container; it does not run the CLI.
+                boolean optionValue = i > 0 && tokens[i - 1].startsWith("-");
+                if (!optionValue && "floci".equals(COMMAND_PREFIX.matcher(tokens[i]).replaceFirst(""))) {
+                    check(root, tokens, i + 1, where + ": " + line.trim(), problems);
+                }
+            }
+        }
+        return problems;
     }
 
     /** Walks one command line from {@code from}, branching where the text offers alternatives. */
@@ -205,29 +242,46 @@ class SkillDocsTest {
         }
     }
 
-    /** The pieces of {@code file} that are code, one string per line or span. */
-    private static List<String> codeIn(Path file) throws IOException {
-        List<String> lines = Files.readAllLines(file, StandardCharsets.UTF_8);
-        String name = file.getFileName().toString();
+    /** The pieces of a file named {@code name} that are code, one string per command or span. */
+    private static List<String> codeIn(String name, List<String> lines) {
         List<String> code = new ArrayList<>();
         if (name.endsWith(".sh")) {
             // Comments and messages are prose; the rest of a script is commands.
-            lines.stream().map(String::trim)
-                    .filter(line -> !line.startsWith("#") && !line.startsWith("echo "))
-                    .forEach(code::add);
+            joinContinued(lines.stream().map(String::trim)
+                    .filter(line -> !line.startsWith("#") && !line.startsWith("echo ")).toList(), code);
             return code;
         }
+        List<String> block = new ArrayList<>();
         boolean fenced = false;
         for (String line : lines) {
             if (line.trim().startsWith("```")) {
                 fenced = !fenced;
+                if (!fenced) {
+                    joinContinued(block, code);
+                    block.clear();
+                }
             } else if (fenced && name.endsWith(".md")) {
-                code.add(line);
+                block.add(line);
             } else {
                 Matcher span = CODE_SPAN.matcher(line);
                 while (span.find()) code.add(span.group(1));
             }
         }
         return code;
+    }
+
+    /** Adds {@code lines} to {@code code}, a line ending in a backslash joined with the next. */
+    private static void joinContinued(List<String> lines, List<String> code) {
+        StringBuilder command = new StringBuilder();
+        for (String line : lines) {
+            String trimmed = line.stripTrailing();
+            if (trimmed.endsWith("\\")) {
+                command.append(trimmed, 0, trimmed.length() - 1).append(' ');
+            } else {
+                code.add(command.append(line).toString());
+                command.setLength(0);
+            }
+        }
+        if (!command.isEmpty()) code.add(command.toString());
     }
 }

@@ -12,14 +12,29 @@ eval "$(floci <tree> env -o text)"
 floci <tree> stop --remove || true   # exits 1 when the container is already gone
 ```
 
-The update check is disabled automatically in CI. Install with
-`curl -fsSL https://floci.io/install.sh | sh` (or `brew install floci-io/floci/floci`).
+The update check is disabled automatically in CI.
+
+Install into a directory the job can write to. The install script defaults to
+`/usr/local/bin` and calls `sudo` when that is not writable, which fails on runners without
+passwordless `sudo`:
+
+```sh
+curl -fsSL https://floci.io/install.sh | FLOCI_INSTALL_DIR="$HOME/.local/bin" sh
+export PATH="$HOME/.local/bin:$PATH"
+```
+
+The install script does not create the directory: run `mkdir -p "$HOME/.local/bin"` first
+where it may be missing. `brew install floci-io/floci/floci` also works where Homebrew is
+present.
 
 ### GitHub Actions
 
 ```yaml
 - name: Install floci
-  run: curl -fsSL https://floci.io/install.sh | sh
+  run: |
+    mkdir -p "$HOME/.local/bin"
+    curl -fsSL https://floci.io/install.sh | FLOCI_INSTALL_DIR="$HOME/.local/bin" sh
+    echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 - name: Start emulator
   run: |
     floci aws start --detach

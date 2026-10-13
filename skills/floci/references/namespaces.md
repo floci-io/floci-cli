@@ -134,13 +134,13 @@ Pick a free port per profile; the port is the one thing that must differ between
 services:
   floci-a:
     image: floci/floci:latest
-    ports: ["4566:4566"]
+    ports: ["127.0.0.1:4566:4566"]
     environment:
       FLOCI_DOCKER_RESOURCE_NAMESPACE: a
     volumes: ["/var/run/docker.sock:/var/run/docker.sock"]
   floci-b:
     image: floci/floci:latest
-    ports: ["14566:4566"]
+    ports: ["127.0.0.1:14566:4566"]
     environment:
       FLOCI_DOCKER_RESOURCE_NAMESPACE: b
       FLOCI_BASE_URL: http://localhost:14566

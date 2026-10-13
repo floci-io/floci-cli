@@ -2,11 +2,15 @@
 # Ensure a Floci emulator is running and print its environment for eval.
 #
 # Usage:
-#   eval "$(<skill dir>/scripts/ensure-running.sh <aws|gcp|az|oci> [profile])"
+#   exports="$(<skill dir>/scripts/ensure-running.sh <aws|gcp|az|oci> [profile])" && eval "$exports"
 #
-# Starts the emulator only if it is not already healthy, waits for readiness,
-# then prints the `floci <tree> env` exports on stdout. Progress goes to stderr.
-# Env: FLOCI_WAIT_TIMEOUT (default 120s).
+# Not eval "$(...)" in one step: that succeeds even when this script fails.
+#
+# Starts the emulator only if no container exists, waits for readiness, then prints
+# the `floci <tree> env` exports on stdout. Progress goes to stderr.
+# Exit 3: the container exists but is not running. `floci <tree> start` would remove it and
+# create a new one, so this script leaves it alone unless FLOCI_REPLACE_STOPPED=1.
+# Env: FLOCI_WAIT_TIMEOUT (default 120s), FLOCI_REPLACE_STOPPED.
 set -euo pipefail
 
 tree="${1:-}"
@@ -29,14 +33,35 @@ fi
 
 status_json="$(floci "$tree" status -o json ${args[@]+"${args[@]}"} 2>/dev/null || true)"
 
-if grep -Eq '"state"[[:space:]]*:[[:space:]]*"running"' <<<"$status_json"; then
-  echo "floci $tree${profile:+ ($profile)} container already running" >&2
-else
-  # start removes a stopped container with the same name before recreating it, so its
-  # state survives only with --persist (or a profile with persistDir).
+state="$(sed -nE 's/.*"state"[[:space:]]*:[[:space:]]*"([^"]*)".*/\1/p' <<<"$status_json" | head -n 1)"
+
+start() {
   echo "starting floci $tree${profile:+ ($profile)}..." >&2
   floci "$tree" start --detach -q ${args[@]+"${args[@]}"} >&2
-fi
+}
+
+case "$state" in
+  running)
+    echo "floci $tree${profile:+ ($profile)} container already running" >&2
+    ;;
+  "not found")
+    start
+    ;;
+  "")
+    echo "could not read the state of floci $tree${profile:+ ($profile)}; run 'floci $tree doctor'" >&2
+    exit 1
+    ;;
+  *)
+    # start removes a container of the same name before creating a new one. Without a profile
+    # the new one gets default settings, so a custom port, image or persist mount is lost.
+    if [[ "${FLOCI_REPLACE_STOPPED:-}" != "1" ]]; then
+      echo "floci $tree${profile:+ ($profile)} container exists but is not running (state: $state)." >&2
+      echo "Starting it removes that container and creates a new one. Ask the user, then re-run with FLOCI_REPLACE_STOPPED=1." >&2
+      exit 3
+    fi
+    start
+    ;;
+esac
 
 if ! floci "$tree" wait --timeout "${FLOCI_WAIT_TIMEOUT:-120s}" -q ${args[@]+"${args[@]}"} >&2; then
   echo "floci $tree did not become ready; recent logs:" >&2
