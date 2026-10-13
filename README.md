@@ -1070,6 +1070,42 @@ services:
 
 ---
 
+## AI agents
+
+[`skills/floci/`](skills/floci/) is an [Agent Skill](https://agentskills.io) that teaches coding agents (Claude Code,
+Codex, Cursor, Kiro, Gemini CLI and others) to work with Floci: install and drive this CLI, wire `aws`, `gcloud`, `az`,
+`oci` and the SDKs to the emulators without touching real cloud, write `docker run` commands and Compose files, run
+several instances side by side, and look things up in the published documentation of each emulator
+([AWS](https://floci.io/floci/), [Azure](https://floci.io/floci-az/), [GCP](https://floci.io/floci-gcp/),
+[OCI](https://floci.io/floci-oci/)) instead of guessing.
+
+```sh
+# Any supported agent (asks which ones to install it for)
+npx skills add floci-io/floci-cli
+
+# Claude Code, as a plugin
+/plugin marketplace add floci-io/floci-cli
+/plugin install floci@floci
+```
+
+In [Kiro](https://kiro.dev), install it as a power: Powers panel, **Add Custom Power**, **Import power from GitHub**,
+and enter `https://github.com/floci-io/floci-cli`. The `plugin.json` at the repository root is the
+[Agent Plugins](https://agent-plugins.org) manifest Kiro reads. Kiro also loads plain Agent Skills, so copying
+`skills/floci/` into `.kiro/skills/` (or `~/.kiro/skills/`) works as well.
+
+Or copy the `skills/floci/` directory into your agent's skills directory (for example `~/.claude/skills/floci/`).
+
+| Part | What it holds |
+|---|---|
+| `SKILL.md` | Lifecycle, safety rules (fake credentials only, verify the endpoint, explicit product tree) and when to read what |
+| `references/` | One page per cloud, plus Docker and Compose, multiple instances and namespaces, CI, troubleshooting, and how to find a page in the docs |
+| `assets/compose/` | Compose templates for each emulator and for all four together |
+| `scripts/` | `install-floci.sh` and `ensure-running.sh` (bash) |
+
+The skill follows the CLI: `SkillDocsTest` checks every `floci` command it quotes against the real command tree.
+
+---
+
 ## Scope
 
 `floci-cli` manages Floci's lifecycle, config, state, and diagnostics.
@@ -1094,7 +1130,31 @@ Running Floci in tests? Use the Testcontainers module for your language instead 
 
 - 💬 [Slack](https://join.slack.com/t/floci/shared_invite/zt-3tjn02s3q-A00kEjJ1cZxsg_imTfy6Cw): quick questions and community chat
 - 🗣️ [GitHub Discussions](https://github.com/orgs/floci-io/discussions): ideas, design tradeoffs, and proposals
+- 🐛 [Issues](https://github.com/floci-io/floci-cli/issues): bugs in this CLI or in the agent skill (emulator bugs go to that emulator's repository)
+- 🛟 [SUPPORT.md](https://github.com/floci-io/.github/blob/main/SUPPORT.md): where to get help, and what community support covers
 - [CONTRIBUTING.md](CONTRIBUTING.md) · [SECURITY.md](https://github.com/floci-io/.github/blob/main/SECURITY.md) · [CODE_OF_CONDUCT.md](https://github.com/floci-io/.github/blob/main/CODE_OF_CONDUCT.md) · [MAINTAINERS.md](MAINTAINERS.md)
+
+## Privacy
+
+The Floci CLI and the agent skill in [`skills/floci/`](skills/floci/) collect no data. There is no telemetry, no
+analytics, no account and no sign-in, and nothing you do with them is reported to the Floci project.
+
+The only network requests they make are the ones needed to do what you asked:
+
+| Request | To | When |
+|---|---|---|
+| Release check | `api.github.com` | At most once every 24 hours from an interactive terminal, and on `floci update`. Turn it off with `FLOCI_NO_UPDATE_CHECK=1`; it is off in CI and for piped output |
+| Binary download | `github.com` (release assets) | Only when you run `floci update` or the install script |
+| Image pull | Your container registry (Docker Hub by default) | When `docker` pulls an emulator image on `floci start` |
+| Name lookup | DNS for `localhost.floci.io`, which answers `127.0.0.1` | When a tool uses the endpoint that `floci env` prints for AWS |
+| Documentation pages | `floci.io` and `raw.githubusercontent.com` | When an agent using the skill looks something up |
+
+Those services see what any HTTP or DNS request shows them (such as your IP address) and apply their own privacy
+policies. Everything else stays on your machine: the emulators run locally, your cloud CLIs and SDKs talk to
+`localhost`, and profiles and state live under `~/.floci`. The skill tells agents to use only the fake credentials the
+emulators accept and never to read or reuse real cloud credentials.
+
+Questions about this: see [Community](#community).
 
 ## License
 

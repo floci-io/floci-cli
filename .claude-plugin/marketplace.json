@@ -1,0 +1,21 @@
+{
+  "name": "floci",
+  "owner": {
+    "name": "Floci",
+    "url": "https://floci.io"
+  },
+  "metadata": {
+    "description": "Agent skills for Floci, the free local emulators for AWS, GCP, Azure and OCI"
+  },
+  "plugins": [
+    {
+      "name": "floci",
+      "description": "Run, wire up and troubleshoot the Floci local cloud emulators with floci-cli, docker run or Docker Compose",
+      "source": "./",
+      "strict": false,
+      "skills": [
+        "./skills/floci"
+      ]
+    }
+  ]
+}

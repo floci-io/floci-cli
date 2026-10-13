@@ -1,0 +1,43 @@
+# Floci Azure emulator (floci-az) with an example app service.
+# Copy what you need into the project's Compose file; see references/docker.md for what to trim.
+# Docs: https://floci.io/floci-az/configuration/docker-compose/
+
+services:
+  floci-az:
+    image: floci/floci-az:latest
+    # The CLI's default container name, so `floci az status|wait|env|setup` work unchanged.
+    # Rename it (and pass --container) when two projects run on the same host. The namespace
+    # below is per project too: change both together, or two projects copied from this
+    # file will touch each other's containers.
+    container_name: floci-az
+    ports:
+      # Loopback only: the emulator accepts fake credentials, so do not publish it to the
+      # network. Other Compose services reach it by service name, not through this port.
+      - "127.0.0.1:4577:4577"
+    environment:
+      # HTTPS next to HTTP on the same port. Required by the az CLI and `floci az setup`;
+      # harmless for apps that use plain HTTP.
+      FLOCI_AZ_TLS_ENABLED: "true"
+      # Keeps the containers this emulator launches (Functions, databases, AKS, ...) apart
+      # from those of other emulator instances on the same Docker host.
+      FLOCI_AZ_DOCKER_RESOURCE_NAMESPACE: myapp
+      # Keep state in the volume below. Remove both to start empty every time.
+      FLOCI_AZ_STORAGE_MODE: persistent
+    volumes:
+      # Needed by services that run real containers (Functions, PostgreSQL, MySQL, AKS, ...).
+      - /var/run/docker.sock:/var/run/docker.sock
+      - floci-az-data:/app/data
+    # No healthcheck here: the image has one built in.
+
+  app:
+    build: .
+    environment:
+      # The well-known development account. Endpoints use the service name, not localhost.
+      AZURE_STORAGE_CONNECTION_STRING: >-
+        DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint=http://floci-az:4577/devstoreaccount1;QueueEndpoint=http://floci-az:4577/devstoreaccount1-queue;TableEndpoint=http://floci-az:4577/devstoreaccount1-table;
+    depends_on:
+      floci-az:
+        condition: service_healthy
+
+volumes:
+  floci-az-data:

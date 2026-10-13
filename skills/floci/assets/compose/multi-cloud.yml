@@ -1,0 +1,55 @@
+# All four Floci emulators on one network. Delete the services you do not need.
+# Each emulator keeps its own port, so nothing has to be remapped.
+# See references/docker.md for the app-side wiring of each cloud.
+#
+# Ports are published on loopback only: the emulators accept fake credentials.
+# 'myapp' is a placeholder: use one namespace per project, and rename the containers with it
+# when two projects run on the same Docker host.
+# Minimal form: no persistence, and child containers (RDS, Cloud SQL, Functions, ...) are not
+# reachable by name from an app service. docker.md says which lines to copy for either.
+
+services:
+  floci:
+    image: floci/floci:latest
+    container_name: floci
+    ports:
+      - "127.0.0.1:4566:4566"
+    environment:
+      FLOCI_HOSTNAME: floci
+      FLOCI_DOCKER_RESOURCE_NAMESPACE: myapp
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+
+  floci-gcp:
+    image: floci/floci-gcp:latest
+    container_name: floci-gcp
+    ports:
+      - "127.0.0.1:4588:4588"
+    environment:
+      FLOCI_GCP_HOSTNAME: floci-gcp
+      FLOCI_GCP_BASE_URL: http://floci-gcp:4588
+      FLOCI_GCP_DOCKER_RESOURCE_NAMESPACE: myapp
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+
+  floci-az:
+    image: floci/floci-az:latest
+    container_name: floci-az
+    ports:
+      - "127.0.0.1:4577:4577"
+    environment:
+      FLOCI_AZ_TLS_ENABLED: "true"
+      FLOCI_AZ_DOCKER_RESOURCE_NAMESPACE: myapp
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+
+  floci-oci:
+    image: floci/floci-oci:latest
+    container_name: floci-oci
+    ports:
+      - "127.0.0.1:4599:4599"
+    environment:
+      FLOCI_OCI_HOSTNAME: floci-oci
+      FLOCI_OCI_DOCKER_RESOURCE_NAMESPACE: myapp
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
