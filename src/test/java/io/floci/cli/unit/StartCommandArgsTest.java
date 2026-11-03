@@ -97,6 +97,18 @@ class StartCommandArgsTest {
     }
 
     @Test
+    void eachSecurityOptReachesDockerRunInEveryTree() {
+        assertEquals(List.of("-d", "--name", "floci", "-p", "4566:4566", "-v", "/sock:/sock",
+                "--security-opt", "label=disable", "--security-opt", "no-new-privileges", "floci/floci:latest"),
+                parse("start", "--security-opt", "label=disable", "--security-opt", "no-new-privileges")
+                        .dockerRunArgs(SOCKET));
+        for (String tree : new String[]{"gcp", "az", "oci"}) {
+            List<String> args = parse(tree, "start", "--security-opt", "label=disable").dockerRunArgs(SOCKET);
+            assertEquals("label=disable", args.get(args.indexOf("--security-opt") + 1), tree);
+        }
+    }
+
+    @Test
     void explicitPersistFlagStillWinsOverTheProfile() throws Exception {
         writeProfile("probe", "persistDir: /from-profile\n");
 
