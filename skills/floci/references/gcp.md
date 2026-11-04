@@ -19,7 +19,9 @@ silently, so check the output):
 | `SECRET_MANAGER_EMULATOR_HOST` | Secret Manager |
 | `IAM_EMULATOR_HOST` | IAM |
 
-Client libraries skip credentials when these are set.
+Emulator-variable support depends on the service and SDK. Do not assume an exported
+variable redirects a client or disables credential lookup. Python Secret Manager ignores
+`SECRET_MANAGER_EMULATOR_HOST`: configure its endpoint and credentials explicitly, as below.
 Pass `project="floci-local"` (or any id) explicitly to clients. Firebase Auth uses
 `FIREBASE_AUTH_EMULATOR_HOST=localhost:4588`, which `floci gcp env` does not export: set it
 yourself when the app uses the Firebase Admin SDK.
@@ -28,6 +30,27 @@ SDKs without an emulator variable (Cloud Run, Cloud Functions, KMS, Logging, Tas
 etc.) need the endpoint set on the client: `http://localhost:4588` for REST, `localhost:4588`
 plaintext for gRPC, with no credentials (`NoCredentialsProvider` in Java,
 `AnonymousCredentials` in Python, `ClientOptions(api_endpoint=...)`).
+
+### Python Secret Manager
+
+Use the REST transport with an explicit endpoint and anonymous credentials. On the host,
+use `http://localhost:4588`; from the Compose app service use `http://floci-gcp:4588`.
+Setting `SECRET_MANAGER_EMULATOR_HOST` alone does not configure this client.
+
+```python
+from google.auth.credentials import AnonymousCredentials
+from google.cloud import secretmanager_v1
+
+client = secretmanager_v1.SecretManagerServiceClient(
+    transport="rest",
+    credentials=AnonymousCredentials(),
+    client_options={"api_endpoint": "http://localhost:4588"},
+)
+```
+
+Before making requests, check `client.transport._host` in a local test. It must be your
+emulator endpoint. For gRPC, provide an explicit plaintext channel instead of the default
+TLS channel. See the [Python client source](https://github.com/googleapis/google-cloud-python/blob/main/packages/google-cloud-secret-manager/google/cloud/secretmanager_v1/services/secret_manager_service/client.py).
 
 ## Wiring for gcloud (important)
 
