@@ -143,7 +143,9 @@ Ask before running `docker compose down -v`: `-v` deletes the data volume. Plain
 - **GCP**: `STORAGE_EMULATOR_HOST=http://floci-gcp:4588` (with scheme) and
   `PUBSUB_EMULATOR_HOST`, `FIRESTORE_EMULATOR_HOST`, `DATASTORE_EMULATOR_HOST`,
   `SECRET_MANAGER_EMULATOR_HOST` set to `floci-gcp:4588` (no scheme). Set both
-  `FLOCI_GCP_HOSTNAME` and `FLOCI_GCP_BASE_URL` on the emulator.
+  `FLOCI_GCP_HOSTNAME` and `FLOCI_GCP_BASE_URL` on the emulator. SDK support varies:
+  Python Secret Manager ignores its emulator variable; use the explicit REST endpoint
+  `http://floci-gcp:4588` with anonymous credentials (see [gcp.md](gcp.md)).
 - **Azure**: a connection string with the service name in each endpoint (see `azure.yml`).
   The control plane (`az`, ARM, Terraform) needs TLS on and the CA trusted: from the host run
   `floci az setup --container <container name>`; inside another container, read
