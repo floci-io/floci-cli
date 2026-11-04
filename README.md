@@ -549,6 +549,10 @@ Variables exported (per enabled service):
 | `SECRET_MANAGER_EMULATOR_HOST` | Secret Manager |
 | `IAM_EMULATOR_HOST` | IAM |
 
+SDK support for these variables varies by service and language. Python Secret Manager ignores
+`SECRET_MANAGER_EMULATOR_HOST`; set an explicit emulator endpoint and anonymous credentials.
+See the [Python Secret Manager recipe](skills/floci/references/gcp.md#python-secret-manager).
+
 ### `floci az env`
 
 Prints Azure connection variables for the running Floci Azure instance.
