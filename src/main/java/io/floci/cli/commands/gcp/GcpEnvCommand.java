@@ -77,7 +77,7 @@ public class GcpEnvCommand implements Callable<Integer> {
             printer.println(ShellExport.formatExport(shell, entry.getKey(), entry.getValue()));
         }
         printer.println("");
-        printer.println(Ansi.gray("# Run: " + ShellExport.loadHint(shell, "floci gcp env" + global.instanceSelector())));
+        printer.println(Ansi.gray("# Run: " + ShellExport.loadHint(shell, "floci gcp env" + global.envLoadFlags(shell))));
 
         return 0;
     }

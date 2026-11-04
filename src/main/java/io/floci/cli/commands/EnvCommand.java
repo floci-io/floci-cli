@@ -73,7 +73,7 @@ public class EnvCommand implements Callable<Integer> {
             printer.println(ShellExport.formatExport(shell, entry.getKey(), entry.getValue()));
         }
         printer.println("");
-        printer.println(Ansi.gray("# Run: " + ShellExport.loadHint(shell, "floci env" + global.instanceSelector())));
+        printer.println(Ansi.gray("# Run: " + ShellExport.loadHint(shell, "floci env" + global.envLoadFlags(shell))));
         return 0;
     }
 

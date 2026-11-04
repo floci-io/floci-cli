@@ -39,6 +39,15 @@ public final class ShellExport {
         };
     }
 
+    /** {@code value} as one single-quoted argument in the given shell. */
+    public static String quoted(String shell, String value) {
+        return switch (shell.toLowerCase()) {
+            case "fish"                       -> "'" + value.replace("\\", "\\\\").replace("'", "\\'") + "'";
+            case "powershell", "pwsh", "ps1"  -> "'" + value.replace("'", "''") + "'";
+            default                           -> "'" + value.replace("'", "'\\''") + "'";
+        };
+    }
+
     /** Renders one export line for the given shell ({@code bash}, {@code fish}, {@code powershell}). */
     public static String formatExport(String shell, String key, String value) {
         return switch (shell.toLowerCase()) {

@@ -95,8 +95,36 @@ class InstanceHintsTest {
                 new OciEnvCommand(docker), new AzEnvCommand(temp, endpoint -> { throw new AssertionError("no cert expected"); }, docker))) {
             Run result = run(env, "--profile", "team alpha");
             assertEquals(0, result.exit(), result.err());
-            assertTrue(result.out().contains("env --profile 'team alpha'"), result.out());
+            assertTrue(result.out().contains("env --profile 'team alpha' -o text"), result.out());
         }
+    }
+    @Test
+    void envLoadHintsQuoteForTheShellTheyAreFor() throws Exception {
+        Files.writeString(temp.resolve("team's.yaml"), "container: other\nendpoint: http://127.0.0.1:1\n");
+        for (Callable<Integer> env : List.<Callable<Integer>>of(new EnvCommand(new FakeDocker()), new GcpEnvCommand(new FakeDocker()),
+                new OciEnvCommand(new FakeDocker()), new AzEnvCommand(temp, endpoint -> { throw new AssertionError("no cert expected"); }, new FakeDocker()))) {
+            assertTrue(run(env, "--profile", "team's").out().contains("--profile 'team'\\''s' -o text)\""));
+        }
+        for (Callable<Integer> env : List.<Callable<Integer>>of(new EnvCommand(new FakeDocker()), new GcpEnvCommand(new FakeDocker()),
+                new OciEnvCommand(new FakeDocker()), new AzEnvCommand(temp, endpoint -> { throw new AssertionError("no cert expected"); }, new FakeDocker()))) {
+            String out = run(env, "--profile", "team's", "--shell", "powershell").out();
+            assertTrue(out.contains("--profile 'team''s' -o text --shell powershell | Invoke-Expression"), out);
+        }
+        for (Callable<Integer> env : List.<Callable<Integer>>of(new EnvCommand(new FakeDocker()), new GcpEnvCommand(new FakeDocker()),
+                new OciEnvCommand(new FakeDocker()), new AzEnvCommand(temp, endpoint -> { throw new AssertionError("no cert expected"); }, new FakeDocker()))) {
+            String out = run(env, "--profile", "team's", "--shell", "fish").out();
+            assertTrue(out.contains("--profile 'team\\'s' -o text --shell fish | source"), out);
+        }
+    }
+    @Test
+    void aProfileThatAsksForJsonStillGetsALoadableHint() throws Exception {
+        Files.writeString(temp.resolve("json.yaml"), "container: other\nendpoint: http://127.0.0.1:1\noutput: json\n");
+        String out = run(new EnvCommand(new FakeDocker()), "--profile", "json", "-o", "text").out();
+        assertTrue(out.contains("eval \"$(floci env --profile json -o text)\""), out);
+    }
+    @Test
+    void aLoadHintWithoutAProfileStaysBare() throws Exception {
+        assertTrue(run(new EnvCommand(new FakeDocker())).out().contains("eval \"$(floci env)\""));
     }
     @Test
     void doctorPassesTheSelectorToCheckFixesInStructuredOutput() throws Exception {

@@ -127,7 +127,7 @@ public class AzEnvCommand implements Callable<Integer> {
             printer.println(ShellExport.formatExport(shell, "AZURE_STORAGE_CONNECTION_STRING", connStr));
             printAzCliVars(printer, azCliVars);
             printer.println("");
-            printer.println(Ansi.gray("# Run: " + ShellExport.loadHint(shell, "floci az env" + global.instanceSelector())));
+            printer.println(Ansi.gray("# Run: " + ShellExport.loadHint(shell, "floci az env" + global.envLoadFlags(shell))));
         } else {
             printer.println(ShellExport.formatExport(shell, "AZURE_STORAGE_ACCOUNT", account));
             printer.println(ShellExport.formatExport(shell, "AZURE_STORAGE_KEY", DEV_KEY));
@@ -136,7 +136,7 @@ public class AzEnvCommand implements Callable<Integer> {
             }
             printAzCliVars(printer, azCliVars);
             printer.println("");
-            printer.println(Ansi.gray("# Run: " + ShellExport.loadHint(shell, "floci az env --format sdk-vars" + global.instanceSelector())));
+            printer.println(Ansi.gray("# Run: " + ShellExport.loadHint(shell, "floci az env --format sdk-vars" + global.envLoadFlags(shell))));
         }
 
         return 0;

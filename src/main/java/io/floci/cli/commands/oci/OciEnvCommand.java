@@ -73,7 +73,7 @@ public class OciEnvCommand implements Callable<Integer> {
             printer.println(ShellExport.formatExport(shell, entry.getKey(), entry.getValue()));
         }
         printer.println("");
-        printer.println(Ansi.gray("# Run: " + ShellExport.loadHint(shell, "floci oci env" + global.instanceSelector())));
+        printer.println(Ansi.gray("# Run: " + ShellExport.loadHint(shell, "floci oci env" + global.envLoadFlags(shell))));
         return 0;
     }
 }
