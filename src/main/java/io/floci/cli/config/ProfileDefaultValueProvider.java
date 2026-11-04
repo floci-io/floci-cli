@@ -94,6 +94,7 @@ public class ProfileDefaultValueProvider implements IDefaultValueProvider {
         }
         for (String optionName : option.names()) {
             GlobalOptions global = (GlobalOptions) command.mixins().get("global").userObject();
+            if ("--endpoint".equals(optionName) && profile.port != null) global.endpointCameFromProfilePort();
             String value = ProfileDefaults.valueFor(profile, optionName, global.product);
             if (value != null) return value;
         }

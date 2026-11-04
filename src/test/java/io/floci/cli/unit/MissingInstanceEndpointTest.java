@@ -114,6 +114,35 @@ class MissingInstanceEndpointTest {
         assertTrue(out.toString().contains("\"endpoint\" : \"" + product.defaultEndpoint() + "\""), out.toString());
     }
 
+    private GlobalOptions parsedEnv(ProductProfile product, String yaml) throws Exception {
+        Files.writeString(temp.resolve("other.yaml"), yaml);
+        var parsed = FlociCli.buildCommandLine(new ProfileStore(temp)).parseArgs(product.name().toLowerCase(), "env", "--profile", "other");
+        while (parsed.hasSubcommand()) parsed = parsed.subcommand();
+        return (GlobalOptions) parsed.commandSpec().mixins().get("global").userObject();
+    }
+
+    @ParameterizedTest
+    @MethodSource("products")
+    void aProfilePortEqualToTheDefaultIsStillAChosenPort(ProductProfile product) throws Exception {
+        GlobalOptions global = parsedEnv(product, "container: other\nport: " + product.defaultPort() + "\n");
+        assertTrue(global.canUseConfiguredEndpoint());
+        assertEquals("http://localhost:" + product.defaultPort(), global.resolvedEndpoint(missing));
+    }
+
+    @ParameterizedTest
+    @MethodSource("products")
+    void aProfileWithNeitherPortNorEndpointStaysUnknown(ProductProfile product) throws Exception {
+        GlobalOptions global = parsedEnv(product, "container: other\n");
+        assertFalse(global.canUseConfiguredEndpoint());
+        assertThrows(IllegalStateException.class, () -> global.resolvedEndpoint(missing));
+    }
+
+    @Test
+    void aRunningContainerStillCorrectsAProfilePortEqualToTheDefault() throws Exception {
+        GlobalOptions global = parsedEnv(ProductProfile.AWS, "container: other\nport: 4566\n");
+        assertEquals("http://localhost:16000", global.resolvedEndpoint(running));
+    }
+
     @Test
     void aProfileEndpointOnAnotherHostBeatsALocalContainer() throws Exception {
         Files.writeString(temp.resolve("other.yaml"), "container: other\nendpoint: http://remote:9000\n");

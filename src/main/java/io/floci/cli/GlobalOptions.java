@@ -50,6 +50,10 @@ public class GlobalOptions {
     // The value FLOCI_ENDPOINT supplied, if any: that is a choice, like typing --endpoint.
     private final String endpointFromEnv;
 
+    // Whether the endpoint came from a profile's port. The string cannot say: a profile with
+    // port 4566 yields the product's default endpoint, yet that port was chosen.
+    private boolean portFromProfile;
+
     @Option(names = {"--endpoint"},
             description = "Floci server endpoint URL (default: ${DEFAULT-VALUE})",
             paramLabel = "<url>")
@@ -195,9 +199,14 @@ public class GlobalOptions {
         return noEmoji || !terminal || noColorEnv;
     }
 
+    /** Called by the profile provider when it derives the endpoint from a profile's {@code port}. */
+    public void endpointCameFromProfilePort() {
+        portFromProfile = true;
+    }
+
     /** Whether a configured endpoint can identify this instance without a container lookup. */
     public boolean canUseConfiguredEndpoint() {
-        return typed("--endpoint") || endpoint.equals(endpointFromEnv)
+        return typed("--endpoint") || endpoint.equals(endpointFromEnv) || portFromProfile
                 || !product.defaultEndpoint().equals(endpoint)
                 || product.defaultContainer().equals(container);
     }
