@@ -1,7 +1,7 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "floci",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Run, wire up and troubleshoot Floci, the free local emulators for AWS, GCP, Azure and OCI: floci-cli lifecycle, safe wiring of aws, gcloud, az, oci and the SDKs, docker run and Docker Compose files, several instances side by side, and lookups in the published docs.",
   "author": {
     "name": "Floci",
