@@ -95,6 +95,25 @@ class MissingInstanceEndpointTest {
         assertEquals("http://localhost:9999", global.resolvedEndpoint(running));
     }
 
+    @ParameterizedTest
+    @MethodSource("products")
+    void anEnvironmentEndpointOnTheDefaultPortIsStillAKnownEndpoint(ProductProfile product) {
+        GlobalOptions fromEnv = new GlobalOptions(product,
+                key -> key.equals(product.envVar("ENDPOINT")) ? product.defaultEndpoint() : null);
+        StatusCommand status = new StatusCommand(product, missing) {
+            { global = fromEnv; }
+        };
+        PrintStream original = System.out;
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        try {
+            System.setOut(new PrintStream(out));
+            new CommandLine(status).execute("--container", "other", "--json");
+        } finally {
+            System.setOut(original);
+        }
+        assertTrue(out.toString().contains("\"endpoint\" : \"" + product.defaultEndpoint() + "\""), out.toString());
+    }
+
     @Test
     void aProfileEndpointOnAnotherHostBeatsALocalContainer() throws Exception {
         Files.writeString(temp.resolve("other.yaml"), "container: other\nendpoint: http://remote:9000\n");

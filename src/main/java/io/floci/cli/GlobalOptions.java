@@ -168,7 +168,8 @@ public class GlobalOptions {
 
     /** Whether a configured endpoint can identify this instance without a container lookup. */
     public boolean canUseConfiguredEndpoint() {
-        return typed("--endpoint") || !product.defaultEndpoint().equals(endpoint)
+        return typed("--endpoint") || endpoint.equals(endpointFromEnv)
+                || !product.defaultEndpoint().equals(endpoint)
                 || product.defaultContainer().equals(container);
     }
 
