@@ -36,6 +36,11 @@ public record ProductProfile(
         return "aws".equals(name) ? "floci" : "floci " + name;
     }
 
+    /** Always names the tree: a bare {@code floci} goes to whatever default product is configured. */
+    public String explicitCommandPrefix() {
+        return "floci " + name;
+    }
+
     /**
      * The Docker resource namespace an instance in {@code container} gets when none is set: none
      * for the default container, so its child containers keep their names; otherwise the container

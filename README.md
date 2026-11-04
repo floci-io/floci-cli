@@ -489,6 +489,12 @@ stdout: the progress lines are left out and docker's pull progress goes to stder
 `restart` report `container`, `id`, `image`, `endpoint`, `state` and `ready` (`ready` is absent
 with `--detach`). `logs` prints the container's own output and stays plain text.
 
+If `restart` fails after removing the old container, stderr includes a `start` command with
+the resolved container, port, image, endpoint, persistence, services and namespace settings.
+It also appears with structured output. Review the failure, then run that command to retry. If
+the new container is running but did not become ready, stderr instead says to check `logs` and
+run `wait`, because `start` refuses a running container.
+
 ### `floci status` / `floci gcp status` / `floci az status` / `floci oci status`
 
 ```sh
