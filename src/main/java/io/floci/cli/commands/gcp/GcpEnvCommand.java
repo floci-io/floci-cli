@@ -54,7 +54,7 @@ public class GcpEnvCommand implements Callable<Integer> {
             printer.error(ShellExport.unsupported(shell));
             return 2;
         }
-        String effectiveEndpoint = global.resolvedEndpoint(docker);
+        String effectiveEndpoint = global.resolvedEndpoint(docker, printer::warn);
         String host = extractHost(effectiveEndpoint);
         int port = extractPort(effectiveEndpoint);
         String hostPort = host + ":" + port;

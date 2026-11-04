@@ -98,7 +98,7 @@ public class AzEnvCommand implements Callable<Integer> {
             printer.error(ShellExport.unsupported(shell));
             return 2;
         }
-        String effectiveEndpoint = global.resolvedEndpoint(docker);
+        String effectiveEndpoint = global.resolvedEndpoint(docker, printer::warn);
         int port = extractPort(effectiveEndpoint);
 
         boolean sdkVarsMode = "sdk-vars".equals(format) || serviceFilter != null;

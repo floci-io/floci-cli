@@ -43,7 +43,7 @@ public class OciEnvCommand implements Callable<Integer> {
             printer.error(ShellExport.unsupported(shell));
             return 2;
         }
-        String endpoint = global.resolvedEndpoint(docker);
+        String endpoint = global.resolvedEndpoint(docker, printer::warn);
 
         Map<String, String> vars = new LinkedHashMap<>();
         // OCI SDKs and CLI take one endpoint for every service; ocilocal reads FLOCI_OCI_ENDPOINT.

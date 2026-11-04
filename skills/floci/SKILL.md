@@ -88,9 +88,11 @@ clouds the user works with; suggest installing them, do not install them unasked
    keep the instance's flags; keep them when retrying.
 8. **Do not guess what an emulator supports.** Check `floci <tree> services -o json` and the
    published docs ([references/docs.md](references/docs.md)) instead of answering from memory.
-9. **With a profile, start and wait before `env`.** Until the profile's container is running,
-   `env` and `status` fall back to the default port and describe the default instance. Trust
-   `"state": "running"` in `status -o json`, not `reachable`.
+9. **With a profile, start and wait before `env`.** Until the container is running, `env`
+   warns on stderr. A profile with a `port` resolves to that port; a named container with
+   neither a port nor an endpoint has `"endpoint": null` in `status -o json` and `env` exits 1
+   rather than describe the default instance. Trust `"state": "running"` in `status -o json`,
+   not `reachable`.
 
 ## Lifecycle (same for every tree)
 

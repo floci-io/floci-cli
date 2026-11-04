@@ -54,7 +54,7 @@ public class EnvCommand implements Callable<Integer> {
             printer.error(ShellExport.unsupported(shell));
             return 2;
         }
-        String effectiveEndpoint = global.resolvedEndpoint(docker);
+        String effectiveEndpoint = global.resolvedEndpoint(docker, printer::warn);
         int port = extractPort(effectiveEndpoint);
         String endpointUrl = "http://" + host + ":" + port;
 

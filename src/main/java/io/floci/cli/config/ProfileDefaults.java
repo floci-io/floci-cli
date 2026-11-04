@@ -1,5 +1,7 @@
 package io.floci.cli.config;
 
+import io.floci.cli.ProductProfile;
+
 /**
  * Maps a loaded {@link Profile} onto the CLI options it supplies defaults for.
  *
@@ -9,6 +11,20 @@ package io.floci.cli.config;
 public final class ProfileDefaults {
 
     private ProfileDefaults() {}
+
+    public static String valueFor(Profile profile, String optionName, ProductProfile product) {
+        return profile != null && "--endpoint".equals(optionName)
+                ? endpointFor(profile, product) : valueFor(profile, optionName);
+    }
+
+    /** Legacy profiles may pair a custom host port with the product's default endpoint. */
+    public static String endpointFor(Profile profile, ProductProfile product) {
+        if (profile.port != null && (profile.endpoint == null
+                || profile.endpoint.equals(product.defaultEndpoint()))) {
+            return "http://localhost:" + profile.port;
+        }
+        return profile.endpoint;
+    }
 
     /**
      * The profile's value for {@code optionName}, or {@code null} when the profile is silent
