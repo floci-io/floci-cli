@@ -57,7 +57,7 @@ class ProfilePrecedenceTest {
         writeProfile("probe", FULL_PROFILE);
         CommandSpec spec = leafSpec("start", "--profile", "probe");
 
-        assertEquals("http://localhost:4566", spec.findOption("--endpoint").getValue());
+        assertEquals("http://localhost:4599", spec.findOption("--endpoint").getValue());
         assertEquals("floci-probe", spec.findOption("--container").getValue());
         assertEquals("floci/floci:enforced", spec.findOption("--image").getValue());
         assertEquals(Integer.valueOf(4599), spec.findOption("--port").getValue());
@@ -118,7 +118,7 @@ class ProfilePrecedenceTest {
         for (String command : new String[]{"status", "logs", "wait", "doctor", "env", "services"}) {
             CommandSpec spec = leafSpec(command, "--profile", "probe");
             assertEquals("floci-probe", spec.findOption("--container").getValue(), command);
-            assertEquals("http://localhost:4566", spec.findOption("--endpoint").getValue(), command);
+            assertEquals("http://localhost:4599", spec.findOption("--endpoint").getValue(), command);
         }
     }
 

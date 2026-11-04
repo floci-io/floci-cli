@@ -30,6 +30,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
@@ -84,6 +85,8 @@ public class DoctorCommand implements Callable<Integer> {
             new AzCliConnectionStringCheck()
     );
 
+    private static final String ENDPOINT_REACHABLE = "endpoint.reachable";
+
     private final DockerClient docker;
 
     private final List<Check> allChecks;
@@ -130,7 +133,9 @@ public class DoctorCommand implements Callable<Integer> {
         }
 
         List<CheckResult> results = new ArrayList<>();
-        String effectiveEndpoint = global.resolvedEndpoint(docker);
+        // Doctor is where a failed start sends people, so a missing instance must not stop it.
+        Optional<String> known = global.knownEndpoint(docker);
+        String effectiveEndpoint = known.orElse(global.endpoint);
 
         boolean textMode = printer.format() == OutputFormat.text;
 
@@ -143,7 +148,9 @@ public class DoctorCommand implements Callable<Integer> {
         // concurrently; results are still printed in list order as each one becomes available.
         try (ExecutorService pool = Executors.newVirtualThreadPerTaskExecutor()) {
             List<Future<CheckResult>> pending = selected.stream()
-                    .map(check -> pool.submit(() -> runSafely(check, effectiveEndpoint, global.container)))
+                    .map(check -> pool.submit(() -> known.isEmpty() && ENDPOINT_REACHABLE.equals(check.name())
+                            ? unknownEndpoint()
+                            : runSafely(check, effectiveEndpoint, global.container)))
                     .toList();
             for (int i = 0; i < selected.size(); i++) {
                 CheckResult result = await(selected.get(i), pending.get(i));
@@ -197,6 +204,13 @@ public class DoctorCommand implements Callable<Integer> {
 
     private List<String> knownNames() {
         return allChecks.stream().map(Check::name).filter(n -> n != null).toList();
+    }
+
+    // Probing the configured endpoint here would report the default instance as this one's.
+    private CheckResult unknownEndpoint() {
+        return CheckResult.warn(ENDPOINT_REACHABLE,
+                "Endpoint for container '" + global.container + "' is unknown, so it was not probed",
+                profile.commandPrefix() + " start" + global.instanceSelector());
     }
 
     // One failing check must not abort the run: report it and keep going.

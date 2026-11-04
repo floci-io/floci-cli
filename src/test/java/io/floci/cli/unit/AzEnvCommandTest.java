@@ -37,10 +37,12 @@ class AzEnvCommandTest {
         System.setOut(new PrintStream(outBuf));
         System.setErr(new PrintStream(errBuf));
         try {
-            String[] all = new String[args.length + 2];
+            String[] all = new String[args.length + 4];
             all[0] = "--container";
             all[1] = container;
-            System.arraycopy(args, 0, all, 2, args.length);
+            all[2] = "--endpoint";
+            all[3] = "http://localhost:4577";
+            System.arraycopy(args, 0, all, 4, args.length);
             assertEquals(0, new CommandLine(new AzEnvCommand(tempDir, certs)).execute(all));
         } finally {
             System.setOut(out);

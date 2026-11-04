@@ -54,13 +54,18 @@ public class StatusCommand implements Callable<Integer> {
         String containerImage = "";
         String containerPorts = "";
         String effectiveEndpoint = global.endpoint;
+        boolean endpointKnown = global.canUseConfiguredEndpoint();
         try {
             Optional<DockerClient.ContainerInfo> info = docker.inspectContainer(global.container);
             if (info.isPresent()) {
                 containerState = info.get().state();
                 containerImage = info.get().image();
                 containerPorts = info.get().ports();
-                effectiveEndpoint = global.endpointFromPorts(containerPorts, global.endpoint);
+                String published = global.configuredEndpointWins() ? null : global.endpointFromPorts(containerPorts, null);
+                if (published != null) {
+                    effectiveEndpoint = published;
+                    endpointKnown = true;
+                }
             }
         } catch (DockerException e) {
             containerState = "error: " + e.getMessage();
@@ -70,13 +75,16 @@ public class StatusCommand implements Callable<Integer> {
         String serverVersion = "unavailable";
         String serverEdition = "";
         boolean reachable = false;
-        FlociHttpClient client = new FlociHttpClient(effectiveEndpoint, profile);
-        try {
-            var health = client.health();
-            serverVersion = health.version();
-            serverEdition = health.edition();
-            reachable = true;
-        } catch (Exception ignored) {}
+        if (!endpointKnown) effectiveEndpoint = null;
+        if (endpointKnown) {
+            FlociHttpClient client = new FlociHttpClient(effectiveEndpoint, profile);
+            try {
+                var health = client.health();
+                serverVersion = health.version();
+                serverEdition = health.edition();
+                reachable = true;
+            } catch (Exception ignored) {}
+        }
         // On stderr, so structured output stays one document.
         ServerCompatibility.warning(profile, serverVersion, global.instanceSelector()).ifPresent(printer::warn);
 
@@ -106,7 +114,7 @@ public class StatusCommand implements Callable<Integer> {
         printer.println("  Container:  " + global.container + "  " + stateColor);
         if (!containerImage.isBlank()) printer.println("  Image:      " + containerImage);
         if (!containerPorts.isBlank()) printer.println("  Ports:      " + containerPorts);
-        printer.println("  Endpoint:   " + effectiveEndpoint);
+        printer.println("  Endpoint:   " + (endpointKnown ? effectiveEndpoint : "unknown"));
         printer.println("  Reachable:  " + (reachable ? Ansi.green("yes") : Ansi.red("no")));
         if (reachable) {
             printer.println("  Version:    " + serverVersion);

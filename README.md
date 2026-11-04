@@ -489,6 +489,17 @@ stdout: the progress lines are left out and docker's pull progress goes to stder
 `restart` report `container`, `id`, `image`, `endpoint`, `state` and `ready` (`ready` is absent
 with `--detach`). `logs` prints the container's own output and stays plain text.
 
+A selected container with no published port and no configured endpoint has no known endpoint.
+`status` does not probe the default instance and reports `endpoint: null` in structured output.
+`env`, `services`, `az setup` and the `snapshot` commands exit `1` with the next step rather than
+act on the default instance. `doctor` and `version` still run and do not probe it. `wait` keeps
+looking for the container until `--timeout`.
+
+A profile's `port` supplies its endpoint when the endpoint is unset or still the product default.
+A running container's published port corrects that endpoint, unless the endpoint was chosen on
+purpose: typed with `--endpoint`, set in `FLOCI_ENDPOINT`, or on another host. `env` warns on stderr
+when it looked the container up and it is not running.
+
 ### `floci status` / `floci gcp status` / `floci az status` / `floci oci status`
 
 ```sh

@@ -4,6 +4,7 @@ import io.floci.cli.CliVersion;
 import io.floci.cli.GlobalOptions;
 import io.floci.cli.ProductProfile;
 import io.floci.cli.ServerCompatibility;
+import io.floci.cli.docker.DockerClient;
 import io.floci.cli.http.FlociHttpClient;
 import io.floci.cli.output.Ansi;
 import io.floci.cli.output.OutputFormat;
@@ -27,11 +28,19 @@ public class VersionCommand implements Callable<Integer> {
     @Mixin
     protected GlobalOptions global;
 
+    private final DockerClient docker;
+
     public VersionCommand() {
         this(ProductProfile.AWS);
     }
 
     protected VersionCommand(ProductProfile profile) {
+        this(profile, new DockerClient());
+    }
+
+    /** Test seam: {@code docker} answers the container and image lookups. */
+    public VersionCommand(ProductProfile profile, DockerClient docker) {
+        this.docker = docker;
         this.profile = profile;
         this.global = new GlobalOptions(profile);
     }
@@ -44,15 +53,17 @@ public class VersionCommand implements Callable<Integer> {
         String serverEdition = null;
         String imageDigest = null;
 
-        var docker = new io.floci.cli.docker.DockerClient();
-        String effectiveEndpoint = global.resolvedEndpoint(docker);
+        String effectiveEndpoint = global.knownEndpoint(docker).orElse(null);
 
-        FlociHttpClient client = new FlociHttpClient(effectiveEndpoint, profile);
-        try {
-            var info = client.info();
-            serverVersion = info.version();
-            serverEdition = info.edition();
-        } catch (Exception ignored) {}
+        // The CLI's own version does not depend on the instance, so a missing one is not an error.
+        if (effectiveEndpoint != null) {
+            FlociHttpClient client = new FlociHttpClient(effectiveEndpoint, profile);
+            try {
+                var info = client.info();
+                serverVersion = info.version();
+                serverEdition = info.edition();
+            } catch (Exception ignored) {}
+        }
         // On stderr, so structured output stays one document.
         ServerCompatibility.warning(profile, serverVersion, global.instanceSelector()).ifPresent(printer::warn);
 
@@ -78,7 +89,9 @@ public class VersionCommand implements Callable<Integer> {
         } else {
             // Effective endpoint (port auto-detected) — the gcp/az/oci trees always did
             // this; the old AWS copy printed the raw --endpoint value.
-            printer.println("Server:      " + Ansi.gray("not reachable at " + effectiveEndpoint));
+            printer.println("Server:      " + Ansi.gray(effectiveEndpoint != null
+                    ? "not reachable at " + effectiveEndpoint
+                    : "unknown, container '" + global.container + "' has no published port"));
         }
         if (imageDigest != null) {
             printer.println("Image:       " + imageDigest);

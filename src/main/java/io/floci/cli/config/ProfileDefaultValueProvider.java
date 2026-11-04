@@ -1,5 +1,6 @@
 package io.floci.cli.config;
 
+import io.floci.cli.GlobalOptions;
 import io.floci.cli.output.Ansi;
 import io.floci.cli.output.OutputFormat;
 import io.floci.cli.util.Causes;
@@ -77,7 +78,7 @@ public class ProfileDefaultValueProvider implements IDefaultValueProvider {
         CommandSpec command = arg.command();
         // Group commands, the root, and `update` carry no GlobalOptions mixin.
         OptionSpec profileOption = command.findOption("--profile");
-        if (profileOption == null) return null;
+        if (profileOption == null || !command.mixins().containsKey("global")) return null;
         String name = profileOption.getValue();
         if (name == null) return null;
 
@@ -92,7 +93,8 @@ public class ProfileDefaultValueProvider implements IDefaultValueProvider {
             throw e;
         }
         for (String optionName : option.names()) {
-            String value = ProfileDefaults.valueFor(profile, optionName);
+            GlobalOptions global = (GlobalOptions) command.mixins().get("global").userObject();
+            String value = ProfileDefaults.valueFor(profile, optionName, global.product);
             if (value != null) return value;
         }
         return null;
