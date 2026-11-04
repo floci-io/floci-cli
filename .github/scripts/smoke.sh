@@ -41,17 +41,13 @@ require_output() {
   fi
 }
 
-# Exercise the shorthand and the plain-marks option through the shipped binary.
+# The shorthand and the plain-marks flag parse in the shipped binary. What --no-emoji does cannot
+# be seen here: piped output is already plain. ErgonomicsTest covers that.
 reported=$("$bin" version --json --no-emoji | tr -d ' \r\n')
 case "$reported" in
   *'"cli":'*) ;;
   *) echo "::error::version --json did not return a version object: $reported"; exit 1 ;;
 esac
-"$bin" version --no-emoji > "$work/plain"
-if LC_ALL=C grep -q '[^ -~[:space:]]' "$work/plain"; then
-  echo "::error::version --no-emoji contains non-ASCII marks"
-  exit 1
-fi
 
 "$bin" completion bash > "$work/completion"
 [ -s "$work/completion" ] || { echo "::error::completion bash printed nothing"; exit 1; }

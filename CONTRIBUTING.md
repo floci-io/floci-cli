@@ -39,7 +39,7 @@ mvn package -Pnative -DskipTests     # native binary → target/floci (requires 
 ```
 
 The native CI and release jobs run `.github/scripts/smoke.sh ./target/floci`. It checks
-completion, rejected input, JSON/plain/YAML output, profile create/edit/read/delete, reset's
+completion, rejected input, JSON and YAML output, profile create/edit/read/delete, reset's
 confirmation guard and Compose validation with YAML anchors and merge keys. It needs no
 emulator or Docker daemon. It skips profile edit on Windows. Run it after building the native binary when changing these paths.
 
