@@ -123,7 +123,7 @@ public class WaitCommand implements Callable<Integer> {
 
         if (spinner) clearSpinner(printer);
         printer.error("Timed out waiting for " + profile.displayName() + " after " + timeout
-                + ".\nIs the container running? Try '" + profile.commandPrefix() + " status'.");
+                + ".\nIs the container running? Try '" + profile.commandPrefix() + " status" + global.instanceSelector() + "'.");
         return 1;
     }
 

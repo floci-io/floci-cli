@@ -32,16 +32,23 @@ public class ServicesCommand implements Callable<Integer> {
     }
 
     protected ServicesCommand(ProductProfile profile) {
+        this(profile, new DockerClient());
+    }
+
+    public ServicesCommand(ProductProfile profile, DockerClient docker) {
+        this.docker = docker;
         this.profile = profile;
         this.global = new GlobalOptions(profile);
     }
+
+    private final DockerClient docker;
 
     @Override
     public Integer call() {
         Printer printer = global.printer();
         // Resolve the endpoint from the container's port mapping, like status/wait/env do,
         // so a container started with --port <n> is still found without --endpoint.
-        String effectiveEndpoint = global.resolvedEndpoint(new DockerClient());
+        String effectiveEndpoint = global.resolvedEndpoint(docker);
         FlociHttpClient client = new FlociHttpClient(effectiveEndpoint, profile);
 
         List<String> services;
@@ -50,7 +57,7 @@ public class ServicesCommand implements Callable<Integer> {
             services = Arrays.asList(health.services());
         } catch (Exception e) {
             printer.error("Could not reach " + profile.displayName() + " at " + effectiveEndpoint
-                    + ".\nIs " + profile.displayName() + " running? Try '" + profile.commandPrefix() + " start'.");
+                    + ".\nIs " + profile.displayName() + " running? Try '" + profile.commandPrefix() + " start" + global.instanceSelector() + "'.");
             return 1;
         }
 

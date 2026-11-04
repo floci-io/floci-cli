@@ -27,6 +27,11 @@ public class LogsCommand implements Callable<Integer> {
     }
 
     protected LogsCommand(ProductProfile profile) {
+        this(profile, new DockerClient());
+    }
+
+    public LogsCommand(ProductProfile profile, DockerClient docker) {
+        this.docker = docker;
         this.profile = profile;
         this.global = new GlobalOptions(profile);
     }
@@ -43,15 +48,16 @@ public class LogsCommand implements Callable<Integer> {
     @Option(names = {"--service"}, description = "Filter to a specific service (not yet supported; requires server-side filtering)", paramLabel = "<name>")
     String service;
 
+    private final DockerClient docker;
+
     @Override
     public Integer call() {
         Printer printer = global.printer();
-        DockerClient docker = new DockerClient();
 
         try {
             var info = docker.inspectContainer(global.container);
             if (info.isEmpty()) {
-                printer.error("Container '" + global.container + "' not found.\nRun '" + profile.commandPrefix() + " start' to launch one.");
+                printer.error("Container '" + global.container + "' not found.\nRun '" + profile.commandPrefix() + " start" + global.instanceSelector() + "' to launch one.");
                 return 1;
             }
         } catch (DockerException e) {

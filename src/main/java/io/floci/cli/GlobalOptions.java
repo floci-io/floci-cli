@@ -5,6 +5,7 @@ import io.floci.cli.output.Ansi;
 import io.floci.cli.output.Glyphs;
 import io.floci.cli.output.OutputFormat;
 import io.floci.cli.output.Printer;
+import io.floci.cli.output.ShellExport;
 import picocli.CommandLine.Model.CommandSpec;
 import picocli.CommandLine.Option;
 import picocli.CommandLine.Spec;
@@ -105,12 +106,40 @@ public class GlobalOptions {
      * empty. Values are shell-quoted, because hints are meant to be pasted.
      */
     public String instanceSelector() {
+        return selector(GlobalOptions::shellWord);
+    }
+
+    /**
+     * The flags for a hint that loads {@code env} in {@code shell}: the selector, quoted for that
+     * shell, and {@code -o text} after a profile, which may set {@code output: json} that no shell
+     * can load.
+     *
+     * <p>This hint is a comment in the output people feed to {@code eval}, so a line break in a
+     * value would end the comment and run the rest as code. No quoting survives that: such a value
+     * becomes a placeholder. PLAIN_WORD is a POSIX rule ({@code @team} is a splat in PowerShell),
+     * so other shells always get quotes.
+     */
+    public String envLoadFlags(String shell) {
+        String selector = selector(value -> {
+            if (ShellExport.breaksLine(value)) return "<value>";
+            return ShellExport.isPosix(shell) && PLAIN_WORD.matcher(value).matches()
+                    ? value : ShellExport.quoted(shell, value);
+        });
+        return profile != null ? selector + " -o text" : selector;
+    }
+
+    private String selector(UnaryOperator<String> quote) {
+        String selector = "";
         if (profile != null) {
-            String selector = " --profile " + shellWord(profile);
-            return typed("--container") ? selector + " --container " + shellWord(container) : selector;
+            selector = " --profile " + quote.apply(profile);
+            if (typed("--container")) selector += " --container " + quote.apply(container);
+        } else if (!product.defaultContainer().equals(container)) {
+            selector = " --container " + quote.apply(container);
         }
-        if (!product.defaultContainer().equals(container)) return " --container " + shellWord(container);
-        return "";
+        if (typed("--endpoint") || (profile == null && !product.defaultEndpoint().equals(endpoint))) {
+            selector += " --endpoint " + quote.apply(endpoint);
+        }
+        return selector;
     }
 
     /** Whether {@code option} was given on the command line, as opposed to coming from a profile, the environment or the default. */

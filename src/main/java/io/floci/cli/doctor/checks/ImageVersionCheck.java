@@ -46,6 +46,12 @@ public class ImageVersionCheck implements Check {
 
     @Override
     public CheckResult run(String endpoint, String container) {
+        return run(endpoint, container, "");
+    }
+
+    @Override
+    public CheckResult run(String endpoint, String container, String selector) {
+        String pullHint = this.pullHint + selector;
         try {
             if (!docker.isImagePresent(image)) {
                 return CheckResult.warn("image.version", image + " not present — version cannot be checked",

@@ -21,7 +21,7 @@ import java.util.concurrent.Callable;
 public class EnvCommand implements Callable<Integer> {
 
     @Mixin
-    GlobalOptions global;
+    GlobalOptions global = new GlobalOptions();
 
     @Option(names = {"--host"},
             description = "Hostname for the AWS endpoint URL (default: localhost.floci.io)",
@@ -41,6 +41,12 @@ public class EnvCommand implements Callable<Integer> {
             paramLabel = "<shell>")
     String shell;
 
+    private final DockerClient docker;
+
+    public EnvCommand() { this(new DockerClient()); }
+
+    public EnvCommand(DockerClient docker) { this.docker = docker; }
+
     @Override
     public Integer call() {
         Printer printer = global.printer();
@@ -48,7 +54,7 @@ public class EnvCommand implements Callable<Integer> {
             printer.error(ShellExport.unsupported(shell));
             return 2;
         }
-        String effectiveEndpoint = global.resolvedEndpoint(new DockerClient());
+        String effectiveEndpoint = global.resolvedEndpoint(docker);
         int port = extractPort(effectiveEndpoint);
         String endpointUrl = "http://" + host + ":" + port;
 
@@ -67,7 +73,7 @@ public class EnvCommand implements Callable<Integer> {
             printer.println(ShellExport.formatExport(shell, entry.getKey(), entry.getValue()));
         }
         printer.println("");
-        printer.println(Ansi.gray("# Run: " + ShellExport.loadHint(shell, "floci env")));
+        printer.println(Ansi.gray("# Run: " + ShellExport.loadHint(shell, "floci env" + global.envLoadFlags(shell))));
         return 0;
     }
 

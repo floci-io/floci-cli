@@ -854,7 +854,8 @@ expect.
 
 An instance is a profile. Its **container name** is its identity, its **port** is the only thing
 that must differ from the other instances, and its **persist dir** keeps its state across
-container recreation. Every command (`status`, `logs`, `env`, `doctor`, `stop`, ...) finds the
+container recreation. Hints for follow-up CLI commands preserve the selected profile, container
+and explicit endpoint, and a retried `start` keeps the flags you typed. Every command (`status`, `logs`, `env`, `doctor`, `stop`, ...) finds the
 instance through its container, so passing the same `--profile` is all it takes. Any local state
 the CLI keeps about an instance lives in `~/.floci/<product>/<container>/`.
 

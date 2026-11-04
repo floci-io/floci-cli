@@ -128,11 +128,11 @@ public class AzSetupCommand implements Callable<Integer> {
             return reset ? reset(printer, flociAzDir, cloud) : setup(printer, flociAzDir, cloud);
         } catch (AzCliNotFoundException e) {
             printer.error("az CLI not found in PATH.\n"
-                    + "Install it from https://learn.microsoft.com/cli/azure/install-azure-cli, then re-run 'floci az setup'.");
+                    + "Install it from https://learn.microsoft.com/cli/azure/install-azure-cli, then re-run 'floci az setup" + global.instanceSelector() + "'.");
             return 1;
         } catch (StepFailedException e) {
             printer.error(e.getMessage()
-                    + "\nFix the error above and re-run 'floci az setup', or run 'floci az setup --reset' to start over.");
+                    + "\nFix the error above and re-run 'floci az setup" + global.instanceSelector() + "', or run 'floci az setup --reset" + global.instanceSelector() + "' to start over.");
             return 1;
         }
     }
@@ -149,12 +149,12 @@ public class AzSetupCommand implements Callable<Integer> {
             caPem = fetchWithRetry(certSource, httpEndpoint, CERT_ATTEMPTS, certRetryDelay);
         } catch (TlsUnavailableException e) {
             printer.error(e.notYet()
-                    ? "Floci Azure is still generating its TLS certificate.\nWait a few seconds and re-run 'floci az setup'."
+                    ? "Floci Azure is still generating its TLS certificate.\nWait a few seconds and re-run 'floci az setup" + global.instanceSelector() + "'."
                     : "Floci Azure is running without TLS, which the az CLI needs to log in.\n"
-                            + "Run 'floci az restart' to enable it, then re-run 'floci az setup'.");
+                            + "Run 'floci az restart" + global.instanceSelector() + "' to enable it, then re-run 'floci az setup" + global.instanceSelector() + "'.");
             return 1;
         } catch (FlociException e) {
-            printer.error(e.getMessage() + "\nRun 'floci az start', then re-run 'floci az setup'.");
+            printer.error(e.getMessage() + "\nRun 'floci az start" + global.instanceSelector() + "', then re-run 'floci az setup" + global.instanceSelector() + "'.");
             return 1;
         }
 
@@ -169,7 +169,7 @@ public class AzSetupCommand implements Callable<Integer> {
             }
         } catch (Exception e) {
             printer.error("Could not write the az configuration: " + e.getMessage()
-                    + "\nCheck that " + flociAzDir + " is writable and re-run 'floci az setup'.");
+                    + "\nCheck that " + flociAzDir + " is writable and re-run 'floci az setup" + global.instanceSelector() + "'.");
             return 1;
         }
 
@@ -195,7 +195,7 @@ public class AzSetupCommand implements Callable<Integer> {
         boolean subscriptionSet = az.run(List.of("account", "set", "--subscription", subscription), env).ok();
 
         // This instance now uses the default az config. An isolated config left by an earlier
-        // setup would otherwise keep 'floci az env' selecting its old login.
+        // setup would otherwise keep the old login selected by env.
         boolean isolatedRemoved = false;
         if (globalConfig && Files.isDirectory(configDir)) {
             try {
@@ -203,7 +203,7 @@ public class AzSetupCommand implements Callable<Integer> {
                 isolatedRemoved = true;
             } catch (IOException e) {
                 printer.warn("Could not remove the old isolated az config " + configDir.toAbsolutePath() + ": "
-                        + e.getMessage() + "\nDelete it by hand, or 'floci az env' keeps selecting it.");
+                        + e.getMessage() + "\nDelete it by hand, or 'floci az env" + global.instanceSelector() + "' keeps selecting it.");
             }
         }
 
@@ -279,7 +279,7 @@ public class AzSetupCommand implements Callable<Integer> {
             deleteIfEmpty(flociAzDir);
         } catch (IOException e) {
             printer.error("Could not remove " + flociAzDir + ": " + e.getMessage()
-                    + "\nDelete it by hand, then re-run 'floci az setup' if you need it again.");
+                    + "\nDelete it by hand, then re-run 'floci az setup" + global.instanceSelector() + "' if you need it again.");
             return 1;
         }
         out.put("reset", existed);

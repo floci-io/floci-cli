@@ -39,6 +39,30 @@ public final class ShellExport {
         };
     }
 
+    /** Whether {@code shell} is one of the POSIX family, as opposed to fish or PowerShell. */
+    public static boolean isPosix(String shell) {
+        return switch (shell.toLowerCase()) {
+            case "fish", "powershell", "pwsh", "ps1" -> false;
+            default -> true;
+        };
+    }
+
+    /** Whether {@code value} could end the comment line it is printed in, in any shell. */
+    public static boolean breaksLine(String value) {
+        return value.chars().anyMatch(c -> Character.isISOControl(c)
+                || Character.getType(c) == Character.LINE_SEPARATOR
+                || Character.getType(c) == Character.PARAGRAPH_SEPARATOR);
+    }
+
+    /** {@code value} as one single-quoted argument in the given shell. */
+    public static String quoted(String shell, String value) {
+        return switch (shell.toLowerCase()) {
+            case "fish"                       -> "'" + value.replace("\\", "\\\\").replace("'", "\\'") + "'";
+            case "powershell", "pwsh", "ps1"  -> "'" + value.replace("'", "''") + "'";
+            default                           -> "'" + value.replace("'", "'\\''") + "'";
+        };
+    }
+
     /** Renders one export line for the given shell ({@code bash}, {@code fish}, {@code powershell}). */
     public static String formatExport(String shell, String key, String value) {
         return switch (shell.toLowerCase()) {
