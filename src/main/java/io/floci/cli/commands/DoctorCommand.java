@@ -128,7 +128,7 @@ public class DoctorCommand implements Callable<Integer> {
         List<Check> selected = selected();
         if (selected.isEmpty()) {
             printer.error("Unknown check '" + checkName + "'.\nRun '" + profile.commandPrefix()
-                    + " doctor' to see every check, or pass one of: " + String.join(", ", knownNames()) + ".");
+                    + " doctor" + global.instanceSelector() + "' to see every check, or pass one of: " + String.join(", ", knownNames()) + ".");
             return ExitCode.USAGE;
         }
 
@@ -150,7 +150,7 @@ public class DoctorCommand implements Callable<Integer> {
             List<Future<CheckResult>> pending = selected.stream()
                     .map(check -> pool.submit(() -> known.isEmpty() && ENDPOINT_REACHABLE.equals(check.name())
                             ? unknownEndpoint()
-                            : runSafely(check, effectiveEndpoint, global.container)))
+                            : runSafely(check, effectiveEndpoint, global.container, global.instanceSelector())))
                     .toList();
             for (int i = 0; i < selected.size(); i++) {
                 CheckResult result = await(selected.get(i), pending.get(i));
@@ -214,9 +214,9 @@ public class DoctorCommand implements Callable<Integer> {
     }
 
     // One failing check must not abort the run: report it and keep going.
-    private static CheckResult runSafely(Check check, String endpoint, String container) {
+    private static CheckResult runSafely(Check check, String endpoint, String container, String selector) {
         try {
-            return check.run(endpoint, container);
+            return check.run(endpoint, container, selector);
         } catch (RuntimeException e) {
             return failed(check, e);
         }

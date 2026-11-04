@@ -22,6 +22,7 @@ class ProductProfileTest {
         assertEquals("FLOCI_ENDPOINT", ProductProfile.AWS.envVar("ENDPOINT"));
         assertEquals("/_floci", ProductProfile.AWS.controlPrefix());
         assertEquals("floci", ProductProfile.AWS.commandPrefix());
+        assertEquals("floci aws", ProductProfile.AWS.explicitCommandPrefix());
         assertEquals(Map.of(), ProductProfile.AWS.startEnv());
     }
 
@@ -35,6 +36,7 @@ class ProductProfileTest {
         assertEquals("FLOCI_GCP_CONTAINER", ProductProfile.GCP.envVar("CONTAINER"));
         assertEquals("/_floci-gcp", ProductProfile.GCP.controlPrefix());
         assertEquals("floci gcp", ProductProfile.GCP.commandPrefix());
+        assertEquals("floci gcp", ProductProfile.GCP.explicitCommandPrefix());
         assertEquals(Map.of(), ProductProfile.GCP.startEnv());
     }
 
@@ -49,6 +51,7 @@ class ProductProfileTest {
         // The floci-az server exposes /_floci/* (same as AWS), NOT /_floci-az.
         assertEquals("/_floci", ProductProfile.AZ.controlPrefix());
         assertEquals("floci az", ProductProfile.AZ.commandPrefix());
+        assertEquals("floci az", ProductProfile.AZ.explicitCommandPrefix());
         assertEquals(Map.of("TLS_ENABLED", "true"), ProductProfile.AZ.startEnv());
     }
 
@@ -62,6 +65,7 @@ class ProductProfileTest {
         assertEquals("FLOCI_OCI_ENDPOINT", ProductProfile.OCI.envVar("ENDPOINT"));
         assertEquals("/_floci-oci", ProductProfile.OCI.controlPrefix());
         assertEquals("floci oci", ProductProfile.OCI.commandPrefix());
+        assertEquals("floci oci", ProductProfile.OCI.explicitCommandPrefix());
         assertEquals(Map.of(), ProductProfile.OCI.startEnv());
     }
 

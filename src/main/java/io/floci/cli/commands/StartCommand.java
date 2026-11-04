@@ -99,7 +99,14 @@ public class StartCommand implements Callable<Integer> {
     public static StartCommand resolvedFor(ProductProfile product,
                                            ProfileDefaultValueProvider provider,
                                            String profileName) {
-        StartCommand start = new StartCommand(product);
+        return resolvedFor(product, provider, profileName, new DockerClient());
+    }
+
+    /** Reuse the caller's Docker client when a restart starts the resolved instance. */
+    public static StartCommand resolvedFor(ProductProfile product,
+                                           ProfileDefaultValueProvider provider,
+                                           String profileName, DockerClient docker) {
+        StartCommand start = new StartCommand(product, docker);
         if (profileName != null) {
             new CommandLine(start)
                     .setCaseInsensitiveEnumValuesAllowed(true)
@@ -107,6 +114,37 @@ public class StartCommand implements Callable<Integer> {
                     .parseArgs("--profile", profileName);
         }
         return start;
+    }
+
+    // The rest of what was typed, so a retried start is the same start. Empty for a start built by
+    // restart, which was never parsed.
+    private String typedStartFlags() {
+        StringBuilder flags = new StringBuilder();
+        if (global.typed("--port")) flags.append(" --port ").append(port);
+        if (global.typed("--image")) flags.append(" --image ").append(GlobalOptions.shellWord(image));
+        if (global.typed("--persist")) flags.append(" --persist ").append(GlobalOptions.shellWord(persistDir));
+        if (global.typed("--services")) flags.append(" --services ").append(GlobalOptions.shellWord(services));
+        if (global.typed("--namespace")) flags.append(" --namespace ").append(GlobalOptions.shellWord(namespace));
+        return flags.toString();
+    }
+
+    /** A self-contained POSIX command that recovers the resolved settings after a failed restart. */
+    public String recoveryCommand() {
+        StringBuilder command = new StringBuilder(profile.explicitCommandPrefix()).append(" start");
+        command.append(" --container ").append(GlobalOptions.shellWord(global.container));
+        command.append(" --port ").append(port);
+        command.append(" --image ").append(GlobalOptions.shellWord(image));
+        // --port already moves the default endpoint, so only a different one is worth naming.
+        if (!profile.defaultEndpoint().equals(global.endpoint)) {
+            command.append(" --endpoint ").append(GlobalOptions.shellWord(global.endpoint));
+        }
+        // Resolved, so the retry mounts the same directory from wherever it is run.
+        if (persistDir != null && !persistDir.isBlank()) {
+            command.append(" --persist ").append(GlobalOptions.shellWord(bindSource(docker.daemonHost())));
+        }
+        if (services != null) command.append(" --services ").append(GlobalOptions.shellWord(services));
+        if (namespace != null) command.append(" --namespace ").append(GlobalOptions.shellWord(namespace));
+        return command.toString();
     }
 
     /** What a profile-resolved instance would start with. Read by {@code config show}. */
@@ -352,7 +390,7 @@ public class StartCommand implements Callable<Integer> {
             if (existing.isPresent()) {
                 String state = existing.get().state();
                 if ("running".equals(state)) {
-                    printer.error("Container '" + global.container + "' is already running.\nRun '" + profile.commandPrefix() + " stop' first or pass --container <name> to use a different name.");
+                    printer.error("Container '" + global.container + "' is already running.\nRun '" + profile.commandPrefix() + " stop" + global.instanceSelector() + "' first or pass --container <name> to use a different name.");
                     return 1;
                 }
                 // Remove stopped container so we can start fresh
@@ -390,7 +428,7 @@ public class StartCommand implements Callable<Integer> {
                 docker.pull(image, pull);
             }
         } catch (DockerException e) {
-            printer.error("Failed to pull image: " + e.getMessage() + "\nRun '" + profile.commandPrefix() + " start --pull never' to skip pulling.");
+            printer.error("Failed to pull image: " + e.getMessage() + "\nRun '" + profile.commandPrefix() + " start --pull never" + global.instanceSelector() + typedStartFlags() + "' to skip pulling.");
             return 1;
         }
 
@@ -405,7 +443,7 @@ public class StartCommand implements Callable<Integer> {
             // withNextStep, not the two-argument error: docker's own output is often several
             // lines, which must not be taken for a next step.
             printer.error("Failed to start container: " + e.withNextStep(
-                    "Run '" + profile.commandPrefix() + " doctor' to check Docker, the image and the port."));
+                    "Run '" + profile.commandPrefix() + " doctor" + global.instanceSelector() + "' to check Docker, the image and the port."));
             return 1;
         }
 
@@ -414,7 +452,7 @@ public class StartCommand implements Callable<Integer> {
         String endpoint = withPort(global.endpoint, port);
 
         if (detach) {
-            progress.accept(Ansi.gray("Detached. Run '" + profile.commandPrefix() + " wait' to poll for readiness."));
+            progress.accept(Ansi.gray("Detached. Run '" + profile.commandPrefix() + " wait" + global.instanceSelector() + "' to poll for readiness."));
             if (structured) printer.structured(result(id, endpoint, null));
             return 0;
         }
@@ -433,9 +471,16 @@ public class StartCommand implements Callable<Integer> {
         return exit;
     }
 
+    private String readinessTimeout = "30s";
+
     /** How long start waits for the emulator to answer. A seam: tests do not wait half a minute. */
     protected String readinessTimeout() {
-        return "30s";
+        return readinessTimeout;
+    }
+
+    /** Test seam for a start built by {@code restart}, which cannot be subclassed from outside. */
+    public void readinessTimeout(String timeout) {
+        this.readinessTimeout = timeout;
     }
 
     // What -o json/yaml reports for a start: 'ready' is left out when --detach did not wait for it.

@@ -68,6 +68,7 @@ public class AzEnvCommand implements Callable<Integer> {
             paramLabel = "<shell>")
     String shell;
 
+    private final DockerClient docker;
     private final Path stateRoot;
     private final AzSetupCommand.CertSource certSource;
 
@@ -81,6 +82,11 @@ public class AzEnvCommand implements Callable<Integer> {
      * each instance's config dir and CA; {@code certSource} reads the running server's CA.
      */
     public AzEnvCommand(Path stateRoot, AzSetupCommand.CertSource certSource) {
+        this(stateRoot, certSource, new DockerClient());
+    }
+
+    public AzEnvCommand(Path stateRoot, AzSetupCommand.CertSource certSource, DockerClient docker) {
+        this.docker = docker;
         this.stateRoot = stateRoot;
         this.certSource = certSource;
     }
@@ -92,7 +98,7 @@ public class AzEnvCommand implements Callable<Integer> {
             printer.error(ShellExport.unsupported(shell));
             return 2;
         }
-        String effectiveEndpoint = global.resolvedEndpoint(new DockerClient(), printer::warn);
+        String effectiveEndpoint = global.resolvedEndpoint(docker, printer::warn);
         int port = extractPort(effectiveEndpoint);
 
         boolean sdkVarsMode = "sdk-vars".equals(format) || serviceFilter != null;
@@ -121,7 +127,7 @@ public class AzEnvCommand implements Callable<Integer> {
             printer.println(ShellExport.formatExport(shell, "AZURE_STORAGE_CONNECTION_STRING", connStr));
             printAzCliVars(printer, azCliVars);
             printer.println("");
-            printer.println(Ansi.gray("# Run: " + ShellExport.loadHint(shell, "floci az env")));
+            printer.println(Ansi.gray("# Run: " + ShellExport.loadHint(shell, "floci az env" + global.envLoadFlags(shell))));
         } else {
             printer.println(ShellExport.formatExport(shell, "AZURE_STORAGE_ACCOUNT", account));
             printer.println(ShellExport.formatExport(shell, "AZURE_STORAGE_KEY", DEV_KEY));
@@ -130,7 +136,7 @@ public class AzEnvCommand implements Callable<Integer> {
             }
             printAzCliVars(printer, azCliVars);
             printer.println("");
-            printer.println(Ansi.gray("# Run: " + ShellExport.loadHint(shell, "floci az env --format sdk-vars")));
+            printer.println(Ansi.gray("# Run: " + ShellExport.loadHint(shell, "floci az env --format sdk-vars" + global.envLoadFlags(shell))));
         }
 
         return 0;

@@ -37,6 +37,12 @@ public class EndpointReachableCheck implements Check {
 
     @Override
     public CheckResult run(String endpoint, String container) {
+        return run(endpoint, container, "");
+    }
+
+    @Override
+    public CheckResult run(String endpoint, String container, String selector) {
+
         FlociHttpClient client = new FlociHttpClient(endpoint, controlPrefix);
         try {
             var health = client.health(Duration.ofSeconds(3));
@@ -51,6 +57,6 @@ public class EndpointReachableCheck implements Check {
         }
         return CheckResult.fail("endpoint.reachable",
                 "GET " + controlPrefix + "/health at " + endpoint + " did not return 200",
-                "Is Floci running? Try '" + commandPrefix + " start'.");
+                "Is Floci running? Try '" + commandPrefix + " start" + selector + "'.");
     }
 }

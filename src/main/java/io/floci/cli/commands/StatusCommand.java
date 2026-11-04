@@ -123,7 +123,7 @@ public class StatusCommand implements Callable<Integer> {
 
         if (!reachable && !"running".equals(containerState)) {
             printer.println("");
-            printer.println(Ansi.gray("Run '" + profile.commandPrefix() + " start' to launch " + profile.displayName() + "."));
+            printer.println(Ansi.gray("Run '" + profile.commandPrefix() + " start" + global.instanceSelector() + "' to launch " + profile.displayName() + "."));
         }
 
         return exit;

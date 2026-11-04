@@ -35,11 +35,13 @@ services:
   app:
     build: .
     environment:
-      # Client libraries skip credentials when these are set. Storage needs the scheme.
+      # SDK support varies by service. Storage needs the scheme.
       STORAGE_EMULATOR_HOST: http://floci-gcp:4588
       PUBSUB_EMULATOR_HOST: floci-gcp:4588
       FIRESTORE_EMULATOR_HOST: floci-gcp:4588
       DATASTORE_EMULATOR_HOST: floci-gcp:4588
+      # Python Secret Manager needs explicit endpoint + anonymous credentials; see gcp.md.
+      # This variable alone does not configure that SDK.
       SECRET_MANAGER_EMULATOR_HOST: floci-gcp:4588
       GOOGLE_CLOUD_PROJECT: floci-local
     depends_on:

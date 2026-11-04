@@ -41,6 +41,12 @@ public class GcpEnvCommand implements Callable<Integer> {
             paramLabel = "<shell>")
     String shell;
 
+    private final DockerClient docker;
+
+    public GcpEnvCommand() { this(new DockerClient()); }
+
+    public GcpEnvCommand(DockerClient docker) { this.docker = docker; }
+
     @Override
     public Integer call() {
         Printer printer = global.printer();
@@ -48,7 +54,7 @@ public class GcpEnvCommand implements Callable<Integer> {
             printer.error(ShellExport.unsupported(shell));
             return 2;
         }
-        String effectiveEndpoint = global.resolvedEndpoint(new DockerClient(), printer::warn);
+        String effectiveEndpoint = global.resolvedEndpoint(docker, printer::warn);
         String host = extractHost(effectiveEndpoint);
         int port = extractPort(effectiveEndpoint);
         String hostPort = host + ":" + port;
@@ -71,7 +77,7 @@ public class GcpEnvCommand implements Callable<Integer> {
             printer.println(ShellExport.formatExport(shell, entry.getKey(), entry.getValue()));
         }
         printer.println("");
-        printer.println(Ansi.gray("# Run: " + ShellExport.loadHint(shell, "floci gcp env")));
+        printer.println(Ansi.gray("# Run: " + ShellExport.loadHint(shell, "floci gcp env" + global.envLoadFlags(shell))));
 
         return 0;
     }

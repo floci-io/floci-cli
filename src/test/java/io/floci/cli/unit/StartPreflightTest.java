@@ -294,7 +294,7 @@ class StartPreflightTest {
 
         assertEquals(1, r.exit());
         assertTrue(r.err().contains("Failed to start container: docker: Error response from daemon"), r.err());
-        assertTrue(r.err().strip().endsWith("Run 'floci gcp doctor' to check Docker, the image and the port."), r.err());
+        assertTrue(r.err().strip().endsWith("Run 'floci gcp doctor --container floci-gcp-preflight' to check Docker, the image and the port."), r.err());
     }
 
     /** A context selected with DOCKER_CONTEXT or 'docker context use' is not in the environment: docker is asked. */
