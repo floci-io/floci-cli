@@ -116,6 +116,39 @@ class InstanceHintsTest {
             assertTrue(out.contains("--profile 'team\\'s' -o text --shell fish | source"), out);
         }
     }
+    private List<Callable<Integer>> allEnvCommands() {
+        return List.of(new EnvCommand(new FakeDocker()), new GcpEnvCommand(new FakeDocker()), new OciEnvCommand(new FakeDocker()),
+                new AzEnvCommand(temp, endpoint -> { throw new AssertionError("no cert expected"); }, new FakeDocker()));
+    }
+    @Test
+    void aValueWithALineBreakCannotEscapeTheHintComment() throws Exception {
+        for (String breaker : List.of("\n", "\r", "\u0085", "\u2028", "\u2029")) {
+            for (String shell : List.of("bash", "fish", "powershell")) {
+                for (Callable<Integer> env : allEnvCommands()) {
+                    Run result = run(env, "--container", "x" + breaker + "touch injected" + breaker + "#",
+                            "--endpoint", "http://localhost:1", "--shell", shell);
+                    assertEquals(0, result.exit(), result.err());
+                    assertFalse(result.out().contains("touch injected"), result.out());
+                    assertTrue(result.out().contains("--container <value>"), result.out());
+                }
+            }
+        }
+    }
+    @Test
+    void nonPosixShellsQuoteEvenAPlainValue() throws Exception {
+        for (Callable<Integer> env : allEnvCommands()) {
+            String out = run(env, "--container", "@team", "--endpoint", "http://localhost:1", "--shell", "powershell").out();
+            assertTrue(out.contains("--container '@team'"), out);
+        }
+        for (Callable<Integer> env : allEnvCommands()) {
+            String out = run(env, "--container", "@team", "--endpoint", "http://localhost:1", "--shell", "fish").out();
+            assertTrue(out.contains("--container '@team'"), out);
+        }
+        for (Callable<Integer> env : allEnvCommands()) {
+            String out = run(env, "--container", "@team", "--endpoint", "http://localhost:1").out();
+            assertTrue(out.contains("--container @team"), out);
+        }
+    }
     @Test
     void aProfileThatAsksForJsonStillGetsALoadableHint() throws Exception {
         Files.writeString(temp.resolve("json.yaml"), "container: other\nendpoint: http://127.0.0.1:1\noutput: json\n");

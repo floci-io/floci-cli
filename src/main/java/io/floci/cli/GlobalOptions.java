@@ -113,9 +113,18 @@ public class GlobalOptions {
      * The flags for a hint that loads {@code env} in {@code shell}: the selector, quoted for that
      * shell, and {@code -o text} after a profile, which may set {@code output: json} that no shell
      * can load.
+     *
+     * <p>This hint is a comment in the output people feed to {@code eval}, so a line break in a
+     * value would end the comment and run the rest as code. No quoting survives that: such a value
+     * becomes a placeholder. PLAIN_WORD is a POSIX rule ({@code @team} is a splat in PowerShell),
+     * so other shells always get quotes.
      */
     public String envLoadFlags(String shell) {
-        String selector = selector(value -> PLAIN_WORD.matcher(value).matches() ? value : ShellExport.quoted(shell, value));
+        String selector = selector(value -> {
+            if (ShellExport.breaksLine(value)) return "<value>";
+            return ShellExport.isPosix(shell) && PLAIN_WORD.matcher(value).matches()
+                    ? value : ShellExport.quoted(shell, value);
+        });
         return profile != null ? selector + " -o text" : selector;
     }
 
