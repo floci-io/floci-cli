@@ -170,11 +170,16 @@ public class RestartCommand implements Callable<Integer> {
         } catch (DockerException e) {
             running = false;
         }
-        String selector = global.instanceSelector();
         if (running) {
+            String prefix = profile.explicitCommandPrefix();
+            String selector = global.instanceSelector();
+            // By now this is the endpoint start waited on, with the port it bound.
+            String wait = global.typed("--endpoint") && !selector.contains(" --endpoint ")
+                    ? selector + " --endpoint " + GlobalOptions.shellWord(global.endpoint)
+                    : selector;
             return "The new container is running but did not become ready.\n"
-                    + "Check it with '" + profile.commandPrefix() + " logs" + selector + "', then run '"
-                    + profile.commandPrefix() + " wait" + selector + "' to wait again.";
+                    + "Check it with '" + prefix + " logs" + selector + "', then run '"
+                    + prefix + " wait" + wait + "' to wait again.";
         }
         return "Restart did not finish after the old container was removed.\n"
                 + "To retry with the same settings, run:\n" + recovery;

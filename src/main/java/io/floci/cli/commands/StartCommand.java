@@ -118,7 +118,7 @@ public class StartCommand implements Callable<Integer> {
 
     /** A self-contained POSIX command that recovers the resolved settings after a failed restart. */
     public String recoveryCommand() {
-        StringBuilder command = new StringBuilder(profile.commandPrefix()).append(" start");
+        StringBuilder command = new StringBuilder(profile.explicitCommandPrefix()).append(" start");
         command.append(" --container ").append(GlobalOptions.shellWord(global.container));
         command.append(" --port ").append(port);
         command.append(" --image ").append(GlobalOptions.shellWord(image));
@@ -126,7 +126,10 @@ public class StartCommand implements Callable<Integer> {
         if (!profile.defaultEndpoint().equals(global.endpoint)) {
             command.append(" --endpoint ").append(GlobalOptions.shellWord(global.endpoint));
         }
-        if (persistDir != null) command.append(" --persist ").append(GlobalOptions.shellWord(persistDir));
+        // Resolved, so the retry mounts the same directory from wherever it is run.
+        if (persistDir != null && !persistDir.isBlank()) {
+            command.append(" --persist ").append(GlobalOptions.shellWord(bindSource(docker.daemonHost())));
+        }
         if (services != null) command.append(" --services ").append(GlobalOptions.shellWord(services));
         if (namespace != null) command.append(" --namespace ").append(GlobalOptions.shellWord(namespace));
         return command.toString();

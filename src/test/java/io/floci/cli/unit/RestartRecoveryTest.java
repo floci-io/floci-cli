@@ -102,6 +102,63 @@ class RestartRecoveryTest {
         assertFalse(text.contains("floci gcp start --container"), text);
     }
 
+    private String restartStderr(ProductProfile product, FailedStart docker, String... args) throws Exception {
+        var restart = new RestartCommand(product, docker) {
+            @Override public StartCommand buildStartCommand() throws DockerException {
+                StartCommand start = super.buildStartCommand();
+                start.readinessTimeout("1ms");
+                return start;
+            }
+        };
+        CommandLine command = new CommandLine(restart)
+                .setDefaultValueProvider(new ProfileDefaultValueProvider(new ProfileStore(profiles)));
+        PrintStream out = System.out, err = System.err;
+        ByteArrayOutputStream stderr = new ByteArrayOutputStream();
+        try {
+            System.setErr(new PrintStream(stderr)); System.setOut(new PrintStream(new ByteArrayOutputStream()));
+            assertEquals(1, command.execute(args));
+        } finally { System.setErr(err); System.setOut(out); }
+        return stderr.toString();
+    }
+
+    private static FailedStart comesUpRunning() {
+        return new FailedStart() {
+            @Override public String startContainer(List<String> args) {
+                actions.add("run"); state = "running"; return "new-id";
+            }
+        };
+    }
+
+    @Test
+    void awsRecoveryNamesItsTreeBecauseABareCommandFollowsTheDefaultProduct() throws Exception {
+        String refused = restartStderr(ProductProfile.AWS, new FailedStart(), "--container", "other");
+        assertTrue(refused.contains("floci aws start --container other"), refused);
+        String unready = restartStderr(ProductProfile.AWS, comesUpRunning(), "--container", "other");
+        assertTrue(unready.contains("floci aws logs --container other"), unready);
+        assertTrue(unready.contains("floci aws wait --container other"), unready);
+    }
+
+    @Test
+    void theSuggestedWaitChecksTheEndpointStartWaitedOn() throws Exception {
+        String text = restartStderr(ProductProfile.GCP, comesUpRunning(),
+                "--container", "floci-gcp-team", "--endpoint", "http://build-host:4588");
+        assertTrue(text.contains("floci gcp wait --container floci-gcp-team --endpoint http://build-host:14588"), text);
+    }
+
+    @Test
+    void theRecoveryCommandPrintsTheDirectoryALocalDaemonWouldMount() {
+        FailedStart local = new FailedStart() {
+            @Override public DockerHost daemonHost() { return new DockerHost(Kind.UNIX, null, "unix:///var/run/docker.sock"); }
+        };
+        StartCommand onLocal = new StartCommand(ProductProfile.GCP, local);
+        new CommandLine(onLocal).parseArgs("--persist", "rel/data");
+        assertTrue(onLocal.recoveryCommand().contains("--persist " + Path.of("rel/data").toAbsolutePath()), onLocal.recoveryCommand());
+
+        StartCommand onRemote = new StartCommand(ProductProfile.GCP, new FailedStart());
+        new CommandLine(onRemote).parseArgs("--persist", "/srv/data");
+        assertTrue(onRemote.recoveryCommand().contains("--persist /srv/data"), onRemote.recoveryCommand());
+    }
+
     @Test
     void failedStopDoesNotClaimTheOldContainerWasRemoved() {
         FailedStart docker = new FailedStart(); docker.failStop = true;
