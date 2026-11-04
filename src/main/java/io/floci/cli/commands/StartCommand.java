@@ -99,7 +99,14 @@ public class StartCommand implements Callable<Integer> {
     public static StartCommand resolvedFor(ProductProfile product,
                                            ProfileDefaultValueProvider provider,
                                            String profileName) {
-        StartCommand start = new StartCommand(product);
+        return resolvedFor(product, provider, profileName, new DockerClient());
+    }
+
+    /** Reuse the caller's Docker client when a restart starts the resolved instance. */
+    public static StartCommand resolvedFor(ProductProfile product,
+                                           ProfileDefaultValueProvider provider,
+                                           String profileName, DockerClient docker) {
+        StartCommand start = new StartCommand(product, docker);
         if (profileName != null) {
             new CommandLine(start)
                     .setCaseInsensitiveEnumValuesAllowed(true)
@@ -107,6 +114,22 @@ public class StartCommand implements Callable<Integer> {
                     .parseArgs("--profile", profileName);
         }
         return start;
+    }
+
+    /** A self-contained POSIX command that recovers the resolved settings after a failed restart. */
+    public String recoveryCommand() {
+        StringBuilder command = new StringBuilder(profile.commandPrefix()).append(" start");
+        command.append(" --container ").append(GlobalOptions.shellWord(global.container));
+        command.append(" --port ").append(port);
+        command.append(" --image ").append(GlobalOptions.shellWord(image));
+        // --port already moves the default endpoint, so only a different one is worth naming.
+        if (!profile.defaultEndpoint().equals(global.endpoint)) {
+            command.append(" --endpoint ").append(GlobalOptions.shellWord(global.endpoint));
+        }
+        if (persistDir != null) command.append(" --persist ").append(GlobalOptions.shellWord(persistDir));
+        if (services != null) command.append(" --services ").append(GlobalOptions.shellWord(services));
+        if (namespace != null) command.append(" --namespace ").append(GlobalOptions.shellWord(namespace));
+        return command.toString();
     }
 
     /** What a profile-resolved instance would start with. Read by {@code config show}. */
@@ -433,9 +456,16 @@ public class StartCommand implements Callable<Integer> {
         return exit;
     }
 
+    private String readinessTimeout = "30s";
+
     /** How long start waits for the emulator to answer. A seam: tests do not wait half a minute. */
     protected String readinessTimeout() {
-        return "30s";
+        return readinessTimeout;
+    }
+
+    /** Test seam for a start built by {@code restart}, which cannot be subclassed from outside. */
+    public void readinessTimeout(String timeout) {
+        this.readinessTimeout = timeout;
     }
 
     // What -o json/yaml reports for a start: 'ready' is left out when --detach did not wait for it.

@@ -125,7 +125,7 @@ public class GlobalOptions {
     }
 
     // POSIX single quotes: the hints are shell command lines like the CLI's other 'Run ...' hints.
-    private static String shellWord(String value) {
+    public static String shellWord(String value) {
         if (PLAIN_WORD.matcher(value).matches()) return value;
         return "'" + value.replace("'", "'\\''") + "'";
     }
