@@ -109,6 +109,18 @@ public class StartCommand implements Callable<Integer> {
         return start;
     }
 
+    // The rest of what was typed, so a retried start is the same start. Empty for a start built by
+    // restart, which was never parsed.
+    private String typedStartFlags() {
+        StringBuilder flags = new StringBuilder();
+        if (global.typed("--port")) flags.append(" --port ").append(port);
+        if (global.typed("--image")) flags.append(" --image ").append(GlobalOptions.shellWord(image));
+        if (global.typed("--persist")) flags.append(" --persist ").append(GlobalOptions.shellWord(persistDir));
+        if (global.typed("--services")) flags.append(" --services ").append(GlobalOptions.shellWord(services));
+        if (global.typed("--namespace")) flags.append(" --namespace ").append(GlobalOptions.shellWord(namespace));
+        return flags.toString();
+    }
+
     /** What a profile-resolved instance would start with. Read by {@code config show}. */
     public String image() { return image; }
 
@@ -352,7 +364,7 @@ public class StartCommand implements Callable<Integer> {
             if (existing.isPresent()) {
                 String state = existing.get().state();
                 if ("running".equals(state)) {
-                    printer.error("Container '" + global.container + "' is already running.\nRun '" + profile.commandPrefix() + " stop' first or pass --container <name> to use a different name.");
+                    printer.error("Container '" + global.container + "' is already running.\nRun '" + profile.commandPrefix() + " stop" + global.instanceSelector() + "' first or pass --container <name> to use a different name.");
                     return 1;
                 }
                 // Remove stopped container so we can start fresh
@@ -390,7 +402,7 @@ public class StartCommand implements Callable<Integer> {
                 docker.pull(image, pull);
             }
         } catch (DockerException e) {
-            printer.error("Failed to pull image: " + e.getMessage() + "\nRun '" + profile.commandPrefix() + " start --pull never' to skip pulling.");
+            printer.error("Failed to pull image: " + e.getMessage() + "\nRun '" + profile.commandPrefix() + " start --pull never" + global.instanceSelector() + typedStartFlags() + "' to skip pulling.");
             return 1;
         }
 
@@ -405,7 +417,7 @@ public class StartCommand implements Callable<Integer> {
             // withNextStep, not the two-argument error: docker's own output is often several
             // lines, which must not be taken for a next step.
             printer.error("Failed to start container: " + e.withNextStep(
-                    "Run '" + profile.commandPrefix() + " doctor' to check Docker, the image and the port."));
+                    "Run '" + profile.commandPrefix() + " doctor" + global.instanceSelector() + "' to check Docker, the image and the port."));
             return 1;
         }
 
@@ -414,7 +426,7 @@ public class StartCommand implements Callable<Integer> {
         String endpoint = withPort(global.endpoint, port);
 
         if (detach) {
-            progress.accept(Ansi.gray("Detached. Run '" + profile.commandPrefix() + " wait' to poll for readiness."));
+            progress.accept(Ansi.gray("Detached. Run '" + profile.commandPrefix() + " wait" + global.instanceSelector() + "' to poll for readiness."));
             if (structured) printer.structured(result(id, endpoint, null));
             return 0;
         }

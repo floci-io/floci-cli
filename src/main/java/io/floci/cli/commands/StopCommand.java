@@ -64,7 +64,7 @@ public class StopCommand implements Callable<Integer> {
         try {
             var info = docker.inspectContainer(global.container);
             if (info.isEmpty()) {
-                printer.error("Container '" + global.container + "' not found.\nRun '" + profile.commandPrefix() + " start' to launch one.");
+                printer.error("Container '" + global.container + "' not found.\nRun '" + profile.commandPrefix() + " start" + global.instanceSelector() + "' to launch one.");
                 return 1;
             }
             if (!"running".equals(info.get().state())) {

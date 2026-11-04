@@ -82,7 +82,8 @@ clouds the user works with; suggest installing them, do not install them unasked
    namespace) but not in-memory state, and on Azure the new container has a new certificate,
    so `floci az setup` must be run again. `start` on a running container fails. Say so before
    recreating anything.
-7. **Never add `-q` to `env`**: it suppresses the exports themselves.
+7. **Never add `-q` to `env`**: it suppresses the exports themselves. Follow-up command hints
+   keep the instance's flags; keep them when retrying.
 8. **Do not guess what an emulator supports.** Check `floci <tree> services -o json` and the
    published docs ([references/docs.md](references/docs.md)) instead of answering from memory.
 9. **With a profile, start and wait before `env`.** Until the profile's container is running,

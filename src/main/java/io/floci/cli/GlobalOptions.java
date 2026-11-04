@@ -105,12 +105,17 @@ public class GlobalOptions {
      * empty. Values are shell-quoted, because hints are meant to be pasted.
      */
     public String instanceSelector() {
+        String selector = "";
         if (profile != null) {
-            String selector = " --profile " + shellWord(profile);
-            return typed("--container") ? selector + " --container " + shellWord(container) : selector;
+            selector = " --profile " + shellWord(profile);
+            if (typed("--container")) selector += " --container " + shellWord(container);
+        } else if (!product.defaultContainer().equals(container)) {
+            selector = " --container " + shellWord(container);
         }
-        if (!product.defaultContainer().equals(container)) return " --container " + shellWord(container);
-        return "";
+        if (typed("--endpoint") || (profile == null && !product.defaultEndpoint().equals(endpoint))) {
+            selector += " --endpoint " + shellWord(endpoint);
+        }
+        return selector;
     }
 
     /** Whether {@code option} was given on the command line, as opposed to coming from a profile, the environment or the default. */
@@ -125,7 +130,7 @@ public class GlobalOptions {
     }
 
     // POSIX single quotes: the hints are shell command lines like the CLI's other 'Run ...' hints.
-    private static String shellWord(String value) {
+    public static String shellWord(String value) {
         if (PLAIN_WORD.matcher(value).matches()) return value;
         return "'" + value.replace("'", "'\\''") + "'";
     }

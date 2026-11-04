@@ -36,6 +36,13 @@ public class ContainerRunningCheck implements Check {
 
     @Override
     public CheckResult run(String endpoint, String container) {
+        return run(endpoint, container, "");
+    }
+
+    @Override
+    public CheckResult run(String endpoint, String container, String selector) {
+        String start = this.start + selector;
+        String stop = this.stop + selector;
         try {
             var info = docker.inspectContainer(container);
             if (info.isEmpty()) {

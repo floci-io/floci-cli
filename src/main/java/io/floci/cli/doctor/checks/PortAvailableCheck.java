@@ -45,6 +45,12 @@ public class PortAvailableCheck implements Check {
 
     @Override
     public CheckResult run(String endpoint, String container) {
+        return run(endpoint, container, "");
+    }
+
+    @Override
+    public CheckResult run(String endpoint, String container, String selector) {
+        String startCommand = this.startCommand + selector;
         int port = extractPort(endpoint, defaultPort);
         // If a Floci container is already listening on the port, that's fine
         try {
