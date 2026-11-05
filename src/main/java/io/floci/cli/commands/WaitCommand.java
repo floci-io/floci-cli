@@ -96,13 +96,18 @@ public class WaitCommand implements Callable<Integer> {
         // The deadline starts now, so the container lookup below counts against --timeout too.
         Instant deadline = Instant.now().plusMillis(timeoutMillis);
         String effectiveEndpoint = knownEndpoint != null ? knownEndpoint : endpointWithin(deadline);
-        FlociHttpClient client = new FlociHttpClient(effectiveEndpoint, profile);
+        // Null until the container exists: never poll the default instance on its behalf.
+        FlociHttpClient client = effectiveEndpoint != null ? new FlociHttpClient(effectiveEndpoint, profile) : null;
 
         // Poll soon after a start, then back off; never let a request or a pause run past the
         // deadline, so --timeout is a real upper bound.
         long delay = FIRST_DELAY_MS;
         while (Instant.now().isBefore(deadline)) {
-            if (isReady(client, service, requestTimeout(Duration.between(Instant.now(), deadline)))) {
+            if (client == null) {
+                effectiveEndpoint = endpointWithin(deadline);
+                if (effectiveEndpoint != null) client = new FlociHttpClient(effectiveEndpoint, profile);
+            }
+            if (client != null && isReady(client, service, requestTimeout(Duration.between(Instant.now(), deadline)))) {
                 if (spinner) clearSpinner(printer);
                 if (printer.format() != OutputFormat.text) {
                     if (!embedded) printer.structured(Map.of("ready", true, "endpoint", effectiveEndpoint));
@@ -123,34 +128,35 @@ public class WaitCommand implements Callable<Integer> {
 
         if (spinner) clearSpinner(printer);
         printer.error("Timed out waiting for " + profile.displayName() + " after " + timeout
-                + ".\nIs the container running? Try '" + profile.commandPrefix() + " status'.");
+                + ".\nIs the container running? Try '" + profile.commandPrefix() + " status" + global.instanceSelector() + "'.");
         return 1;
     }
 
     // A stalled daemon or an unreachable remote DOCKER_HOST can hold `docker inspect` far longer
     // than --timeout, so the lookup gets the time left and the configured endpoint is the fallback.
     private String endpointWithin(Instant deadline) {
+        String fallback = global.canUseConfiguredEndpoint() ? global.endpoint : null;
         long remaining = Duration.between(Instant.now(), deadline).toMillis();
-        if (remaining <= 0) return global.endpoint;
+        if (remaining <= 0) return fallback;
         // A detached virtual thread: a hung lookup is abandoned, not joined, and cannot keep the
         // JVM alive once wait returns.
         CompletableFuture<String> resolved = new CompletableFuture<>();
         Thread lookup = Thread.ofVirtual().name("floci-wait-endpoint").start(() -> {
             try {
-                resolved.complete(global.resolvedEndpoint(docker));
+                resolved.complete(global.knownEndpoint(docker).orElse(null));
             } catch (RuntimeException e) {
-                resolved.complete(global.endpoint);
+                resolved.complete(fallback);
             }
         });
         try {
             return resolved.get(remaining, TimeUnit.MILLISECONDS);
         } catch (TimeoutException | ExecutionException e) {
             lookup.interrupt(); // DockerClient kills the docker process it was waiting on
-            return global.endpoint;
+            return fallback;
         } catch (InterruptedException e) {
             lookup.interrupt();
             Thread.currentThread().interrupt();
-            return global.endpoint;
+            return fallback;
         }
     }
 

@@ -504,6 +504,23 @@ stdout: the progress lines are left out and docker's pull progress goes to stder
 `restart` report `container`, `id`, `image`, `endpoint`, `state` and `ready` (`ready` is absent
 with `--detach`). `logs` prints the container's own output and stays plain text.
 
+If `restart` fails after removing the old container, stderr includes a `start` command with
+the resolved container, port, image, endpoint, persistence, services and namespace settings.
+It also appears with structured output. Review the failure, then run that command to retry. If
+the new container is running but did not become ready, stderr instead says to check `logs` and
+run `wait`, because `start` refuses a running container.
+
+A selected container with no published port and no configured endpoint has no known endpoint.
+`status` does not probe the default instance and reports `endpoint: null` in structured output.
+`env`, `services`, `az setup` and the `snapshot` commands exit `1` with the next step rather than
+act on the default instance. `doctor` and `version` still run and do not probe it. `wait` keeps
+looking for the container until `--timeout`.
+
+A profile's `port` supplies its endpoint when the endpoint is unset or still the product default.
+A running container's published port corrects that endpoint, unless the endpoint was chosen on
+purpose: typed with `--endpoint`, set in `FLOCI_ENDPOINT`, or on another host. `env` warns on stderr
+when it looked the container up and it is not running.
+
 ### `floci status` / `floci gcp status` / `floci az status` / `floci oci status`
 
 ```sh
@@ -563,6 +580,10 @@ Variables exported (per enabled service):
 | `DATASTORE_EMULATOR_HOST` | Datastore |
 | `SECRET_MANAGER_EMULATOR_HOST` | Secret Manager |
 | `IAM_EMULATOR_HOST` | IAM |
+
+SDK support for these variables varies by service and language. Python Secret Manager ignores
+`SECRET_MANAGER_EMULATOR_HOST`; set an explicit emulator endpoint and anonymous credentials.
+See the [Python Secret Manager recipe](skills/floci/references/gcp.md#python-secret-manager).
 
 ### `floci az env`
 
@@ -859,7 +880,8 @@ expect.
 
 An instance is a profile. Its **container name** is its identity, its **port** is the only thing
 that must differ from the other instances, and its **persist dir** keeps its state across
-container recreation. Every command (`status`, `logs`, `env`, `doctor`, `stop`, ...) finds the
+container recreation. Hints for follow-up CLI commands preserve the selected profile, container
+and explicit endpoint, and a retried `start` keeps the flags you typed. Every command (`status`, `logs`, `env`, `doctor`, `stop`, ...) finds the
 instance through its container, so passing the same `--profile` is all it takes. Any local state
 the CLI keeps about an instance lives in `~/.floci/<product>/<container>/`.
 

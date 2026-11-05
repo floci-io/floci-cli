@@ -1,16 +1,20 @@
 package io.floci.cli;
 
 import io.floci.cli.docker.DockerClient;
+import io.floci.cli.docker.DockerException;
 import io.floci.cli.output.Ansi;
 import io.floci.cli.output.Glyphs;
 import io.floci.cli.output.OutputFormat;
 import io.floci.cli.output.Printer;
+import io.floci.cli.output.ShellExport;
 import picocli.CommandLine.Model.CommandSpec;
 import picocli.CommandLine.Option;
 import picocli.CommandLine.Spec;
 
 import java.net.URI;
 import java.util.Optional;
+import java.util.Set;
+import java.util.function.Consumer;
 import java.util.function.UnaryOperator;
 import java.util.regex.Pattern;
 
@@ -37,9 +41,18 @@ public class GlobalOptions {
     @Spec(Spec.Target.MIXEE)
     CommandSpec mixee;
 
+    private static final Set<String> LOOPBACK_HOSTS = Set.of("localhost", "127.0.0.1", "[::1]", "localhost.floci.io");
+
     private static final Pattern PLAIN_WORD = Pattern.compile("[A-Za-z0-9._@%+=:,/-]+");
 
     public final ProductProfile product;
+
+    // The value FLOCI_ENDPOINT supplied, if any: that is a choice, like typing --endpoint.
+    private final String endpointFromEnv;
+
+    // Whether the endpoint came from a profile's port. The string cannot say: a profile with
+    // port 4566 yields the product's default endpoint, yet that port was chosen.
+    private boolean portFromProfile;
 
     @Option(names = {"--endpoint"},
             description = "Floci server endpoint URL (default: ${DEFAULT-VALUE})",
@@ -88,6 +101,7 @@ public class GlobalOptions {
     /** Test seam: {@code envLookup} replaces {@code System.getenv}. */
     public GlobalOptions(ProductProfile product, UnaryOperator<String> envLookup) {
         this.product = product;
+        this.endpointFromEnv = envLookup.apply(product.envVar("ENDPOINT"));
         this.endpoint = envOr(envLookup, product.envVar("ENDPOINT"), product.defaultEndpoint());
         this.container = envOr(envLookup, product.envVar("CONTAINER"), product.defaultContainer());
     }
@@ -105,12 +119,40 @@ public class GlobalOptions {
      * empty. Values are shell-quoted, because hints are meant to be pasted.
      */
     public String instanceSelector() {
+        return selector(GlobalOptions::shellWord);
+    }
+
+    /**
+     * The flags for a hint that loads {@code env} in {@code shell}: the selector, quoted for that
+     * shell, and {@code -o text} after a profile, which may set {@code output: json} that no shell
+     * can load.
+     *
+     * <p>This hint is a comment in the output people feed to {@code eval}, so a line break in a
+     * value would end the comment and run the rest as code. No quoting survives that: such a value
+     * becomes a placeholder. PLAIN_WORD is a POSIX rule ({@code @team} is a splat in PowerShell),
+     * so other shells always get quotes.
+     */
+    public String envLoadFlags(String shell) {
+        String selector = selector(value -> {
+            if (ShellExport.breaksLine(value)) return "<value>";
+            return ShellExport.isPosix(shell) && PLAIN_WORD.matcher(value).matches()
+                    ? value : ShellExport.quoted(shell, value);
+        });
+        return profile != null ? selector + " -o text" : selector;
+    }
+
+    private String selector(UnaryOperator<String> quote) {
+        String selector = "";
         if (profile != null) {
-            String selector = " --profile " + shellWord(profile);
-            return typed("--container") ? selector + " --container " + shellWord(container) : selector;
+            selector = " --profile " + quote.apply(profile);
+            if (typed("--container")) selector += " --container " + quote.apply(container);
+        } else if (!product.defaultContainer().equals(container)) {
+            selector = " --container " + quote.apply(container);
         }
-        if (!product.defaultContainer().equals(container)) return " --container " + shellWord(container);
-        return "";
+        if (typed("--endpoint") || (profile == null && !product.defaultEndpoint().equals(endpoint))) {
+            selector += " --endpoint " + quote.apply(endpoint);
+        }
+        return selector;
     }
 
     /** Whether {@code option} was given on the command line, as opposed to coming from a profile, the environment or the default. */
@@ -125,7 +167,7 @@ public class GlobalOptions {
     }
 
     // POSIX single quotes: the hints are shell command lines like the CLI's other 'Run ...' hints.
-    private static String shellWord(String value) {
+    public static String shellWord(String value) {
         if (PLAIN_WORD.matcher(value).matches()) return value;
         return "'" + value.replace("'", "'\\''") + "'";
     }
@@ -157,27 +199,92 @@ public class GlobalOptions {
         return noEmoji || !terminal || noColorEnv;
     }
 
-    // Inspects the container and derives the endpoint from its host port mapping.
-    // Falls back to the configured endpoint if the container is not found or has no mapping.
-    public String resolvedEndpoint(DockerClient docker) {
+    /** Called by the profile provider when it derives the endpoint from a profile's {@code port}. */
+    public void endpointCameFromProfilePort() {
+        portFromProfile = true;
+    }
+
+    /** Whether a configured endpoint can identify this instance without a container lookup. */
+    public boolean canUseConfiguredEndpoint() {
+        return typed("--endpoint") || endpoint.equals(endpointFromEnv) || portFromProfile
+                || !product.defaultEndpoint().equals(endpoint)
+                || product.defaultContainer().equals(container);
+    }
+
+    /**
+     * Whether the configured endpoint was chosen on purpose, so it beats the port a local container
+     * publishes: typed, from the environment, or on another host. A loopback endpoint from a
+     * profile is only where the instance was last known to be, so the container corrects it.
+     */
+    public boolean configuredEndpointWins() {
+        return typed("--endpoint") || endpoint.equals(endpointFromEnv) || !isLoopback(endpoint);
+    }
+
+    private static boolean isLoopback(String url) {
         try {
-            return docker.inspectContainer(container)
-                    .map(info -> endpointFromPorts(info.ports(), endpoint))
-                    .orElse(endpoint);
-        } catch (Exception e) {
-            return endpoint;
+            String host = URI.create(url).getHost();
+            return host == null || LOOPBACK_HOSTS.contains(host);
+        } catch (IllegalArgumentException e) {
+            return false;
         }
     }
 
-    // Matches the container-side port from the configured endpoint to find the actual host port.
-    public String endpointFromPorts(String ports, String fallback) {
-        if (ports == null || ports.isBlank()) return fallback;
+    /**
+     * For commands that act on the instance (env, services, snapshot, az setup): where it is, or
+     * an {@link IllegalStateException} with the next step when that cannot be known, because
+     * acting on the default instance instead could change the wrong state.
+     */
+    public String resolvedEndpoint(DockerClient docker) {
+        return resolvedEndpoint(docker, message -> { });
+    }
+
+    /** As above, reporting a missing or stopped container on stderr so env's stdout stays clean. */
+    public String resolvedEndpoint(DockerClient docker, Consumer<String> warning) {
+        Lookup found = lookup(docker);
+        if (found.problem() != null) warning.accept(found.problem());
+        if (found.endpoint() != null) return found.endpoint();
+        throw new IllegalStateException("The endpoint for container '" + container + "' is unknown.\n"
+                + (found.dockerFailed()
+                        ? "Check that Docker is running and retry, or pass --endpoint <url> explicitly."
+                        : "Run '" + product.commandPrefix() + " start" + instanceSelector()
+                                + "', or pass --endpoint <url> explicitly."));
+    }
+
+    /**
+     * For commands that only report (doctor, version, wait): where the instance is, or empty when
+     * that cannot be known. They must still run when the instance is missing, without describing
+     * the default instance as if it were this one.
+     */
+    public Optional<String> knownEndpoint(DockerClient docker) {
+        return Optional.ofNullable(lookup(docker).endpoint());
+    }
+
+    private record Lookup(String endpoint, String problem, boolean dockerFailed) { }
+
+    private Lookup lookup(DockerClient docker) {
+        if (configuredEndpointWins()) return new Lookup(endpoint, null, false);
+        String configured = canUseConfiguredEndpoint() ? endpoint : null;
         try {
-            int containerPort = URI.create(fallback).getPort();
-            if (containerPort == -1) containerPort = product.defaultPort();
-            return publishedEndpoint(ports, containerPort).orElse(fallback);
-        } catch (Exception ignored) {}
-        return fallback;
+            var info = docker.inspectContainer(container);
+            if (info.isEmpty()) return new Lookup(configured, instanceNotRunning(), false);
+            String problem = "running".equals(info.get().state()) ? null : instanceNotRunning();
+            String published = endpointFromPorts(info.get().ports(), null);
+            return new Lookup(published != null ? published : configured, problem, false);
+        } catch (DockerException | RuntimeException e) {
+            return new Lookup(configured,
+                    "Could not inspect container '" + container + "'.\nCheck that Docker is running and retry.", true);
+        }
+    }
+
+    private String instanceNotRunning() {
+        return "Container '" + container + "' is not running.\nRun '" + product.commandPrefix()
+                + " start" + instanceSelector() + "' before using its environment.";
+    }
+
+    // Published mappings always name the product's internal port, even when a profile's
+    // configured endpoint already contains its custom host port.
+    public String endpointFromPorts(String ports, String fallback) {
+        return publishedEndpoint(ports, product.defaultPort()).orElse(fallback);
     }
 
     /**

@@ -96,7 +96,14 @@ public class RestartCommand implements Callable<Integer> {
         int stopResult = buildStopCommand().call();
         if (stopResult != 0) return stopResult;
 
-        return start.call();
+        // Capture before start mutates its endpoint while waiting. This command stands alone,
+        // even if the profile is edited or deleted after the failed restart.
+        String recovery = start.recoveryCommand();
+        int result = start.call();
+        if (result != 0) {
+            printer.error(recoveryMessage(recovery));
+        }
+        return result;
     }
 
     /**
@@ -125,7 +132,7 @@ public class RestartCommand implements Callable<Integer> {
     public StartCommand buildStartCommand() throws DockerException {
         // The outer parse's provider: its memoized profile is the snapshot the globals below were
         // resolved from, so the start settings cannot come from a newer version of the file.
-        StartCommand start = StartCommand.resolvedFor(profile, ProfileDefaultValueProvider.of(spec), global.profile);
+        StartCommand start = StartCommand.resolvedFor(profile, ProfileDefaultValueProvider.of(spec), global.profile, docker);
 
         // The real invocation's globals win: they already carry the profile plus any flag the
         // user passed, resolved once by the outer parse.
@@ -152,6 +159,31 @@ public class RestartCommand implements Callable<Integer> {
             if (namespace != null) start.namespace = namespace;
             start.securityOpts = run.securityOpts();
         });
+    }
+
+    // A new container that is up but has not answered yet cannot be started again: start refuses a
+    // running container. So the retry command is only for a container that did not come up.
+    private String recoveryMessage(String recovery) {
+        boolean running;
+        try {
+            running = docker.inspectContainer(global.container)
+                    .filter(info -> "running".equals(info.state())).isPresent();
+        } catch (DockerException e) {
+            running = false;
+        }
+        if (running) {
+            String prefix = profile.explicitCommandPrefix();
+            String selector = global.instanceSelector();
+            // By now this is the endpoint start waited on, with the port it bound.
+            String wait = global.typed("--endpoint") && !selector.contains(" --endpoint ")
+                    ? selector + " --endpoint " + GlobalOptions.shellWord(global.endpoint)
+                    : selector;
+            return "The new container is running but did not become ready.\n"
+                    + "Check it with '" + prefix + " logs" + selector + "', then run '"
+                    + prefix + " wait" + wait + "' to wait again.";
+        }
+        return "Restart did not finish after the old container was removed.\n"
+                + "To retry with the same settings, run:\n" + recovery;
     }
 
     private boolean containerExists() {
