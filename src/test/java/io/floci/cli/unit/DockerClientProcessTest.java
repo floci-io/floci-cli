@@ -216,7 +216,7 @@ class DockerClientProcessTest {
         Path json = tempDir.resolve("inspect.json");
         Files.writeString(json, """
                 {"Config":{"Image":"floci/floci-gcp:0.9","Env":["FLOCI_GCP_SERVICES=storage","PATH=/usr/bin"]},
-                 "HostConfig":{"PortBindings":{"4588/tcp":[{"HostIp":"","HostPort":"14588"}]}},
+                 "HostConfig":{"PortBindings":{"4588/tcp":[{"HostIp":"","HostPort":"14588"}]},"SecurityOpt":["label=disable"]},
                  "Mounts":[{"Type":"bind","Source":"/data/gcp","Destination":"/app/data"}]}
                 """);
         Path fakeDocker = tempDir.resolve("docker");
@@ -230,6 +230,7 @@ class DockerClientProcessTest {
         assertEquals(14588, run.hostPort());
         assertEquals("/data/gcp", run.persistSource());
         assertEquals("storage", run.env().get("FLOCI_GCP_SERVICES"));
+        assertEquals(List.of("label=disable"), run.securityOpts());
     }
 
     /** Without --persist the image's /app/data volume is mounted; that is not a persist directory. */
@@ -250,6 +251,7 @@ class DockerClientProcessTest {
                 .inspectRunSettings("floci-oci", 4599).orElseThrow();
 
         assertNull(run.persistSource());
+        assertEquals(List.of(), run.securityOpts());
     }
 
     /** BL-041: with --verbose set, each docker command is echoed to stderr before it runs. */

@@ -474,6 +474,23 @@ For a `unix://` socket the resolved path is bind-mounted into the container; for
 remote `tcp://` daemon the `DOCKER_HOST` value is passed through to the container
 instead. Run `floci doctor` to see which endpoint was resolved.
 
+With SELinux enforcing (for example the Fedora VM behind `podman machine`), the container's label
+keeps Floci from connecting to the socket, and the web console fails to start with
+`java.net.BindException: Permission denied`. Relabeling the mount with `:z` is not enough: it fixes
+access to the socket file, but SELinux also checks the daemon on the other end of the socket. Turn
+labeling off for the Floci container instead:
+
+```sh
+floci start --security-opt label=disable
+```
+
+`--security-opt` is passed to `docker run` unchanged and can be repeated. Without `--profile`,
+`floci restart` passes back the options `docker inspect` reports for the running container. With
+`--profile` it starts from the profile, which has no key for them: run
+`floci <product> stop --profile <name> --remove`, then
+`floci <product> start --profile <name> --security-opt ...`, where `<product>` is the profile's
+`aws`, `gcp`, `az` or `oci`.
+
 ### `floci stop` / `floci gcp stop` / `floci az stop` / `floci oci stop`
 
 ```sh
@@ -979,7 +996,7 @@ Where a command's codes carry a specific meaning a script can rely on:
 | `doctor` | every check passed (warnings allowed) | at least one check failed | `--check` names no known check |
 | `update --check` | up to date | an update is available | the check itself failed |
 | `update` | updated, or already up to date | the update failed; the binary is unchanged | `--version` is not a release version |
-| `start`, `restart` | started (and ready, unless `--detach`) | Docker, the image, the port or readiness failed, or the `--persist` directory cannot be created | `--port`, `--pull`, the namespace or the `--persist` path is not valid |
+| `start`, `restart` | started (and ready, unless `--detach`) | Docker, the image, the port or readiness failed, or the `--persist` directory cannot be created | `--port`, `--pull`, the namespace, the `--persist` path or a `--security-opt seccomp=` value is not valid |
 | `stop` | stopped, or was not running | no such container, or Docker failed | bad flag or profile |
 | `reset` | state reset | declined, not available on this server, no running instance to reset, or the configuration names two different servers | no terminal to ask on and no `--yes` |
 | `config validate` | no errors (warnings allowed) | errors found, or the file cannot be read | bad flag |

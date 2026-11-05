@@ -81,6 +81,9 @@ public class StartCommand implements Callable<Integer> {
     // Docker's own name rule: the emulators put the namespace inside child container names.
     private static final Pattern NAMESPACE = Pattern.compile("[A-Za-z0-9][A-Za-z0-9_.-]*");
 
+    @Option(names = {"--security-opt"}, description = "Docker security option for the emulator container, repeatable (label=disable lets it reach the Docker socket on SELinux hosts)", paramLabel = "<opt>")
+    List<String> securityOpts = List.of();
+
     @Option(names = {"--pull"}, description = "Image pull policy: always, missing, never", defaultValue = "missing", paramLabel = "always|missing|never")
     String pull;
 
@@ -125,6 +128,7 @@ public class StartCommand implements Callable<Integer> {
         if (global.typed("--persist")) flags.append(" --persist ").append(GlobalOptions.shellWord(persistDir));
         if (global.typed("--services")) flags.append(" --services ").append(GlobalOptions.shellWord(services));
         if (global.typed("--namespace")) flags.append(" --namespace ").append(GlobalOptions.shellWord(namespace));
+        if (global.typed("--security-opt")) securityOpts.forEach(opt -> flags.append(" --security-opt ").append(GlobalOptions.shellWord(opt)));
         return flags.toString();
     }
 
@@ -144,6 +148,7 @@ public class StartCommand implements Callable<Integer> {
         }
         if (services != null) command.append(" --services ").append(GlobalOptions.shellWord(services));
         if (namespace != null) command.append(" --namespace ").append(GlobalOptions.shellWord(namespace));
+        securityOpts.forEach(opt -> command.append(" --security-opt ").append(GlobalOptions.shellWord(opt)));
         return command.toString();
     }
 
@@ -179,6 +184,14 @@ public class StartCommand implements Callable<Integer> {
         if (pull == null || !PULL_POLICIES.contains(pull.toLowerCase(Locale.ROOT))) {
             // Anything else used to fall through to a pull, so a typo silently meant "always".
             return "Invalid --pull '" + pull + "'.\nUse always, missing or never.";
+        }
+        // docker inspect reports a seccomp profile file inline, so restart would carry it over in a
+        // form docker run rejects, and only after the stop has removed the container.
+        if (securityOpts.stream().anyMatch(opt -> opt.startsWith("seccomp={"))) {
+            String prefix = profile.commandPrefix();
+            return "--security-opt seccomp= takes the path of a profile file, not the profile itself.\n"
+                    + "Run '" + prefix + " start" + global.instanceSelector() + " --security-opt seccomp=<file>', after '"
+                    + prefix + " stop" + global.instanceSelector() + " --remove' if the container exists.";
         }
         return null;
     }
@@ -303,6 +316,7 @@ public class StartCommand implements Callable<Integer> {
         args.addAll(List.of("-d", "--name", global.container));
         args.addAll(List.of("-p", port + ":" + profile.defaultPort()));
         args.addAll(socketArgs);
+        securityOpts.forEach(opt -> args.addAll(List.of("--security-opt", opt)));
         if (persistDir != null && !persistDir.isBlank()) {
             args.addAll(List.of("-v", bindSource(daemon) + ":/app/data"));
             // The server defaults to in-memory storage; enable persistent mode so

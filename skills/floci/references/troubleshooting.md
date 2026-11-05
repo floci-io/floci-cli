@@ -41,7 +41,10 @@ pass `-o text`. Then check the cloud-specific leaks: SQS endpoint bypass (AWS), 
 **Docker-backed services fail (Lambda, ECS, RDS, Cloud Run, AKS, Functions, OKE)**
 The emulator cannot reach a Docker daemon. floci-cli resolves `DOCKER_HOST`, then `DOCKER_SOCK`,
 then the OS default socket. For Podman: `export DOCKER_HOST=unix:///run/user/$(id -u)/podman/podman.sock`.
-`doctor` shows the resolved endpoint. In Compose, mount the socket explicitly.
+`doctor` shows the resolved endpoint. In Compose, mount the socket explicitly. With SELinux
+enforcing (for example the `podman machine` VM), `java.net.BindException: Permission denied` means
+the container's label blocks the socket: run `floci <tree> start --security-opt label=disable`
+(`docker run` takes the same flag). Relabeling the mount with `:z` is not enough.
 
 **Child containers vanish or another instance's tasks get killed**
 Two instances share a Docker host without distinct namespaces. See namespaces.md.
@@ -81,7 +84,8 @@ lists supported operations and gaps. Report it instead of retrying.
 ## Exit codes worth knowing
 
 - `0` success; non-zero failure for every command.
-- `2` usage or validation error: bad profile, duration, namespace, port, `--pull` or `--shell`.
+- `2` usage or validation error: bad profile, duration, namespace, port, `--pull`, `--shell` or an
+  inline `--security-opt seccomp=` profile.
 - `1` from every snapshot subcommand (`save`, `load`, `list`, `delete`, `export`, `import`) in
   every tree: not available server-side yet. A name that is a path (`.`, `..`, or with `/`) is
   `2`, and a bare `floci <tree> snapshot` just prints its usage and exits `0`.

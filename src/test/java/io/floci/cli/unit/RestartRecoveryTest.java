@@ -34,7 +34,8 @@ class RestartRecoveryTest {
         }
         @Override public Optional<RunSettings> inspectRunSettings(String name, int port) {
             return Optional.of(new RunSettings("floci/floci-gcp:0.9", 14588, "/data/team's state",
-                    Map.of("FLOCI_GCP_SERVICES", "storage,pubsub", "FLOCI_GCP_DOCKER_RESOURCE_NAMESPACE", "team")));
+                    Map.of("FLOCI_GCP_SERVICES", "storage,pubsub", "FLOCI_GCP_DOCKER_RESOURCE_NAMESPACE", "team"),
+                    List.of("label=disable", "seccomp=/etc/my profile.json")));
         }
         @Override public void stopContainer(String name, int timeout) throws DockerException {
             if (failStop) throw new DockerException("stop failed");
@@ -67,6 +68,7 @@ class RestartRecoveryTest {
             assertTrue(line.contains("--image floci/floci-gcp:0.9"), line);
             assertTrue(line.contains("--persist '/data/team'\\''s state'"), line);
             assertTrue(line.contains("--services storage,pubsub --namespace team"), line);
+            assertTrue(line.contains("--security-opt label=disable --security-opt 'seccomp=/etc/my profile.json'"), line);
             assertTrue(line.contains("--container floci-gcp-team"), line);
             assertFalse(line.contains("--endpoint"), line);
             if (format.equals("json")) assertEquals("", stdout.toString());

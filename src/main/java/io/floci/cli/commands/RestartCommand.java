@@ -157,6 +157,7 @@ public class RestartCommand implements Callable<Integer> {
             if (services != null) start.services = services;
             String namespace = run.env().get(profile.envVar("DOCKER_RESOURCE_NAMESPACE"));
             if (namespace != null) start.namespace = namespace;
+            start.securityOpts = run.securityOpts();
         });
     }
 

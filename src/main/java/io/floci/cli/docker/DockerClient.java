@@ -61,9 +61,11 @@ public class DockerClient {
     /**
      * What a container was started with, as {@code restart} needs it back: the image, the host
      * port bound to {@code containerPort}, the host directory bind-mounted at {@code /app/data}
-     * (null for a docker volume), and the environment. Any of them may be absent (null, or an empty map).
+     * (null for a docker volume), the environment and the {@code --security-opt} values. Any of them
+     * may be absent (null, or an empty map or list).
      */
-    public record RunSettings(String image, Integer hostPort, String persistSource, Map<String, String> env) {}
+    public record RunSettings(String image, Integer hostPort, String persistSource, Map<String, String> env,
+                              List<String> securityOpts) {}
 
     private static final ObjectMapper JSON = new ObjectMapper();
 
@@ -95,7 +97,9 @@ public class DockerClient {
                 int eq = kv.indexOf('=');
                 if (eq > 0) env.put(kv.substring(0, eq), kv.substring(eq + 1));
             }
-            return Optional.of(new RunSettings(image, hostPort, persist, Map.copyOf(env)));
+            List<String> securityOpts = new ArrayList<>();
+            for (JsonNode opt : c.path("HostConfig").path("SecurityOpt")) securityOpts.add(opt.asText());
+            return Optional.of(new RunSettings(image, hostPort, persist, Map.copyOf(env), List.copyOf(securityOpts)));
         } catch (Exception e) {
             throw new DockerException("Could not read the settings of container '" + name + "': " + e.getMessage());
         }

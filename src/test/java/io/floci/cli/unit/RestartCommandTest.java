@@ -219,7 +219,8 @@ class RestartCommandTest {
     @Test
     void withoutAProfileTheRunningContainersSettingsCarryOver() throws Exception {
         var running = new DockerClient.RunSettings("floci/floci-gcp:0.9", 14588, "/data/gcp",
-                Map.of("FLOCI_GCP_SERVICES", "storage", "FLOCI_GCP_DOCKER_RESOURCE_NAMESPACE", "team"));
+                Map.of("FLOCI_GCP_SERVICES", "storage", "FLOCI_GCP_DOCKER_RESOURCE_NAMESPACE", "team"),
+                List.of("label=disable"));
 
         List<String> args = restartWith(ProductProfile.GCP, running).buildStartCommand().dockerRunArgs(SOCKET);
 
@@ -227,6 +228,7 @@ class RestartCommandTest {
         assertTrue(args.contains("/data/gcp:/app/data"), args.toString());
         assertTrue(args.contains("FLOCI_GCP_SERVICES=storage"), args.toString());
         assertTrue(args.contains("FLOCI_GCP_DOCKER_RESOURCE_NAMESPACE=team"), args.toString());
+        assertEquals("label=disable", args.get(args.indexOf("--security-opt") + 1), args.toString());
         assertEquals("floci/floci-gcp:0.9", args.get(args.size() - 1));
     }
 
@@ -234,13 +236,15 @@ class RestartCommandTest {
     @Test
     void aProfileWinsOverTheRunningContainersSettings() throws Exception {
         writeProfile("pinned", "port: 15000\n");
-        var running = new DockerClient.RunSettings("floci/floci:0.9", 14566, "/data/x", Map.of());
+        var running = new DockerClient.RunSettings("floci/floci:0.9", 14566, "/data/x", Map.of(),
+                List.of("label=disable"));
 
         List<String> args = restartWith(ProductProfile.AWS, running, "--profile", "pinned")
                 .buildStartCommand().dockerRunArgs(SOCKET);
 
         assertTrue(args.contains("15000:4566"), args.toString());
         assertFalse(args.contains("/data/x:/app/data"), args.toString());
+        assertFalse(args.contains("--security-opt"), args.toString());
     }
 
     /** What a restart did, in order: "stop" and "start" as it ran them. */
@@ -332,7 +336,7 @@ class RestartCommandTest {
         DockerClient present = new DockerClient() {
             @Override
             public Optional<RunSettings> inspectRunSettings(String name, int containerPort) {
-                return Optional.of(new RunSettings("floci/floci:0.9", 14566, null, Map.of()));
+                return Optional.of(new RunSettings("floci/floci:0.9", 14566, null, Map.of(), List.of()));
             }
 
             @Override
@@ -375,6 +379,30 @@ class RestartCommandTest {
         assertTrue(r.err().contains("floci restart"), r.err());
     }
 
+    /** docker inspect reports a seccomp profile file inline, which docker run does not take back. */
+    @Test
+    void anInlineSeccompProfileFailsTheRestartBeforeTheStop() {
+        DockerClient seccomp = new DockerClient() {
+            @Override
+            public Optional<RunSettings> inspectRunSettings(String name, int containerPort) {
+                return Optional.of(new RunSettings("floci/floci:0.9", 14566, null, Map.of(),
+                        List.of("label=disable", "seccomp={\"defaultAction\":\"SCMP_ACT_ALLOW\"}")));
+            }
+
+            @Override
+            public Optional<ContainerInfo> inspectContainer(String name) {
+                return Optional.of(new ContainerInfo("abc", name, "floci/floci:0.9", "running", ""));
+            }
+        };
+        List<String> ran = new ArrayList<>();
+
+        Ran r = run(recordingRestart(seccomp, ran));
+
+        assertEquals(2, r.exit());
+        assertEquals(List.of(), ran);
+        assertTrue(r.err().contains("floci stop --remove"), r.err());
+    }
+
     /**
      * A --persist value that cannot be used is a usage error (exit 2), and restart finds out before
      * it stops anything: here a relative path, which a remote daemon cannot resolve.
@@ -386,7 +414,7 @@ class RestartCommandTest {
             @Override
             public Optional<RunSettings> inspectRunSettings(String name, int containerPort) {
                 // What the running container was started with: a relative data directory.
-                return Optional.of(new RunSettings("floci/floci:0.9", 14566, "data", Map.of()));
+                return Optional.of(new RunSettings("floci/floci:0.9", 14566, "data", Map.of(), List.of()));
             }
 
             @Override
