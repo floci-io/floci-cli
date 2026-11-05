@@ -128,6 +128,7 @@ public class StartCommand implements Callable<Integer> {
         if (global.typed("--persist")) flags.append(" --persist ").append(GlobalOptions.shellWord(persistDir));
         if (global.typed("--services")) flags.append(" --services ").append(GlobalOptions.shellWord(services));
         if (global.typed("--namespace")) flags.append(" --namespace ").append(GlobalOptions.shellWord(namespace));
+        if (global.typed("--security-opt")) securityOpts.forEach(opt -> flags.append(" --security-opt ").append(GlobalOptions.shellWord(opt)));
         return flags.toString();
     }
 
@@ -147,6 +148,7 @@ public class StartCommand implements Callable<Integer> {
         }
         if (services != null) command.append(" --services ").append(GlobalOptions.shellWord(services));
         if (namespace != null) command.append(" --namespace ").append(GlobalOptions.shellWord(namespace));
+        securityOpts.forEach(opt -> command.append(" --security-opt ").append(GlobalOptions.shellWord(opt)));
         return command.toString();
     }
 

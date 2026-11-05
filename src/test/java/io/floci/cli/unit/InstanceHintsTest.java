@@ -84,9 +84,11 @@ class InstanceHintsTest {
             @Override public void pull(String image, String policy, PrintStream stream) throws DockerException { throw new DockerException("no such image"); }
         };
         Run start = run(new StartCommand(ProductProfile.AWS, docker), "--container", "other", "--port", "14566",
-                "--image", "my image:1", "--pull", "always");
+                "--image", "my image:1", "--pull", "always", "--security-opt", "label=disable",
+                "--security-opt", "seccomp=/etc/my profile.json");
         assertEquals(1, start.exit());
-        assertTrue(start.err().contains("floci start --pull never --container other --port 14566 --image 'my image:1'"), start.err());
+        assertTrue(start.err().contains("floci start --pull never --container other --port 14566 --image 'my image:1'"
+                + " --security-opt label=disable --security-opt 'seccomp=/etc/my profile.json'"), start.err());
     }
     @Test
     void envLoadHintsPreserveTheProfileInAllFourTrees() throws Exception {

@@ -486,8 +486,10 @@ floci start --security-opt label=disable
 
 `--security-opt` is passed to `docker run` unchanged and can be repeated. Without `--profile`,
 `floci restart` passes back the options `docker inspect` reports for the running container. With
-`--profile` it starts from the profile, which has no key for them: run `floci stop --remove` and
-`floci start --profile <name> --security-opt ...` instead.
+`--profile` it starts from the profile, which has no key for them: run
+`floci <product> stop --profile <name> --remove`, then
+`floci <product> start --profile <name> --security-opt ...`, where `<product>` is the profile's
+`aws`, `gcp`, `az` or `oci`.
 
 ### `floci stop` / `floci gcp stop` / `floci az stop` / `floci oci stop`
 
