@@ -1,19 +1,24 @@
 name: Release
 
-# Triggered when a SemVer tag (e.g. 0.1.0) is pushed.
-# Builds native binaries for 5 platform targets, runs each one (.github/scripts/smoke.sh) and
-# creates a GitHub Release. A binary that does not start fails its job before anything is published.
+# Called by release-please.yml (the publish job) with the release tag, after release-please has
+# tagged the release and created the GitHub Release; also reached through its workflow_dispatch
+# `tag` input to re-publish an existing tag. Builds native binaries for 5 platform targets from
+# the tag, runs each one (.github/scripts/smoke.sh) and attaches them, the jar and sha256sums.txt
+# to that release. A binary that does not start fails its job before anything is uploaded.
 
 on:
-  push:
-    tags:
-      - '[0-9]+.[0-9]+.[0-9]+'
+  workflow_call:
+    inputs:
+      tag:
+        description: Release tag to build and publish (e.g. 0.5.0)
+        required: true
+        type: string
 
 permissions:
   contents: write
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ inputs.tag }}
   cancel-in-progress: true
 
 jobs:
@@ -23,6 +28,8 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: refs/tags/${{ inputs.tag }}
       - uses: graalvm/setup-graalvm@v1
         with:
           java-version: '25'
@@ -32,7 +39,9 @@ jobs:
       - run: mvn clean package -Pnative -DskipTests -B
       - run: mv target/floci target/floci-linux-amd64
       - name: Smoke test
-        run: .github/scripts/smoke.sh target/floci-linux-amd64 "$GITHUB_REF_NAME"
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+        run: .github/scripts/smoke.sh target/floci-linux-amd64 "$INPUT_TAG"
       - uses: actions/upload-artifact@v4
         with:
           name: floci-linux-amd64
@@ -44,6 +53,8 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: refs/tags/${{ inputs.tag }}
       - uses: graalvm/setup-graalvm@v1
         with:
           java-version: '25'
@@ -53,7 +64,9 @@ jobs:
       - run: mvn clean package -Pnative -DskipTests -B
       - run: mv target/floci target/floci-linux-arm64
       - name: Smoke test
-        run: .github/scripts/smoke.sh target/floci-linux-arm64 "$GITHUB_REF_NAME"
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+        run: .github/scripts/smoke.sh target/floci-linux-arm64 "$INPUT_TAG"
       - uses: actions/upload-artifact@v4
         with:
           name: floci-linux-arm64
@@ -65,6 +78,8 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: refs/tags/${{ inputs.tag }}
       - uses: graalvm/setup-graalvm@v1
         with:
           java-version: '25'
@@ -74,7 +89,9 @@ jobs:
       - run: mvn clean package -Pnative -DskipTests -B
       - run: mv target/floci target/floci-darwin-arm64
       - name: Smoke test
-        run: .github/scripts/smoke.sh target/floci-darwin-arm64 "$GITHUB_REF_NAME"
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+        run: .github/scripts/smoke.sh target/floci-darwin-arm64 "$INPUT_TAG"
       - uses: actions/upload-artifact@v4
         with:
           name: floci-darwin-arm64
@@ -91,6 +108,8 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: refs/tags/${{ inputs.tag }}
 
       - name: Install Rosetta 2
         run: sudo softwareupdate --install-rosetta --agree-to-license
@@ -115,7 +134,9 @@ jobs:
 
       - run: mv target/floci target/floci-darwin-amd64
       - name: Smoke test
-        run: .github/scripts/smoke.sh target/floci-darwin-amd64 "$GITHUB_REF_NAME"
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+        run: .github/scripts/smoke.sh target/floci-darwin-amd64 "$INPUT_TAG"
       - uses: actions/upload-artifact@v4
         with:
           name: floci-darwin-amd64
@@ -127,6 +148,8 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: refs/tags/${{ inputs.tag }}
       - uses: graalvm/setup-graalvm@v1
         with:
           java-version: '25'
@@ -137,7 +160,9 @@ jobs:
       - run: mv target/floci.exe target/floci-windows-amd64.exe
       - name: Smoke test
         shell: bash
-        run: .github/scripts/smoke.sh target/floci-windows-amd64.exe "$GITHUB_REF_NAME"
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+        run: .github/scripts/smoke.sh target/floci-windows-amd64.exe "$INPUT_TAG"
       - uses: actions/upload-artifact@v4
         with:
           name: floci-windows-amd64
@@ -149,6 +174,8 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: refs/tags/${{ inputs.tag }}
       - uses: actions/setup-java@v4
         with:
           java-version: '25'
@@ -161,16 +188,20 @@ jobs:
           path: target/floci.jar
 
   release:
-    name: Create GitHub Release
+    name: Attach assets to the GitHub Release
     needs: [build-linux-amd64, build-linux-arm64, build-darwin-amd64, build-darwin-arm64, build-windows-amd64, build-jar]
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: refs/tags/${{ inputs.tag }}
 
       - name: Extract version
         id: version
-        run: echo "version=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+        run: echo "version=${INPUT_TAG}" >> "$GITHUB_OUTPUT"
 
       - uses: actions/download-artifact@v4
         with:
@@ -195,6 +226,9 @@ jobs:
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
+          # Attach to the release release-please created; with no body input the action keeps
+          # release-please's notes and only sets the name and uploads the files.
+          tag_name: ${{ inputs.tag }}
           name: "floci ${{ steps.version.outputs.version }}"
           files: |
             dist/floci-linux-amd64/floci-linux-amd64

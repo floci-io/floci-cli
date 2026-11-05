@@ -1,0 +1,33 @@
+name: Commit lint
+
+# Its own workflow, with no path filters, so every pull request is checked: its commits and its
+# title, which becomes the commit message when the pull request is squash-merged and so decides
+# what release-please does with it.
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+permissions:
+  contents: read
+
+jobs:
+  commit-lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Check the commits
+        uses: wagoid/commitlint-github-action@b948419dd99f3fd78a6548d48f94e3df7f6bf3ed # v6.2.1
+
+      - name: Check the pull request title
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          dir="$RUNNER_TEMP/commitlint"
+          mkdir -p "$dir" && cp commitlint.config.mjs "$dir/" && cd "$dir"
+          npm install --no-save --no-package-lock --no-audit --no-fund \
+            @commitlint/cli@19.8.1 @commitlint/config-conventional@19.8.1 >/dev/null
+          printf '%s\n' "$TITLE" | npx --no-install commitlint

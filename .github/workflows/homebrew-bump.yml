@@ -1,14 +1,17 @@
 name: Homebrew Bump
 
-# Triggered after release.yml succeeds on a version tag.
+# Called by release-please.yml after the publish job has attached the binaries to the release.
 # Opens a PR in floci-io/homebrew-floci with the new version and SHA256.
 #
 # Required secrets: GH_TOKEN (PAT with repo scope on homebrew-floci repo)
 
 on:
-  workflow_run:
-    workflows: [Release]
-    types: [completed]
+  workflow_call:
+    inputs:
+      tag:
+        description: Release tag whose binaries the formula should point at (e.g. 0.5.0)
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -17,14 +20,13 @@ jobs:
   bump:
     name: Bump Homebrew formula
     runs-on: ubuntu-latest
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     timeout-minutes: 10
     steps:
       - name: Extract version from tag
         id: version
-        run: |
-          TAG="${{ github.event.workflow_run.head_branch }}"
-          echo "version=${TAG}" >> "$GITHUB_OUTPUT"
+        env:
+          TAG: ${{ inputs.tag }}
+        run: echo "version=${TAG}" >> "$GITHUB_OUTPUT"
 
       - name: Download release checksums
         run: |
