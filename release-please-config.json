@@ -1,0 +1,13 @@
+{
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "release-type": "maven",
+  "changelog-path": "CHANGELOG.md",
+  "include-component-in-tag": false,
+  "include-v-in-tag": false,
+  "skip-snapshot": true,
+  "signoff": "Hector Ventura <hectorvent@gmail.com>",
+  "last-release-sha": "5f2a1018a446f89299d1d27a0d8236f7ed51bc1f",
+  "packages": {
+    ".": {}
+  }
+}
