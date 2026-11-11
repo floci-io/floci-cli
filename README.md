@@ -936,7 +936,7 @@ floci snapshot save <name>
 floci snapshot load <name>
 floci snapshot delete <name>
 floci snapshot export <name> -f tarball.tar.gz
-floci snapshot import tarball.tar.gz
+floci snapshot import -f tarball.tar.gz
 ```
 
 > GCP, Azure, and OCI snapshots (`floci gcp snapshot` / `floci az snapshot` / `floci oci snapshot`) require server-side endpoints not yet implemented in Floci GCP / Floci Azure / Floci OCI. Until then, those commands report the missing API and exit 1. `floci snapshot export|import` (AWS) are also pending server support and exit 1.
@@ -1002,7 +1002,7 @@ Where a command's codes carry a specific meaning a script can rely on:
 | `config validate` | no errors (warnings allowed) | errors found, or the file cannot be read | bad flag |
 | `config profile ...` | done | not found, already exists, cannot be read, or (for `edit`) no editor is set, the editor failed or the file no longer parses | unknown action, missing or invalid profile name, `--port` out of range |
 | `config default-product` | saved | the file cannot be written | not `aws`, `gcp`, `az` or `oci` |
-| `env` | variables printed | | `--shell` is not supported |
+| `env` | variables printed | the selected container has no known endpoint | `--shell` is not supported |
 | `completion` | script printed | | the shell is not `bash` or `zsh` |
 | `snapshot ...` | done | failed, or the server has no snapshot API yet | invalid snapshot name |
 
