@@ -6,6 +6,7 @@ import picocli.AutoComplete;
 import picocli.CommandLine;
 import picocli.CommandLine.*;
 
+import java.util.List;
 import java.util.concurrent.Callable;
 
 @Command(
@@ -36,7 +37,8 @@ public class CompletionCommand implements Callable<Integer> {
 
         String script = switch (shell.toLowerCase()) {
             case "bash" -> AutoComplete.bash("floci", root);
-            case "zsh"  -> AutoComplete.bash("floci", root); // zsh is bash-compatible; picocli bash script works for zsh too
+            // zsh loads picocli's bash script through bashcompinit.
+            case "zsh"  -> forZsh(AutoComplete.bash("floci", root));
             default -> {
                 printer.error("Shell '" + shell + "' is not supported.\nUse bash or zsh.");
                 yield null;
@@ -47,5 +49,28 @@ public class CompletionCommand implements Callable<Integer> {
         if (script == null) return ExitCode.USAGE;
         System.out.print(script);
         return 0;
+    }
+
+    /**
+     * Lines picocli's script runs at the top level of a zsh, which change the user's shell rather
+     * than floci's completion (#82). {@code COMPLETE_ALIASES} stays on for the whole shell, so every
+     * alias completes as a command of its own instead of as what it stands for. The {@code compopt}
+     * alias is left behind too, and it gets expanded into the completion functions as
+     * {@code complete +o default}, which bashcompinit's {@code complete} turns into completions for
+     * commands named {@code +o} and {@code default}. Neither does anything for floci's own
+     * completion: bashcompinit has no {@code compopt}, and the functions skip it when it is absent.
+     */
+    public static final List<String> ZSH_SHELL_CHANGES = List.of("  setopt COMPLETE_ALIASES", "  alias compopt=complete");
+
+    /** {@code bashScript} without {@link #ZSH_SHELL_CHANGES}. */
+    public static String forZsh(String bashScript) {
+        StringBuilder out = new StringBuilder(bashScript.length());
+        for (String line : bashScript.split("\n", -1)) {
+            if (ZSH_SHELL_CHANGES.contains(line.stripTrailing())) continue;
+            out.append(line).append('\n');
+        }
+        // split(-1) yields a final empty element for a trailing newline; drop the one it added.
+        out.setLength(out.length() - 1);
+        return out.toString();
     }
 }

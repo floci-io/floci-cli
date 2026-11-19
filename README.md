@@ -957,6 +957,8 @@ floci completion zsh  >> ~/.zshrc
 ```
 
 Completion scripts are generated for bash and zsh. Any other shell name is a usage error (exit 2).
+The zsh script loads the bash completion through `bashcompinit` and sets up `floci` only: your shell
+options and aliases are left as they were.
 
 ### `floci update`
 
