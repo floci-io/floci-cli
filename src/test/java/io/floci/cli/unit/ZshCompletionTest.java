@@ -81,7 +81,12 @@ class ZshCompletionTest {
     @ValueSource(strings = {"unsetopt", "setopt"})
     @DisabledOnOs(OS.WINDOWS)
     void sourcingItLeavesTheShellAsItWas(String completeAliases) throws Exception {
-        assumeTrue(Files.isExecutable(Path.of("/bin/zsh")) || onPath("zsh"), "zsh is not installed");
+        boolean zshInstalled = Files.isExecutable(Path.of("/bin/zsh")) || onPath("zsh");
+        // CI installs zsh and sets this, so the test cannot skip there without anyone noticing.
+        if (Boolean.parseBoolean(System.getenv("FLOCI_TEST_REQUIRE_ZSH"))) {
+            assertTrue(zshInstalled, "FLOCI_TEST_REQUIRE_ZSH is set but zsh is not installed");
+        }
+        assumeTrue(zshInstalled, "zsh is not installed");
         Path completion = tempDir.resolve("floci.zsh");
         Files.writeString(completion, script("zsh"));
         String probe = String.join("\n",
