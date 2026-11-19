@@ -474,6 +474,13 @@ For a `unix://` socket the resolved path is bind-mounted into the container; for
 remote `tcp://` daemon the `DOCKER_HOST` value is passed through to the container
 instead. Run `floci doctor` to see which endpoint was resolved.
 
+With `podman machine` on macOS, the socket on the Mac (the one `podman machine start` prints) is
+a forwarder, and the container runs inside the VM, where that path is not the daemon's socket.
+When the daemon is Podman, `floci start` asks `podman info` for the socket the daemon listens on
+inside the VM (`/run/podman/podman.sock` rootful, `/run/user/<uid>/podman/podman.sock` rootless)
+and mounts that instead, so this needs the `podman` CLI on `PATH`. Set `DOCKER_SOCK` to choose
+the mounted socket yourself; it turns the lookup off.
+
 With SELinux enforcing (for example the Fedora VM behind `podman machine`), the container's label
 keeps Floci from connecting to the socket, and the web console fails to start with
 `java.net.BindException: Permission denied`. Relabeling the mount with `:z` is not enough: it fixes

@@ -52,6 +52,12 @@ class StartPreflightTest {
             return daemon;
         }
 
+        // On a Mac the real one would ask the machine's docker whether it is a Podman machine.
+        @Override
+        public Optional<String> podmanMachineSocket(DockerHost daemon) {
+            return Optional.empty();
+        }
+
         @Override
         public Optional<ContainerInfo> inspectContainer(String name) throws DockerException {
             return Optional.empty();

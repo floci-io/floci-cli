@@ -32,6 +32,7 @@ public class DockerClient {
     public static final String CHECK_DOCKER = "Check that Docker is running ('docker info') and re-run the command.";
 
     private final String binary;
+    private final String podmanBinary;
     private final Duration timeout;
 
     public DockerClient() {
@@ -45,7 +46,13 @@ public class DockerClient {
 
     /** Test seam: run {@code binary}, killing any non-streaming call that outlives {@code timeout}. */
     public DockerClient(String binary, Duration timeout) {
+        this(binary, "podman", timeout);
+    }
+
+    /** Test seam: run {@code binary} in place of {@code docker} and {@code podmanBinary} in place of {@code podman}. */
+    public DockerClient(String binary, String podmanBinary, Duration timeout) {
         this.binary = binary;
+        this.podmanBinary = podmanBinary;
         this.timeout = timeout;
     }
 
@@ -298,6 +305,9 @@ public class DockerClient {
             throw new DockerException("Interrupted");
         } catch (IOException e) {
             if (e.getMessage() != null && e.getMessage().contains("No such file")) {
+                if (cmd.length > 0 && "podman".equals(cmd[0])) {
+                    throw new DockerException("podman binary not found in PATH. Install Podman or add it to PATH.");
+                }
                 throw new DockerException("docker binary not found in PATH. Install Docker Desktop or Docker Engine.");
             }
             throw new DockerException(e.getMessage());
@@ -372,6 +382,9 @@ public class DockerClient {
         if (cmd.length > 0 && "docker".equals(cmd[0])) {
             cmd = cmd.clone();
             cmd[0] = binary;
+        } else if (cmd.length > 0 && "podman".equals(cmd[0])) {
+            cmd = cmd.clone();
+            cmd[0] = podmanBinary;
         }
         return new ProcessBuilder(cmd)
                 .redirectErrorStream(false)
@@ -475,6 +488,66 @@ public class DockerClient {
     }
 
     /**
+     * Where the daemon behind {@code daemon} keeps its socket, when that is not the path this
+     * machine reaches it through, or empty. That is the case for {@code podman machine} on macOS:
+     * the socket the docker CLI talks to is a forwarder on the Mac, while containers run inside
+     * the VM, where the Mac path is no socket of the daemon's (and, where podman shares the
+     * directory into the VM, a socket nothing can connect to). Podman reports the path the
+     * daemon itself listens on as {@code Host.RemoteSocket.Path}; the Docker-compatible API has
+     * no such field, so podman is asked.
+     *
+     * @throws DockerException when the daemon is Podman but podman could not say where its socket is
+     */
+    public Optional<String> podmanMachineSocket(DockerHost daemon) throws DockerException {
+        return podmanMachineSocket(daemon, System.getenv("DOCKER_SOCK"), System.getProperty("os.name", ""));
+    }
+
+    /** {@link #podmanMachineSocket(DockerHost)} for a given {@code DOCKER_SOCK} and OS: the test seam. */
+    public Optional<String> podmanMachineSocket(DockerHost daemon, String dockerSockEnv, String osName)
+            throws DockerException {
+        if (!podmanMachineMayApply(daemon, dockerSockEnv, osName)) {
+            return Optional.empty();
+        }
+        String components;
+        try {
+            components = run("docker", "version", "--format", "{{range .Server.Components}}{{.Name}}|{{end}}");
+        } catch (DockerException e) {
+            return Optional.empty();  // Not answered here: start reports an unreachable daemon itself.
+        }
+        if (!components.contains("Podman Engine")) return Optional.empty();
+        String reported = run("podman", "--url", "unix://" + daemon.socketPath(),
+                "info", "--format", "{{.Host.RemoteSocket.Path}}").trim();
+        return remoteSocketMountSource(reported, daemon.socketPath());
+    }
+
+    /**
+     * Whether {@link #podmanMachineSocket} needs to ask the daemon at all: a local unix socket on
+     * macOS, and no {@code DOCKER_SOCK}, which names the socket to mount and so wins over detection.
+     */
+    public static boolean podmanMachineMayApply(DockerHost daemon, String dockerSockEnv, String osName) {
+        boolean mac = osName != null && osName.toLowerCase().startsWith("mac");
+        return mac && daemon.kind() == Kind.UNIX && daemon.socketPath() != null
+                && (dockerSockEnv == null || dockerSockEnv.isBlank());
+    }
+
+    /**
+     * The bind source for podman's reported {@code Host.RemoteSocket.Path}, or empty when there
+     * is nothing to change: no path reported, or the same path this machine already uses.
+     */
+    public static Optional<String> remoteSocketMountSource(String reported, String localPath) {
+        if (reported == null) return Optional.empty();
+        String path = reported.trim();
+        if (path.startsWith("unix://")) path = path.substring("unix://".length());
+        if (path.isEmpty() || path.equals(localPath)) return Optional.empty();
+        return Optional.of(path);
+    }
+
+    /** The {@code docker run} arguments that mount {@code socketPath}, a path on the daemon's host, as the container's docker socket. */
+    public static List<String> socketMountArgs(String socketPath) {
+        return List.of("-v", socketPath + ":" + DEFAULT_UNIX_SOCKET);
+    }
+
+    /**
      * The {@code docker run} arguments needed to give a container access to the host
      * Docker daemon. Unix sockets are bind-mounted at the canonical in-container path;
      * remote TCP daemons are passed through via {@code DOCKER_HOST}.
@@ -483,7 +556,7 @@ public class DockerClient {
         DockerHost host = dockerHost();
         return switch (host.kind()) {
             case TCP -> List.of("-e", "DOCKER_HOST=" + host.raw());
-            case UNIX -> List.of("-v", host.socketPath() + ":" + DEFAULT_UNIX_SOCKET);
+            case UNIX -> socketMountArgs(host.socketPath());
             case NPIPE -> List.of("-v", DEFAULT_UNIX_SOCKET + ":" + DEFAULT_UNIX_SOCKET);
         };
     }
