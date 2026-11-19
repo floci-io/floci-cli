@@ -234,13 +234,21 @@ public class DockerClient {
     }
 
     public String startContainer(List<String> args) throws DockerException {
+        return startContainer(args, Map.of());
+    }
+
+    /**
+     * Starts a container with additional values supplied through this process environment.
+     * Secret values must not be added to docker's argument vector, where process listings expose them.
+     */
+    public String startContainer(List<String> args, Map<String, String> environment) throws DockerException {
         List<String> cmd = new ArrayList<>();
         cmd.add("docker");
         cmd.add("run");
         cmd.addAll(args);
         // docker run may still pull the image (--pull never with a missing image), so it gets
         // far longer than the lookups.
-        return run(Duration.ofMinutes(10), cmd.toArray(String[]::new)).trim();
+        return run(Duration.ofMinutes(10), environment, cmd.toArray(String[]::new)).trim();
     }
 
     /**
@@ -278,10 +286,14 @@ public class DockerClient {
 
     /** Runs {@code cmd} for at most {@code limit}; a null {@code limit} waits as long as it takes. */
     private String run(Duration limit, String... cmd) throws DockerException {
+        return run(limit, Map.of(), cmd);
+    }
+
+    private String run(Duration limit, Map<String, String> environment, String... cmd) throws DockerException {
         Process proc = null;
         boolean finished = false;
         try {
-            proc = runProcess(cmd);
+            proc = runProcess(environment, cmd);
             // Both streams drain at once, so a full stderr pipe cannot stall the process; the wait
             // is bounded and interruptible, and any way out of it but a normal exit kills the
             // process, so no docker call outlives the CLI.
@@ -376,6 +388,10 @@ public class DockerClient {
     }
 
     private Process runProcess(String... cmd) throws IOException {
+        return runProcess(Map.of(), cmd);
+    }
+
+    private Process runProcess(Map<String, String> environment, String... cmd) throws IOException {
         if (Boolean.getBoolean(GlobalOptions.VERBOSE_PROPERTY)) {
             System.err.println("+ " + String.join(" ", cmd));
         }
@@ -386,9 +402,9 @@ public class DockerClient {
             cmd = cmd.clone();
             cmd[0] = podmanBinary;
         }
-        return new ProcessBuilder(cmd)
-                .redirectErrorStream(false)
-                .start();
+        ProcessBuilder builder = new ProcessBuilder(cmd);
+        builder.environment().putAll(environment);
+        return builder.redirectErrorStream(false).start();
     }
 
     public static boolean isInstalled() {

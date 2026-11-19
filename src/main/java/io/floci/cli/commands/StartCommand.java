@@ -38,6 +38,7 @@ import java.util.regex.Pattern;
 public class StartCommand implements Callable<Integer> {
 
     protected final ProductProfile profile;
+    private Map<String, String> inheritedDockerEnvironment = Map.of();
 
     @Mixin
     protected GlobalOptions global;
@@ -342,10 +343,22 @@ public class StartCommand implements Callable<Integer> {
                 args.addAll(List.of("-e", profile.envVar(suffix) + "=" + value)));
         // XKS credentials are encrypted by the AWS emulator with a deployment-managed key.
         // Forward only the variable name: never copy the secret value into docker CLI arguments.
-        addXksCredentialKeyPassThrough(args, profile, System.getenv(
-                profile.envVar("SERVICES_KMS_XKS_CREDENTIAL_ENCRYPTION_KEY")));
+        String xksKeyName = profile.envVar("SERVICES_KMS_XKS_CREDENTIAL_ENCRYPTION_KEY");
+        String xksHostValue = System.getenv(xksKeyName);
+        if (xksHostValue == null) {
+            xksHostValue = inheritedDockerEnvironment.get(xksKeyName);
+        }
+        addXksCredentialKeyPassThrough(args, profile, xksHostValue);
         args.add(image);
         return args;
+    }
+
+    void inheritDockerEnvironment(Map<String, String> environment) {
+        inheritedDockerEnvironment = Map.copyOf(environment);
+    }
+
+    public Map<String, String> dockerEnvironment() {
+        return inheritedDockerEnvironment;
     }
 
     static void addXksCredentialKeyPassThrough(List<String> args, ProductProfile profile, String hostValue) {
@@ -462,7 +475,9 @@ public class StartCommand implements Callable<Integer> {
         String id;
         try {
             progress.accept("Starting " + Ansi.gold(profile.displayName()) + " container...");
-            id = docker.startContainer(args);
+            id = inheritedDockerEnvironment.isEmpty()
+                    ? docker.startContainer(args)
+                    : docker.startContainer(args, inheritedDockerEnvironment);
             progress.accept(Ansi.green("Container started") + " (" + id.substring(0, Math.min(12, id.length())) + ")");
         } catch (DockerException e) {
             // withNextStep, not the two-argument error: docker's own output is often several

@@ -73,6 +73,45 @@ class RestartCommandTest {
     }
 
     @Test
+    void carriesTheXksEncryptionKeyFromTheRunningContainerWithoutPuttingItInArguments() throws Exception {
+        String keyName = ProductProfile.AWS.envVar("SERVICES_KMS_XKS_CREDENTIAL_ENCRYPTION_KEY");
+        String storedKey = "deployment-managed-test-key-value";
+        DockerClient.RunSettings settings = new DockerClient.RunSettings(
+                "floci/floci:test", 4566, null, Map.of(keyName, storedKey), List.of());
+
+        StartCommand start = restartWith(ProductProfile.AWS, settings).buildStartCommand();
+        List<String> args = start.dockerRunArgs(SOCKET);
+
+        assertEquals(Map.of(keyName, storedKey), start.dockerEnvironment());
+        assertTrue(args.containsAll(List.of("-e", keyName)));
+        assertFalse(args.stream().anyMatch(argument -> argument.contains(storedKey)));
+    }
+
+    @Test
+    void carriesTheExistingXksKeyEvenWhenRestartUsesAnExplicitProfile() throws Exception {
+        writeProfile("named", "image: floci/floci:profile\n");
+        String keyName = ProductProfile.AWS.envVar("SERVICES_KMS_XKS_CREDENTIAL_ENCRYPTION_KEY");
+        String storedKey = "existing-container-key";
+        DockerClient.RunSettings settings = new DockerClient.RunSettings(
+                "floci/floci:running", 4566, null, Map.of(keyName, storedKey), List.of());
+
+        StartCommand start = restartWith(ProductProfile.AWS, settings, "--profile", "named").buildStartCommand();
+
+        assertEquals(Map.of(keyName, storedKey), start.dockerEnvironment());
+    }
+
+    @Test
+    void doesNotCarryAnXksKeyForOtherProducts() throws Exception {
+        String keyName = ProductProfile.AWS.envVar("SERVICES_KMS_XKS_CREDENTIAL_ENCRYPTION_KEY");
+        DockerClient.RunSettings settings = new DockerClient.RunSettings(
+                "floci/floci-oci:test", 4599, null, Map.of(keyName, "must-not-cross-products"), List.of());
+
+        StartCommand start = restartWith(ProductProfile.OCI, settings).buildStartCommand();
+
+        assertTrue(start.dockerEnvironment().isEmpty());
+    }
+
+    @Test
     void carriesTheProfileIntoTheStartItRuns() throws Exception {
         writeProfile("probe", """
                 image: floci/floci:enforced
