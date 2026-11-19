@@ -41,6 +41,8 @@ pass `-o text`. Then check the cloud-specific leaks: SQS endpoint bypass (AWS), 
 **Docker-backed services fail (Lambda, ECS, RDS, Cloud Run, AKS, Functions, OKE)**
 The emulator cannot reach a Docker daemon. floci-cli resolves `DOCKER_HOST`, then `DOCKER_SOCK`,
 then the OS default socket. For Podman: `export DOCKER_HOST=unix:///run/user/$(id -u)/podman/podman.sock`.
+With `podman machine` on macOS, `start` mounts the VM-side socket that `podman info` reports (it
+needs `podman` on `PATH`); `DOCKER_SOCK` overrides it, even alongside `DOCKER_HOST`.
 `doctor` shows the resolved endpoint. In Compose, mount the socket explicitly. With SELinux
 enforcing (for example the `podman machine` VM), `java.net.BindException: Permission denied` means
 the container's label blocks the socket: run `floci <tree> start --security-opt label=disable`

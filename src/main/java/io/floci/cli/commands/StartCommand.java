@@ -24,6 +24,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.TreeMap;
 import java.util.concurrent.Callable;
 import java.util.function.Consumer;
@@ -446,7 +447,7 @@ public class StartCommand implements Callable<Integer> {
             return 1;
         }
 
-        List<String> args = dockerRunArgs(DockerClient.dockerSocketRunArgs(), daemon);
+        List<String> args = dockerRunArgs(socketRunArgs(docker, daemon, printer), daemon);
 
         String id;
         try {
@@ -517,6 +518,26 @@ public class StartCommand implements Callable<Integer> {
         } catch (DockerException e) {
             return "unknown";
         }
+    }
+
+    /**
+     * The socket mount for this start: the daemon's own socket inside a {@code podman machine} VM
+     * when there is one ({@link DockerClient#podmanMachineSocket}), else the path the environment
+     * resolves. When podman cannot say where its socket is, the environment's path is still used,
+     * with a warning: it may work (podman's mac helper links {@code /var/run/docker.sock} to the
+     * rootful socket), and the user has a way to name the right one.
+     */
+    public static List<String> socketRunArgs(DockerClient docker, DockerClient.DockerHost daemon, Printer printer) {
+        try {
+            Optional<String> vmSocket = docker.podmanMachineSocket(daemon);
+            if (vmSocket.isPresent()) return DockerClient.socketMountArgs(vmSocket.get());
+        } catch (DockerException e) {
+            printer.warn("The Docker daemon is a Podman machine, but podman could not report its socket inside the VM: "
+                    + e.getMessage().strip() + "\nIf Docker-backed services fail, set DOCKER_SOCK to the daemon's socket"
+                    + " inside the VM (/run/podman/podman.sock for a rootful machine,"
+                    + " /run/user/<uid>/podman/podman.sock for a rootless one) and re-run the command.");
+        }
+        return DockerClient.dockerSocketRunArgs();
     }
 
     /**
