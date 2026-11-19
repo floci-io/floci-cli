@@ -38,16 +38,37 @@ class PodmanMachineSocketTest {
 
     @ParameterizedTest
     @CsvSource(nullValues = "-", value = {
-            "UNIX, /var/run/docker.sock, -, Mac OS X, true",
-            "UNIX, /var/run/docker.sock, '  ', Mac OS X, true",
-            // DOCKER_SOCK names the socket to mount, so it wins over asking the daemon.
-            "UNIX, /var/run/docker.sock, /run/podman/podman.sock, Mac OS X, false",
+            "UNIX, /var/run/docker.sock, Mac OS X, true",
             // No VM in between on Linux: the local path is the daemon's.
-            "UNIX, /run/user/1000/podman/podman.sock, -, Linux, false",
-            "NPIPE, //./pipe/podman, -, Windows 11, false",
-            "TCP, -, -, Mac OS X, false"})
-    void onlyALocalSocketOnMacIsAsked(Kind kind, String socketPath, String dockerSock, String os, boolean expected) {
-        assertEquals(expected, DockerClient.podmanMachineMayApply(new DockerHost(kind, socketPath, null), dockerSock, os));
+            "UNIX, /run/user/1000/podman/podman.sock, Linux, false",
+            "NPIPE, //./pipe/podman, Windows 11, false",
+            "TCP, -, Mac OS X, false"})
+    void onlyALocalSocketOnMacApplies(Kind kind, String socketPath, String os, boolean expected) {
+        assertEquals(expected, DockerClient.isLocalSocketOnMac(new DockerHost(kind, socketPath, null), os));
+    }
+
+    /**
+     * DOCKER_HOST reaches the daemon through the Mac forwarder, DOCKER_SOCK names its socket in
+     * the VM: the mount is DOCKER_SOCK, and podman is not asked. This is what start's warning
+     * tells the user to set.
+     */
+    @Test
+    @DisabledOnOs(OS.WINDOWS)
+    void dockerSockIsTheMountEvenWithDockerHostSet() throws Exception {
+        DockerClient docker = client("echo docker must not run >&2\nexit 1", "echo podman must not run >&2\nexit 1");
+
+        assertEquals(Optional.of("/run/podman/podman.sock"),
+                docker.podmanMachineSocket(MAC_PODMAN, "/run/podman/podman.sock", "Mac OS X"));
+        assertEquals(Optional.of("/run/podman/podman.sock"),
+                docker.podmanMachineSocket(MAC_PODMAN, " unix:///run/podman/podman.sock ", "Mac OS X"));
+        // DOCKER_SOCK alone: it is already the resolved path, so the usual mount stands.
+        assertEquals(Optional.empty(), docker.podmanMachineSocket(
+                new DockerHost(Kind.UNIX, "/run/podman/podman.sock", "/run/podman/podman.sock"),
+                "/run/podman/podman.sock", "Mac OS X"));
+        // Not on Linux, where DOCKER_HOST keeps its precedence.
+        assertEquals(Optional.empty(), docker.podmanMachineSocket(
+                new DockerHost(Kind.UNIX, "/run/user/1000/podman/podman.sock", "unix:///run/user/1000/podman/podman.sock"),
+                "/elsewhere.sock", "Linux"));
     }
 
     @ParameterizedTest

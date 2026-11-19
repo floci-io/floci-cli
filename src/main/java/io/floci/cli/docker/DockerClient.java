@@ -496,6 +496,10 @@ public class DockerClient {
      * daemon itself listens on as {@code Host.RemoteSocket.Path}; the Docker-compatible API has
      * no such field, so podman is asked.
      *
+     * <p>On macOS a set {@code DOCKER_SOCK} is that socket, and podman is not asked. It is the
+     * mount source even when {@code DOCKER_HOST} is what the docker CLI uses to reach the daemon:
+     * the two name the same daemon from either side of the VM.
+     *
      * @throws DockerException when the daemon is Podman but podman could not say where its socket is
      */
     public Optional<String> podmanMachineSocket(DockerHost daemon) throws DockerException {
@@ -505,8 +509,11 @@ public class DockerClient {
     /** {@link #podmanMachineSocket(DockerHost)} for a given {@code DOCKER_SOCK} and OS: the test seam. */
     public Optional<String> podmanMachineSocket(DockerHost daemon, String dockerSockEnv, String osName)
             throws DockerException {
-        if (!podmanMachineMayApply(daemon, dockerSockEnv, osName)) {
+        if (!isLocalSocketOnMac(daemon, osName)) {
             return Optional.empty();
+        }
+        if (dockerSockEnv != null && !dockerSockEnv.isBlank()) {
+            return remoteSocketMountSource(dockerSockEnv, daemon.socketPath());
         }
         String components;
         try {
@@ -520,19 +527,16 @@ public class DockerClient {
         return remoteSocketMountSource(reported, daemon.socketPath());
     }
 
-    /**
-     * Whether {@link #podmanMachineSocket} needs to ask the daemon at all: a local unix socket on
-     * macOS, and no {@code DOCKER_SOCK}, which names the socket to mount and so wins over detection.
-     */
-    public static boolean podmanMachineMayApply(DockerHost daemon, String dockerSockEnv, String osName) {
+    /** Whether {@link #podmanMachineSocket} applies at all: a local unix socket on macOS. */
+    public static boolean isLocalSocketOnMac(DockerHost daemon, String osName) {
         boolean mac = osName != null && osName.toLowerCase().startsWith("mac");
-        return mac && daemon.kind() == Kind.UNIX && daemon.socketPath() != null
-                && (dockerSockEnv == null || dockerSockEnv.isBlank());
+        return mac && daemon.kind() == Kind.UNIX && daemon.socketPath() != null;
     }
 
     /**
-     * The bind source for podman's reported {@code Host.RemoteSocket.Path}, or empty when there
-     * is nothing to change: no path reported, or the same path this machine already uses.
+     * The bind source for {@code reported} (podman's {@code Host.RemoteSocket.Path}, or
+     * {@code DOCKER_SOCK}), or empty when there is nothing to change: no path, or the same path
+     * this machine already uses.
      */
     public static Optional<String> remoteSocketMountSource(String reported, String localPath) {
         if (reported == null) return Optional.empty();

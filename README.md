@@ -479,7 +479,8 @@ a forwarder, and the container runs inside the VM, where that path is not the da
 When the daemon is Podman, `floci start` asks `podman info` for the socket the daemon listens on
 inside the VM (`/run/podman/podman.sock` rootful, `/run/user/<uid>/podman/podman.sock` rootless)
 and mounts that instead, so this needs the `podman` CLI on `PATH`. Set `DOCKER_SOCK` to choose
-the mounted socket yourself; it turns the lookup off.
+the mounted socket yourself: on macOS it is the mount even when `DOCKER_HOST` is set, and podman
+is not asked.
 
 With SELinux enforcing (for example the Fedora VM behind `podman machine`), the container's label
 keeps Floci from connecting to the socket, and the web console fails to start with
