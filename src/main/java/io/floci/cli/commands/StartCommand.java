@@ -340,8 +340,18 @@ public class StartCommand implements Callable<Integer> {
         }
         new TreeMap<>(profile.startEnv()).forEach((suffix, value) ->
                 args.addAll(List.of("-e", profile.envVar(suffix) + "=" + value)));
+        // XKS credentials are encrypted by the AWS emulator with a deployment-managed key.
+        // Forward only the variable name: never copy the secret value into docker CLI arguments.
+        addXksCredentialKeyPassThrough(args, profile, System.getenv(
+                profile.envVar("SERVICES_KMS_XKS_CREDENTIAL_ENCRYPTION_KEY")));
         args.add(image);
         return args;
+    }
+
+    static void addXksCredentialKeyPassThrough(List<String> args, ProductProfile profile, String hostValue) {
+        if ("aws".equals(profile.name()) && hostValue != null && !hostValue.isBlank()) {
+            args.addAll(List.of("-e", profile.envVar("SERVICES_KMS_XKS_CREDENTIAL_ENCRYPTION_KEY")));
+        }
     }
 
     // DockerClient reports a missing binary as "docker binary not found"; on Windows the JDK says
