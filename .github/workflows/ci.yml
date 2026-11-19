@@ -36,7 +36,15 @@ jobs:
           distribution: 'temurin'
           cache: maven
 
+      # ZshCompletionTest sources the completion script in a real zsh, which the runner image does
+      # not ship. FLOCI_TEST_REQUIRE_ZSH turns its skip into a failure, so a missing zsh cannot
+      # pass silently.
+      - name: Install zsh
+        run: sudo apt-get update -q && sudo apt-get install -y -q zsh
+
       - name: Run unit tests
+        env:
+          FLOCI_TEST_REQUIRE_ZSH: 'true'
         run: mvn test -B
 
   native-linux-arm64:
