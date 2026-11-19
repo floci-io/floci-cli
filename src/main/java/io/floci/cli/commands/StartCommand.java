@@ -345,7 +345,7 @@ public class StartCommand implements Callable<Integer> {
         // Forward only the variable name: never copy the secret value into docker CLI arguments.
         String xksKeyName = profile.envVar("SERVICES_KMS_XKS_CREDENTIAL_ENCRYPTION_KEY");
         String xksHostValue = System.getenv(xksKeyName);
-        if (xksHostValue == null) {
+        if (xksHostValue == null || xksHostValue.isBlank()) {
             xksHostValue = inheritedDockerEnvironment.get(xksKeyName);
         }
         addXksCredentialKeyPassThrough(args, profile, xksHostValue);
