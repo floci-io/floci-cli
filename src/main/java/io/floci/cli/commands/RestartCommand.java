@@ -11,6 +11,7 @@ import io.floci.cli.output.Printer;
 import picocli.CommandLine.*;
 import picocli.CommandLine.Model.CommandSpec;
 
+import java.util.Map;
 import java.util.concurrent.Callable;
 
 @Command(
@@ -139,7 +140,11 @@ public class RestartCommand implements Callable<Integer> {
         start.global = global;
         start.pull = "missing";
         start.detach = false;
-        if (global.profile == null) carryOver(start);
+        if (global.profile == null) {
+            carryOver(start);
+        } else {
+            carryOverXksCredentialKey(start);
+        }
         return start;
     }
 
@@ -158,7 +163,21 @@ public class RestartCommand implements Callable<Integer> {
             String namespace = run.env().get(profile.envVar("DOCKER_RESOURCE_NAMESPACE"));
             if (namespace != null) start.namespace = namespace;
             start.securityOpts = run.securityOpts();
+            inheritXksCredentialKey(start, run.env());
         });
+    }
+
+    private void carryOverXksCredentialKey(StartCommand start) throws DockerException {
+        docker.inspectRunSettings(global.container, profile.defaultPort())
+                .ifPresent(run -> inheritXksCredentialKey(start, run.env()));
+    }
+
+    private void inheritXksCredentialKey(StartCommand start, Map<String, String> environment) {
+        String keyName = profile.envVar("SERVICES_KMS_XKS_CREDENTIAL_ENCRYPTION_KEY");
+        String key = environment.get(keyName);
+        if ("aws".equals(profile.name()) && key != null && !key.isBlank()) {
+            start.inheritDockerEnvironment(Map.of(keyName, key));
+        }
     }
 
     // A new container that is up but has not answered yet cannot be started again: start refuses a
