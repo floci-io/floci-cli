@@ -1,6 +1,5 @@
 package io.floci.cli.unit;
 
-import io.floci.cli.FlociCli;
 import io.floci.cli.ProductProfile;
 import io.floci.cli.commands.RestartCommand;
 import io.floci.cli.commands.StartCommand;
@@ -14,7 +13,6 @@ import org.junit.jupiter.api.condition.DisabledOnOs;
 import org.junit.jupiter.api.condition.OS;
 import org.junit.jupiter.api.io.TempDir;
 import picocli.CommandLine;
-import picocli.CommandLine.ParseResult;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -58,13 +56,23 @@ class RestartCommandTest {
     }
 
     private RestartCommand parse(ProductProfile product, String... args) {
-        List<String> all = new ArrayList<>();
-        if (product != ProductProfile.AWS) all.add(product.name());
-        all.add("restart");
-        all.addAll(List.of(args));
-        ParseResult r = FlociCli.buildCommandLine(new ProfileStore(tempDir)).parseArgs(all.toArray(String[]::new));
-        while (r.hasSubcommand()) r = r.subcommand();
-        return (RestartCommand) r.commandSpec().userObject();
+        // Profile-only unit tests must never fall through to the host's real Docker daemon.
+        DockerClient docker = new DockerClient() {
+            @Override
+            public Optional<RunSettings> inspectRunSettings(String name, int containerPort) {
+                return Optional.empty();
+            }
+
+            @Override
+            public Optional<ContainerInfo> inspectContainer(String name) {
+                return Optional.empty();
+            }
+        };
+        RestartCommand restart = new RestartCommand(product, docker);
+        new CommandLine(restart)
+                .setDefaultValueProvider(new ProfileDefaultValueProvider(new ProfileStore(tempDir)))
+                .parseArgs(args);
+        return restart;
     }
 
     private void writeProfile(String name, String yaml) throws IOException {
