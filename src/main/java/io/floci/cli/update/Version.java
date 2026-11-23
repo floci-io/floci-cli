@@ -16,6 +16,11 @@ public final class Version {
         return s != null && SHAPE.matcher(s).matches();
     }
 
+    /** Canonical spelling of a validated version, without its optional leading "v". */
+    public static String normalize(String version) {
+        return version.startsWith("v") ? version.substring(1) : version;
+    }
+
     /** Numeric compare of the x.y.z core; a pre-release suffix on equal cores sorts older. */
     public static boolean isNewer(String candidate, String current) {
         if (!isValid(candidate) || !isValid(current)) {
@@ -33,8 +38,7 @@ public final class Version {
     }
 
     private static int[] core(String v) {
-        String stripped = v.startsWith("v") ? v.substring(1) : v;
-        String[] parts = stripped.split("[-+]", 2)[0].split("\\.");
+        String[] parts = normalize(v).split("[-+]", 2)[0].split("\\.");
         return new int[]{Integer.parseInt(parts[0]), Integer.parseInt(parts[1]), Integer.parseInt(parts[2])};
     }
 

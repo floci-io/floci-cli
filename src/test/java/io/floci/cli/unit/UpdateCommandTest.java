@@ -125,11 +125,12 @@ class UpdateCommandTest {
         }
     }
 
-    @Test
-    void replacesTheBinaryWithTheVerifiedDownload() throws Exception {
+    @ParameterizedTest
+    @ValueSource(strings = {"", "99.0.0", "v99.0.0", " v99.0.0 "})
+    void replacesTheBinaryWithTheVerifiedDownload(String version) throws Exception {
         Path binary = installed(tempDir.resolve("bin"));
 
-        Run r = update(binary);
+        Run r = version.isEmpty() ? update(binary) : update(binary, "--version", version);
 
         assertEquals(0, r.exit(), r.err());
         assertArrayEquals(FRESH, Files.readAllBytes(binary));
@@ -177,6 +178,36 @@ class UpdateCommandTest {
         assertEquals(0, r.exit(), r.err());
         assertTrue(r.out().contains("is up to date"), r.out());
         assertEquals(List.of(), downloads);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"", "v", " v"})
+    void pinningTheCurrentVersionDoesNotDownloadOrReplaceIt(String prefix) throws Exception {
+        Path binary = installed(tempDir.resolve("bin"));
+        String version = prefix + CliVersion.CLI_VERSION + " ";
+
+        for (String[] args : List.of(new String[]{"--version", version},
+                new String[]{"--check", "--version", version})) {
+            Run r = update(binary, args);
+
+            assertEquals(0, r.exit(), r.err());
+            assertTrue(r.out().contains("is up to date"), r.out());
+            assertEquals(List.of(), downloads);
+            assertArrayEquals(OLD, Files.readAllBytes(binary));
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"0.1.0", "v0.1.0"})
+    void anExplicitOlderVersionIsStillOffered(String version) throws Exception {
+        Path binary = installed(tempDir.resolve("bin"));
+
+        Run r = update(binary, "--check", "--version", version);
+
+        assertEquals(1, r.exit(), r.err());
+        assertTrue(r.out().contains("update available"), r.out());
+        assertEquals(List.of(), downloads);
+        assertArrayEquals(OLD, Files.readAllBytes(binary));
     }
 
     @Test
