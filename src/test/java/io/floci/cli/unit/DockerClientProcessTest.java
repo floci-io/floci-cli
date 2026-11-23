@@ -332,15 +332,40 @@ class DockerClientProcessTest {
         assertEquals("", DockerClient.publishedPorts(new ObjectMapper().readTree("{}")));
     }
 
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "Error response from daemon: No such container: floci",
+            "Error: inspecting object: no such container \"floci\"",
+            "Error: No such object: floci"
+    })
+    @DisabledOnOs(OS.WINDOWS)
+    void aMissingContainerIsEmpty(String diagnostic) throws Exception {
+        DockerClient docker = new DockerClient(fakeDocker("echo '" + diagnostic + "' >&2\nexit 1\n"));
+
+        assertTrue(docker.inspectContainer("floci").isEmpty());
+        assertTrue(docker.inspectRunSettings("floci", 4566).isEmpty());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "error during connect: dial unix /var/run/docker.sock: connect: no such file or directory",
+            "error during connect: dial tcp: lookup docker.example: no such host",
+            "permission denied while trying to connect to the Docker daemon socket",
+            "error during connect: dial tcp 127.0.0.1:2375: connect: connection refused"
+    })
+    @DisabledOnOs(OS.WINDOWS)
+    void aFailedInspectionIsNotAMissingContainer(String diagnostic) throws Exception {
+        DockerClient docker = new DockerClient(fakeDocker("echo '" + diagnostic + "' >&2\nexit 1\n"));
+
+        DockerException containerError = assertThrows(DockerException.class, () -> docker.inspectContainer("floci"));
+        assertEquals(diagnostic, containerError.getMessage());
+        DockerException settingsError = assertThrows(DockerException.class, () -> docker.inspectRunSettings("floci", 4566));
+        assertEquals(diagnostic, settingsError.getMessage());
+    }
+
     @Test
     @DisabledOnOs(OS.WINDOWS)
-    void aMissingContainerIsEmptyAndGarbageIsReportedWithANextStep() throws Exception {
-        Path missing = Files.createTempFile(tempDir, "docker", "");
-        Files.writeString(missing, "#!/bin/sh\necho 'Error response from daemon: No such container: floci' >&2\nexit 1\n");
-        assertTrue(missing.toFile().setExecutable(true));
-
-        assertTrue(new DockerClient(missing.toString()).inspectContainer("floci").isEmpty());
-
+    void garbageIsReportedWithANextStep() throws Exception {
         DockerException e = assertThrows(DockerException.class, () -> dockerPrinting("not json").inspectContainer("floci"));
         assertTrue(e.getMessage().contains("Could not read the details of container 'floci'"), e.getMessage());
         assertTrue(e.getMessage().contains("docker info"), e.getMessage());

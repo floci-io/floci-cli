@@ -14,6 +14,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
@@ -175,7 +176,8 @@ public class DockerClient {
         try {
             out = run("docker", "container", "inspect", "--format", "{{json .}}", "--", name);
         } catch (DockerException e) {
-            if (e.getMessage() != null && e.getMessage().toLowerCase().contains("no such")) {
+            String message = e.getMessage() == null ? "" : e.getMessage().toLowerCase(Locale.ROOT);
+            if (message.contains("no such container") || message.contains("no such object")) {
                 return Optional.empty();
             }
             throw e;
