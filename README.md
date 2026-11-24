@@ -1177,7 +1177,7 @@ Running Floci in tests? Use the Testcontainers module for your language instead 
 
 ## Community
 
-- 💬 [Slack](https://join.slack.com/t/floci/shared_invite/zt-3tjn02s3q-A00kEjJ1cZxsg_imTfy6Cw): quick questions and community chat
+- 💬 [Slack](https://floci.io/slack): quick questions and community chat
 - 🗣️ [GitHub Discussions](https://github.com/orgs/floci-io/discussions): ideas, design tradeoffs, and proposals
 - 🐛 [Issues](https://github.com/floci-io/floci-cli/issues): bugs in this CLI or in the agent skill (emulator bugs go to that emulator's repository)
 - 🛟 [SUPPORT.md](https://github.com/floci-io/.github/blob/main/SUPPORT.md): where to get help, and what community support covers
