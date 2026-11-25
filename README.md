@@ -136,6 +136,12 @@ aws dynamodb create-table --table-name users \
 floci stop
 ```
 
+For Floci builds that include AWS KMS External Key Store (XKS) support, export the deployment-managed
+`FLOCI_SERVICES_KMS_XKS_CREDENTIAL_ENCRYPTION_KEY` before `floci start`. The CLI forwards the variable by
+name only, without placing its secret value in Docker arguments. `floci restart` preserves the key from the
+existing container, so keep the deployment key stable across restarts. The value must be a Base64-encoded
+32-byte key and should be supplied through your deployment's secret manager.
+
 ### GCP
 
 ```sh
