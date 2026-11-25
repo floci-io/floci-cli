@@ -84,6 +84,9 @@ public class ConfigProfileCommand implements Callable<Integer> {
     @Option(names = {"--namespace"}, description = "create: Docker resource namespace for the containers this instance launches (default: derived from --container)", paramLabel = "<name>")
     String namespace;
 
+    @Option(names = {"--bind"}, description = "create: host address this instance's port is published on", paramLabel = "<address>")
+    String bind;
+
     @Spec
     CommandSpec spec;
 
@@ -158,6 +161,7 @@ public class ConfigProfileCommand implements Callable<Integer> {
         row.put("persistDir", p.persistDir);
         row.put("services", p.services);
         row.put("namespace", p.namespace);
+        row.put("bind", p.bind);
         return row;
     }
 
@@ -193,6 +197,7 @@ public class ConfigProfileCommand implements Callable<Integer> {
             if (p.persistDir != null) printer.println("  persistDir: " + p.persistDir);
             if (p.services != null)   printer.println("  services:   " + p.services);
             if (p.namespace != null)  printer.println("  namespace:  " + p.namespace);
+            if (p.bind != null)       printer.println("  bind:       " + p.bind);
             return 0;
         } catch (IOException e) {
             printer.error("Could not read profile: " + Causes.firstLine(e), "Fix or delete the profile file, then re-run the command.");
@@ -361,6 +366,7 @@ public class ConfigProfileCommand implements Callable<Integer> {
             if (typed("--persist")) p.persistDir = persistDir;
             if (typed("--services")) p.services = services;
             if (typed("--namespace")) p.namespace = namespace;
+            if (typed("--bind")) p.bind = bind;
 
             for (String warning : collisions(profile, store.list(), p)) {
                 printer.warn(warning);

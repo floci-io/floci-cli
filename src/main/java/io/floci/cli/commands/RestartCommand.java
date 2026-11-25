@@ -139,7 +139,13 @@ public class RestartCommand implements Callable<Integer> {
         start.global = global;
         start.pull = "missing";
         start.detach = false;
-        if (global.profile == null) carryOver(start);
+        if (global.profile == null) {
+            carryOver(start);
+        } else if (start.bind == null) {
+            // A profile that names no address keeps the one start recorded on the container: every
+            // interface would widen a loopback-only instance without a word.
+            docker.inspectRunSettings(global.container, profile.defaultPort()).ifPresent(run -> start.bind = run.bind());
+        }
         return start;
     }
 
@@ -151,6 +157,7 @@ public class RestartCommand implements Callable<Integer> {
     private void carryOver(StartCommand start) throws DockerException {
         docker.inspectRunSettings(global.container, profile.defaultPort()).ifPresent(run -> {
             if (run.hostPort() != null) start.port = run.hostPort();
+            start.bind = run.bind();
             if (run.image() != null) start.image = run.image();
             if (run.persistSource() != null) start.persistDir = run.persistSource();
             String services = run.env().get(profile.envVar("SERVICES"));

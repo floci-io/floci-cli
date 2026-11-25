@@ -23,6 +23,7 @@ class ProfileDefaultsTest {
         p.services = "s3,lambda";
         p.output = "json";
         p.namespace = "team-b";
+        p.bind = "127.0.0.1";
         return p;
     }
 
@@ -36,6 +37,7 @@ class ProfileDefaultsTest {
             "--services,  's3,lambda'",
             "--output,    json",
             "--namespace, team-b",
+            "--bind,      127.0.0.1",
     })
     void mapsEveryProfileField(String option, String expected) {
         assertEquals(expected, ProfileDefaults.valueFor(fullProfile(), option), option);

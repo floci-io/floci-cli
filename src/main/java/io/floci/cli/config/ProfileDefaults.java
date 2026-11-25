@@ -44,6 +44,7 @@ public final class ProfileDefaults {
             case "--persist"   -> profile.persistDir;
             case "--services"  -> profile.services;
             case "--namespace" -> profile.namespace;
+            case "--bind"      -> profile.bind;
             case "--output"    -> profile.output;
             default -> null;
         };

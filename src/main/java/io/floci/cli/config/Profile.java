@@ -18,11 +18,12 @@ public class Profile {
     public String persistDir;
     public String services;
     public String namespace;
+    public String bind;
     public String output;
 
     /** The keys a profile file may set: every field above. Pinned against them by a test. */
     public static final List<String> KNOWN_KEYS = List.of(
-            "name", "endpoint", "container", "image", "port", "persistDir", "services", "namespace", "output");
+            "name", "endpoint", "container", "image", "port", "persistDir", "services", "namespace", "bind", "output");
 
     // Unknown keys stay readable for forward compatibility, but are recorded so a misspelled one
     // ('persist_dir') can be reported instead of silently dropping the setting.

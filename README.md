@@ -411,6 +411,7 @@ floci start --persist ./data         # persist state to a host directory
 floci start --pull always            # always pull the latest image
 floci start --detach                 # return immediately, don't wait
 floci start --namespace team-b       # scope the containers it launches (see below)
+floci start --bind 127.0.0.1         # publish on loopback only (see below)
 
 # GCP
 floci gcp start                      # default port 4588
@@ -441,6 +442,25 @@ On a `--port` other than the product default, `start` also sets the emulator's b
 (`FLOCI_BASE_URL`, `FLOCI_GCP_BASE_URL`, ...) to the endpoint with that port (`http://localhost:<port>`
 unless `--endpoint` names another host), so URLs it returns
 (SQS `QueueUrl`, presigned URLs, the OCI functions invoke endpoint) point at that instance.
+
+`--bind <address>` publishes the emulator's API port on that host address instead of every
+interface, for example `floci start --bind 127.0.0.1` for loopback only. On AWS (emulator 2.2.0 or
+later) it also sets `FLOCI_SERVICES_UI_BIND_ADDRESS`, so the web console the emulator publishes
+itself (port 4500 by default) gets the same address. Other ports the emulators publish themselves,
+such as the AWS emulator's Amazon MQ and MSK brokers and the Azure emulator's console, follow their
+own settings, not `--bind`.
+
+The CLI reaches an instance at `http://localhost:<port>`, which it connects to as `127.0.0.1`, so an
+address other than `127.0.0.1` or `0.0.0.0` needs the endpoint as well: pass `--endpoint` on each
+command, for example `floci start --bind ::1 --endpoint 'http://[::1]:4566'`, or set
+`FLOCI_ENDPOINT`. A profile's `endpoint` covers an address on another interface, but not `[::1]`,
+which the CLI treats as loopback. On the default port the URLs the emulator returns (SQS
+`QueueUrl`, presigned URLs) still name `localhost`, as with a remote daemon.
+
+`floci restart` keeps the address: the profile's `bind`, or else the one `start` recorded in the
+container's `floci_bind` label. A container without that label restarts without `--bind`, whatever
+addresses the runtime published it on. A plain `floci start` after `floci stop` starts from its own
+flags and profile, not the label, so put `bind` in a profile to keep the address on every start.
 
 #### Docker daemon resolution (Podman, rootless, remote contexts)
 
@@ -802,7 +822,7 @@ floci config show                          # show active configuration
 floci config default-product aws|gcp|az|oci  # set the default product (persisted to ~/.floci/config.yaml)
 floci config profile list                  # list saved profiles: container, port, data dir
 floci config profile create <name>         # create a new profile with the tree's defaults
-floci config profile create <name> --container <c> --port <p> --persist <dir> --services <csv> --image <img> --namespace <ns>
+floci config profile create <name> --container <c> --port <p> --persist <dir> --services <csv> --image <img> --namespace <ns> --bind <addr>
 floci config profile show <name>           # show a profile
 floci config profile show <name> --json    # the same keys as one row of `config profile list --json`
 floci config profile edit <name>           # open the profile in $VISUAL or $EDITOR, then check it still reads
@@ -844,6 +864,7 @@ port: 4599
 persistDir: /tmp/floci-persist
 services: s3,lambda
 namespace: team-probe
+bind: 127.0.0.1
 output: json
 ```
 
@@ -860,6 +881,7 @@ have that flag:
 | `persistDir` | `--persist` | `start`; `restart` re-applies it through the start it runs |
 | `services` | `--services` | `start`; `restart` re-applies it through the start it runs |
 | `namespace` | `--namespace` | `start`; `restart` re-applies it through the start it runs |
+| `bind` | `--bind` | `start`; `restart` re-applies it through the start it runs |
 
 Resolution order, highest first:
 
@@ -1006,7 +1028,7 @@ Where a command's codes carry a specific meaning a script can rely on:
 | `doctor` | every check passed (warnings allowed) | at least one check failed | `--check` names no known check |
 | `update --check` | up to date | an update is available | the check itself failed |
 | `update` | updated, or already up to date | the update failed; the binary is unchanged | `--version` is not a release version |
-| `start`, `restart` | started (and ready, unless `--detach`) | Docker, the image, the port or readiness failed, or the `--persist` directory cannot be created | `--port`, `--pull`, the namespace, the `--persist` path or a `--security-opt seccomp=` value is not valid |
+| `start`, `restart` | started (and ready, unless `--detach`) | Docker, the image, the port or readiness failed, or the `--persist` directory cannot be created | `--port`, `--pull`, the namespace, the `--persist` path, a `--security-opt seccomp=` value or the `--bind` address is not valid |
 | `stop` | stopped, or was not running | no such container, or Docker failed | bad flag or profile |
 | `reset` | state reset | declined, not available on this server, no running instance to reset, or the configuration names two different servers | no terminal to ask on and no `--yes` |
 | `config validate` | no errors (warnings allowed) | errors found, or the file cannot be read | bad flag |

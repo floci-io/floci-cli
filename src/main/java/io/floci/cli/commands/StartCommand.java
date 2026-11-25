@@ -15,6 +15,8 @@ import io.floci.cli.output.Printer;
 import picocli.CommandLine;
 import picocli.CommandLine.*;
 
+import java.net.Inet4Address;
+import java.net.InetAddress;
 import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
@@ -85,6 +87,9 @@ public class StartCommand implements Callable<Integer> {
     @Option(names = {"--security-opt"}, description = "Docker security option for the emulator container, repeatable (label=disable lets it reach the Docker socket on SELinux hosts)", paramLabel = "<opt>")
     List<String> securityOpts = List.of();
 
+    @Option(names = {"--bind"}, description = "Host address to publish the API port on, such as 127.0.0.1, and on AWS the web console too (default: every interface). An address other than 127.0.0.1 or 0.0.0.0 also needs --endpoint", paramLabel = "<address>")
+    String bind;
+
     @Option(names = {"--pull"}, description = "Image pull policy: always, missing, never", defaultValue = "missing", paramLabel = "always|missing|never")
     String pull;
 
@@ -130,6 +135,7 @@ public class StartCommand implements Callable<Integer> {
         if (global.typed("--services")) flags.append(" --services ").append(GlobalOptions.shellWord(services));
         if (global.typed("--namespace")) flags.append(" --namespace ").append(GlobalOptions.shellWord(namespace));
         if (global.typed("--security-opt")) securityOpts.forEach(opt -> flags.append(" --security-opt ").append(GlobalOptions.shellWord(opt)));
+        if (global.typed("--bind")) flags.append(" --bind ").append(GlobalOptions.shellWord(bind));
         return flags.toString();
     }
 
@@ -150,6 +156,7 @@ public class StartCommand implements Callable<Integer> {
         if (services != null) command.append(" --services ").append(GlobalOptions.shellWord(services));
         if (namespace != null) command.append(" --namespace ").append(GlobalOptions.shellWord(namespace));
         securityOpts.forEach(opt -> command.append(" --security-opt ").append(GlobalOptions.shellWord(opt)));
+        if (bind != null) command.append(" --bind ").append(GlobalOptions.shellWord(bind));
         return command.toString();
     }
 
@@ -161,6 +168,8 @@ public class StartCommand implements Callable<Integer> {
     public String persistDir() { return persistDir; }
 
     public String services() { return services; }
+
+    public String bind() { return bind; }
 
     /**
      * The resource namespace this instance passes to the emulator, which scopes the child
@@ -194,10 +203,30 @@ public class StartCommand implements Callable<Integer> {
                     + "Run '" + prefix + " start" + global.instanceSelector() + " --security-opt seccomp=<file>', after '"
                     + prefix + " stop" + global.instanceSelector() + " --remove' if the container exists.";
         }
+        // A blank one too: '--bind "$ADDR"' with ADDR unset must not mean every interface.
+        if (bind != null && bindHost() == null) {
+            return "Invalid --bind '" + bind + "'.\nPass one IP address, such as 127.0.0.1, or leave --bind out to publish on every interface.";
+        }
         return null;
     }
 
     private static final List<String> PULL_POLICIES = List.of("always", "missing", "never");
+
+    /**
+     * {@code --bind} parsed (never looked up) and written the one way start passes it on: IPv4
+     * dotted, IPv6 in full (0:0:0:0:0:0:0:1), so docker and podman only ever see a form they read,
+     * whatever spelling the JDK accepted. Null when it is not one IP address, for an IPv6 zone,
+     * which docker refuses, and for IPv4 not typed dotted (Java also reads 127.1 and ::ffff:1.2.3.4).
+     */
+    private String bindHost() {
+        try {
+            InetAddress address = InetAddress.ofLiteral(bind);
+            String host = address.getHostAddress();
+            return host.contains("%") || address instanceof Inet4Address && !host.equals(bind) ? null : host;
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
+    }
 
     /**
      * {@code persistDir} as an absolute, normalized path. Docker reads a bind source without a
@@ -315,7 +344,16 @@ public class StartCommand implements Callable<Integer> {
     public List<String> dockerRunArgs(List<String> socketArgs, DockerClient.DockerHost daemon) {
         List<String> args = new ArrayList<>();
         args.addAll(List.of("-d", "--name", global.container));
-        args.addAll(List.of("-p", port + ":" + profile.defaultPort()));
+        String published = port + ":" + profile.defaultPort();
+        if (bind == null) {
+            args.addAll(List.of("-p", published));
+        } else {
+            // docker takes an IPv6 host address in brackets. The label is what restart reads back:
+            // the addresses a runtime reports also hold its own defaults (Podman's 0.0.0.0).
+            String host = bindHost();
+            args.addAll(List.of("-p", (host.contains(":") ? "[" + host + "]" : host) + ":" + published,
+                    "--label", DockerClient.BIND_LABEL + "=" + host));
+        }
         args.addAll(socketArgs);
         securityOpts.forEach(opt -> args.addAll(List.of("--security-opt", opt)));
         if (persistDir != null && !persistDir.isBlank()) {
@@ -333,6 +371,11 @@ public class StartCommand implements Callable<Integer> {
         // comes from the endpoint, so a remote Docker host is named too.
         if (port != profile.defaultPort()) {
             args.addAll(List.of("-e", profile.envVar("BASE_URL") + "=" + withPort(global.endpoint, port)));
+        }
+        // The AWS emulator publishes its unauthenticated web console itself, on every interface
+        // unless told an address, so it follows the API port.
+        if (bind != null && "aws".equals(profile.name())) {
+            args.addAll(List.of("-e", profile.envVar("SERVICES_UI_BIND_ADDRESS") + "=" + bindHost()));
         }
         String ns = resourceNamespace();
         if (ns != null) {

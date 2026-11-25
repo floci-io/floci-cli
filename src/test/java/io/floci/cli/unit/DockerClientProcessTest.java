@@ -231,6 +231,44 @@ class DockerClientProcessTest {
         assertEquals("/data/gcp", run.persistSource());
         assertEquals("storage", run.env().get("FLOCI_GCP_SERVICES"));
         assertEquals(List.of("label=disable"), run.securityOpts());
+        assertNull(run.bind(), "no label: no --bind");
+    }
+
+    @Test
+    @DisabledOnOs(OS.WINDOWS)
+    void runSettingsReadTheAddressStartRecordedInItsLabel() throws Exception {
+        DockerClient.RunSettings run = dockerPrinting("""
+                {"Config":{"Image":"floci/floci:latest","Labels":{"floci_bind":"127.0.0.1"}},
+                 "HostConfig":{"PortBindings":{"4566/tcp":[{"HostIp":"0.0.0.0","HostPort":"4566"}]}}}
+                """).inspectRunSettings("floci", 4566).orElseThrow();
+
+        assertEquals("127.0.0.1", run.bind());
+    }
+
+    /** A blank label is no label: the container restarts without --bind, as on a container that has none. */
+    @ParameterizedTest
+    @ValueSource(strings = {"", "  "})
+    @DisabledOnOs(OS.WINDOWS)
+    void aBlankLabelIsNoLabel(String label) throws Exception {
+        DockerClient.RunSettings run = dockerPrinting("""
+                {"Config":{"Image":"floci/floci:latest","Labels":{"floci_bind":"%s"}},
+                 "HostConfig":{"PortBindings":{"4566/tcp":[{"HostIp":"","HostPort":"4566"}]}}}
+                """.formatted(label)).inspectRunSettings("floci", 4566).orElseThrow();
+
+        assertNull(run.bind(), "'" + label + "'");
+    }
+
+    /** The published address also holds the runtime's own defaults, so without the label it says nothing. */
+    @ParameterizedTest
+    @ValueSource(strings = {"", "0.0.0.0", "127.0.0.1"})
+    @DisabledOnOs(OS.WINDOWS)
+    void thePublishedAddressIsNotTakenForABind(String hostIp) throws Exception {
+        DockerClient.RunSettings run = dockerPrinting("""
+                {"Config":{"Image":"floci/floci:latest","Labels":{"other":"x"}},
+                 "HostConfig":{"PortBindings":{"4566/tcp":[{"HostIp":"%s","HostPort":"4566"}]}}}
+                """.formatted(hostIp)).inspectRunSettings("floci", 4566).orElseThrow();
+
+        assertNull(run.bind(), hostIp);
     }
 
     /** Without --persist the image's /app/data volume is mounted; that is not a persist directory. */

@@ -165,7 +165,7 @@ class ConfigCommandsTest {
 
     @Test
     void createIgnoresAnotherProfilesValuesAndTakesOnlyTypedFlags() throws Exception {
-        writeProfile("a", "container: floci-az-a\nport: 14577\npersistDir: /data/a\n");
+        writeProfile("a", "container: floci-az-a\nport: 14577\npersistDir: /data/a\nbind: 127.0.0.1\n");
 
         assertEquals(0, profileCmd(ProductProfile.AZ, "create", "b", "--profile", "a", "--port", "14578").exit());
 
@@ -174,6 +174,7 @@ class ConfigCommandsTest {
         assertEquals("floci-az", b.container);
         assertNull(b.persistDir);
         assertNull(b.namespace);
+        assertNull(b.bind);
     }
 
     @Test
@@ -182,6 +183,17 @@ class ConfigCommandsTest {
                 "--container", "floci-gcp-b", "--namespace", "team-b").exit());
 
         assertEquals("team-b", store().get("ns").orElseThrow().namespace);
+    }
+
+    @Test
+    void createStoresATypedBindAndEveryViewReportsIt() throws Exception {
+        assertEquals(0, profileCmd(ProductProfile.AWS, "create", "local", "--bind", "127.0.0.1").exit());
+
+        assertEquals("127.0.0.1", store().get("local").orElseThrow().bind);
+        assertTrue(profileCmd(ProductProfile.AWS, "show", "local").out().contains("bind:       127.0.0.1"));
+        assertTrue(profileCmd(ProductProfile.AWS, "show", "local", "-o", "json").out().contains("\"bind\" : \"127.0.0.1\""));
+        assertTrue(profileCmd(ProductProfile.AWS, "list", "-o", "json").out().contains("\"bind\" : \"127.0.0.1\""));
+        assertTrue(runShow(ProductProfile.AWS, "--profile", "local", "-o", "json").contains("\"bind\" : \"127.0.0.1\""));
     }
 
     @Test

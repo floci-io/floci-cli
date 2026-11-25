@@ -50,6 +50,7 @@ Modern AWS CLI v2 and SDKs honor `AWS_ENDPOINT_URL` for every service. After `ev
 floci aws start --persist ./data             # keep state across recreation
 floci aws start --port 4567                  # custom host port; base URL is adjusted
 floci aws start --namespace team-b           # scope child containers (see namespaces.md)
+floci aws start --bind 127.0.0.1             # API port and web console on loopback only
 floci aws start --pull always                # newest image
 ```
 

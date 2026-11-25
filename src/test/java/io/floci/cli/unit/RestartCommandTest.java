@@ -13,6 +13,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.DisabledOnOs;
 import org.junit.jupiter.api.condition.OS;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import picocli.CommandLine;
 import picocli.CommandLine.ParseResult;
 
@@ -44,7 +46,8 @@ class RestartCommandTest {
     // Through the real wiring, so restart sees the provider the parse used.
     /** A restart whose docker lookups answer from {@code settings} (none: no such container). */
     private RestartCommand restartWith(ProductProfile product, DockerClient.RunSettings settings, String... args) {
-        DockerClient docker = new DockerClient() {
+        // No binary behind it: a call the override does not answer cannot reach a daemon.
+        DockerClient docker = new DockerClient(tempDir.resolve("no-docker").toString()) {
             @Override
             public Optional<RunSettings> inspectRunSettings(String name, int containerPort) {
                 return Optional.ofNullable(settings);
@@ -81,7 +84,7 @@ class RestartCommandTest {
                 services: s3,lambda
                 """);
 
-        List<String> args = parse(ProductProfile.AWS, "--profile", "probe")
+        List<String> args = restartWith(ProductProfile.AWS, null, "--profile", "probe")
                 .buildStartCommand().dockerRunArgs(SOCKET);
 
         assertEquals(List.of(
@@ -104,7 +107,7 @@ class RestartCommandTest {
     void interpolatesProfileValuesExactlyAsStartDoes() throws Exception {
         writeProfile("interp", "persistDir: ${env:HOME}/floci-data\n");
 
-        List<String> args = parse(ProductProfile.AWS, "--profile", "interp")
+        List<String> args = restartWith(ProductProfile.AWS, null, "--profile", "interp")
                 .buildStartCommand().dockerRunArgs(SOCKET);
 
         assertTrue(args.contains(System.getenv("HOME") + "/floci-data:/app/data"),
@@ -116,7 +119,7 @@ class RestartCommandTest {
     void carriesTheProfileNamespaceIntoTheStartItRuns() throws Exception {
         writeProfile("ns", "container: floci-oci-b\nnamespace: team-b\n");
 
-        List<String> args = parse(ProductProfile.OCI, "--profile", "ns")
+        List<String> args = restartWith(ProductProfile.OCI, null, "--profile", "ns")
                 .buildStartCommand().dockerRunArgs(SOCKET);
 
         assertTrue(args.contains("FLOCI_OCI_DOCKER_RESOURCE_NAMESPACE=team-b"), args.toString());
@@ -134,7 +137,7 @@ class RestartCommandTest {
     void fieldsTheProfileOmitsKeepTheProductDefault() throws Exception {
         writeProfile("partial", "persistDir: /tmp/only-persist\n");
 
-        List<String> args = parse(ProductProfile.OCI, "--profile", "partial")
+        List<String> args = restartWith(ProductProfile.OCI, null, "--profile", "partial")
                 .buildStartCommand().dockerRunArgs(SOCKET);
 
         assertEquals(List.of("-d", "--name", "floci-oci", "-p", "4599:4599",
@@ -148,7 +151,7 @@ class RestartCommandTest {
     @Test
     void anInvalidProfileNamespaceFailsBeforeTheStop() throws Exception {
         writeProfile("bad", "container: floci-bad\nnamespace: bad/name\n");
-        RestartCommand restart = parse(ProductProfile.AWS, "--profile", "bad");
+        RestartCommand restart = restartWith(ProductProfile.AWS, null, "--profile", "bad");
 
         PrintStream err = System.err;
         System.setErr(new PrintStream(new ByteArrayOutputStream()));
@@ -169,7 +172,7 @@ class RestartCommandTest {
         Path readOnly = Files.createDirectories(tempDir.resolve("read-only"));
         assertTrue(readOnly.toFile().setWritable(false));
         writeProfile("ro", "container: floci-ro-none\npersistDir: " + readOnly.resolve("state") + "\n");
-        RestartCommand restart = parse(ProductProfile.AWS, "--profile", "ro");
+        RestartCommand restart = restartWith(ProductProfile.AWS, null, "--profile", "ro");
 
         PrintStream out = System.out;
         PrintStream err = System.err;
@@ -197,7 +200,7 @@ class RestartCommandTest {
     @Test
     void usesTheParsesSnapshotEvenIfTheFileChangesAfterwards() throws Exception {
         writeProfile("snap", "container: floci-snap\npersistDir: /from-the-parse\n");
-        RestartCommand restart = parse(ProductProfile.AWS, "--profile", "snap");
+        RestartCommand restart = restartWith(ProductProfile.AWS, null, "--profile", "snap");
 
         writeProfile("snap", "container: floci-snap\npersistDir: /edited-later\n");
         List<String> args = restart.buildStartCommand().dockerRunArgs(SOCKET);
@@ -220,7 +223,7 @@ class RestartCommandTest {
     void withoutAProfileTheRunningContainersSettingsCarryOver() throws Exception {
         var running = new DockerClient.RunSettings("floci/floci-gcp:0.9", 14588, "/data/gcp",
                 Map.of("FLOCI_GCP_SERVICES", "storage", "FLOCI_GCP_DOCKER_RESOURCE_NAMESPACE", "team"),
-                List.of("label=disable"));
+                List.of("label=disable"), null);
 
         List<String> args = restartWith(ProductProfile.GCP, running).buildStartCommand().dockerRunArgs(SOCKET);
 
@@ -237,7 +240,7 @@ class RestartCommandTest {
     void aProfileWinsOverTheRunningContainersSettings() throws Exception {
         writeProfile("pinned", "port: 15000\n");
         var running = new DockerClient.RunSettings("floci/floci:0.9", 14566, "/data/x", Map.of(),
-                List.of("label=disable"));
+                List.of("label=disable"), null);
 
         List<String> args = restartWith(ProductProfile.AWS, running, "--profile", "pinned")
                 .buildStartCommand().dockerRunArgs(SOCKET);
@@ -247,15 +250,149 @@ class RestartCommandTest {
         assertFalse(args.contains("--security-opt"), args.toString());
     }
 
+    /** Without one, a restart would quietly publish a loopback-only instance on every interface. */
+    @Test
+    void withoutAProfileTheRecordedAddressCarriesOver() throws Exception {
+        var running = new DockerClient.RunSettings("floci/floci:0.9", 14566, null, Map.of(), List.of(), "127.0.0.1");
+
+        List<String> args = restartWith(ProductProfile.AWS, running).buildStartCommand().dockerRunArgs(SOCKET);
+
+        assertEquals("127.0.0.1:14566:4566", args.get(args.indexOf("-p") + 1), args.toString());
+    }
+
+    @Test
+    void anIpv6RecordedAddressCarriesOverInBrackets() throws Exception {
+        var running = new DockerClient.RunSettings("floci/floci-oci:0.9", 4599, null, Map.of(), List.of(), "::1");
+
+        List<String> args = restartWith(ProductProfile.OCI, running).buildStartCommand().dockerRunArgs(SOCKET);
+
+        assertTrue(args.contains("[0:0:0:0:0:0:0:1]:4599:4599"), args.toString());
+    }
+
+    /**
+     * A profile decides everything it names, but one that names no address keeps the one start
+     * recorded on the container: falling back to every interface would widen the instance silently.
+     */
+    @Test
+    void aProfileWithoutABindKeepsTheRecordedAddress() throws Exception {
+        writeProfile("pinned", "port: 15000\n");
+        var running = new DockerClient.RunSettings("floci/floci:0.9", 14566, null, Map.of(), List.of(), "127.0.0.1");
+
+        List<String> args = restartWith(ProductProfile.AWS, running, "--profile", "pinned")
+                .buildStartCommand().dockerRunArgs(SOCKET);
+
+        assertEquals("127.0.0.1:15000:4566", args.get(args.indexOf("-p") + 1), args.toString());
+    }
+
+    @Test
+    void aProfilesOwnBindBeatsTheRecordedAddress() throws Exception {
+        writeProfile("v6", "bind: ::1\n");
+        var running = new DockerClient.RunSettings("floci/floci:0.9", 4566, null, Map.of(), List.of(), "127.0.0.1");
+
+        List<String> args = restartWith(ProductProfile.AWS, running, "--profile", "v6")
+                .buildStartCommand().dockerRunArgs(SOCKET);
+
+        assertEquals("[0:0:0:0:0:0:0:1]:4566:4566", args.get(args.indexOf("-p") + 1), args.toString());
+    }
+
+    /** A client whose docker answers every call with an inspect document: these port bindings and labels. */
+    private DockerClient inspecting(String bindings, String labels) throws IOException {
+        Path json = Files.writeString(tempDir.resolve("inspect.json"), """
+                {"Config":{"Image":"floci/floci:0.9","Env":[],"Labels":%s},
+                 "HostConfig":{"PortBindings":{"4566/tcp":%s}}}
+                """.formatted(labels, bindings));
+        Path docker = tempDir.resolve("docker");
+        Files.writeString(docker, "#!/bin/sh\ncat '" + json + "'\n");
+        assertTrue(docker.toFile().setExecutable(true));
+        return new DockerClient(docker.toString());
+    }
+
+    private RestartCommand restartOn(DockerClient docker, String... args) {
+        RestartCommand restart = new RestartCommand(ProductProfile.AWS, docker);
+        new CommandLine(restart).setDefaultValueProvider(new ProfileDefaultValueProvider(new ProfileStore(tempDir))).parseArgs(args);
+        return restart;
+    }
+
+    /**
+     * What a runtime reports it published also holds its own defaults: Docker "", Podman 0.0.0.0,
+     * or one binding per address of Podman's default_host_ips. Without the label, none of it is
+     * taken for a --bind, so the restart gets exactly the arguments it had before the flag existed,
+     * with or without a profile.
+     */
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "[{\"HostIp\":\"\",\"HostPort\":\"14566\"}]",
+            "[{\"HostIp\":\"0.0.0.0\",\"HostPort\":\"14566\"}]",
+            "[{\"HostIp\":\"127.0.0.1\",\"HostPort\":\"14566\"},{\"HostIp\":\"::1\",\"HostPort\":\"14566\"}]"})
+    @DisabledOnOs(OS.WINDOWS)
+    void aContainerStartedWithoutBindRestartsWithoutOne(String bindings) throws Exception {
+        writeProfile("plain", "port: 15000\n");
+        DockerClient docker = inspecting(bindings, "{}");
+
+        assertEquals(List.of("-d", "--name", "floci", "-p", "14566:4566", "-v", "/sock:/sock",
+                "-e", "FLOCI_BASE_URL=http://localhost:14566", "floci/floci:0.9"), restartOn(docker).buildStartCommand().dockerRunArgs(SOCKET));
+        assertEquals(List.of("-d", "--name", "floci", "-p", "15000:4566", "-v", "/sock:/sock",
+                "-e", "FLOCI_BASE_URL=http://localhost:15000", "floci/floci:latest"),
+                restartOn(docker, "--profile", "plain").buildStartCommand().dockerRunArgs(SOCKET));
+    }
+
+    /** What start records, restart reads back and publishes again, whatever the runtime reports. */
+    @ParameterizedTest
+    @ValueSource(strings = {"127.0.0.1", "0.0.0.0", "::1"})
+    @DisabledOnOs(OS.WINDOWS)
+    void theAddressStartRecordsIsTheOneRestartPublishes(String bind) throws Exception {
+        StartCommand start = new StartCommand(ProductProfile.AWS, new DockerClient(tempDir.resolve("no-docker").toString()));
+        new CommandLine(start).parseArgs("--bind", bind, "--port", "14566");
+        List<String> started = start.dockerRunArgs(SOCKET);
+        String label = started.get(started.indexOf("--label") + 1);
+        String recorded = label.substring(label.indexOf('=') + 1);
+
+        List<String> restarted = restartOn(inspecting("[{\"HostIp\":\"0.0.0.0\",\"HostPort\":\"14566\"}]",
+                "{\"floci_bind\":\"" + recorded + "\"}")).buildStartCommand().dockerRunArgs(SOCKET);
+
+        assertEquals(started.get(started.indexOf("-p") + 1), restarted.get(restarted.indexOf("-p") + 1), restarted.toString());
+        assertTrue(restarted.contains(label), restarted.toString());
+    }
+
+    /**
+     * An address docker would refuse, from the profile or from the container, fails the restart
+     * before the stop, so the running instance is left alone.
+     */
+    @Test
+    void aBindDockerWouldRefuseFailsTheRestartBeforeTheStop() throws Exception {
+        writeProfile("brackets", "bind: '[[::1]]'\n");
+        for (String fromContainer : new String[]{null, "[[::1]]"}) {
+            DockerClient running = new DockerClient(tempDir.resolve("no-docker").toString()) {
+                @Override
+                public Optional<RunSettings> inspectRunSettings(String name, int containerPort) {
+                    return Optional.of(new RunSettings("floci/floci:0.9", 4566, null, Map.of(), List.of(), fromContainer));
+                }
+
+                @Override
+                public Optional<ContainerInfo> inspectContainer(String name) {
+                    return Optional.of(new ContainerInfo("abc", name, "floci/floci:0.9", "running", "4566->4566/tcp"));
+                }
+            };
+            List<String> ran = new ArrayList<>();
+            String[] args = fromContainer == null ? new String[]{"--profile", "brackets"} : new String[0];
+
+            Ran r = run(recordingRestart(running, ran, args));
+
+            assertEquals(2, r.exit(), r.err());
+            assertEquals(List.of(), ran, "nothing was stopped or started");
+            assertTrue(r.err().contains("Invalid --bind '[[::1]]'"), r.err());
+        }
+    }
+
     /** What a restart did, in order: "stop" and "start" as it ran them. */
-    private RestartCommand recordingRestart(DockerClient docker, List<String> ran) {
+    private RestartCommand recordingRestart(DockerClient docker, List<String> ran, String... args) {
         RestartCommand restart = new RestartCommand(ProductProfile.AWS, docker) {
             @Override
             public StartCommand buildStartCommand() throws DockerException {
                 // The real one first, so its docker failure still surfaces; it also answers the
                 // checks restart runs before the stop, as only it carries the resolved settings.
                 StartCommand real = super.buildStartCommand();
-                return new StartCommand(ProductProfile.AWS) {
+                return new StartCommand(ProductProfile.AWS, docker) {
                     @Override
                     public String validationError() {
                         return real.validationError();
@@ -276,7 +413,7 @@ class RestartCommandTest {
 
             @Override
             public StopCommand buildStopCommand() {
-                return new StopCommand(ProductProfile.AWS) {
+                return new StopCommand(ProductProfile.AWS, docker) {
                     @Override
                     public Integer call() {
                         ran.add("stop");
@@ -287,7 +424,7 @@ class RestartCommandTest {
         };
         new CommandLine(restart)
                 .setDefaultValueProvider(new ProfileDefaultValueProvider(new ProfileStore(tempDir)))
-                .parseArgs();
+                .parseArgs(args);
         return restart;
     }
 
@@ -336,7 +473,7 @@ class RestartCommandTest {
         DockerClient present = new DockerClient() {
             @Override
             public Optional<RunSettings> inspectRunSettings(String name, int containerPort) {
-                return Optional.of(new RunSettings("floci/floci:0.9", 14566, null, Map.of(), List.of()));
+                return Optional.of(new RunSettings("floci/floci:0.9", 14566, null, Map.of(), List.of(), null));
             }
 
             @Override
@@ -386,7 +523,7 @@ class RestartCommandTest {
             @Override
             public Optional<RunSettings> inspectRunSettings(String name, int containerPort) {
                 return Optional.of(new RunSettings("floci/floci:0.9", 14566, null, Map.of(),
-                        List.of("label=disable", "seccomp={\"defaultAction\":\"SCMP_ACT_ALLOW\"}")));
+                        List.of("label=disable", "seccomp={\"defaultAction\":\"SCMP_ACT_ALLOW\"}"), null));
             }
 
             @Override
@@ -414,7 +551,7 @@ class RestartCommandTest {
             @Override
             public Optional<RunSettings> inspectRunSettings(String name, int containerPort) {
                 // What the running container was started with: a relative data directory.
-                return Optional.of(new RunSettings("floci/floci:0.9", 14566, "data", Map.of(), List.of()));
+                return Optional.of(new RunSettings("floci/floci:0.9", 14566, "data", Map.of(), List.of(), null));
             }
 
             @Override
