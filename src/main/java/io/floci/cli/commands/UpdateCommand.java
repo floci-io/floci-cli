@@ -106,7 +106,7 @@ public class UpdateCommand implements Callable<Integer> {
                 printer.error("invalid --version '" + to + "'.\nPass a release version such as 0.3.0.");
                 return ExitCode.USAGE;
             }
-            String target = pinned ? to.trim() : fetchLatestVersion();
+            String target = pinned ? Version.normalize(to.trim()) : fetchLatestVersion();
 
             // Unpinned updates are semantic, not string-equal: a pre-release/snapshot build
             // (0.1.9-rc.1) must not be silently downgraded to the latest stable (0.1.8).
