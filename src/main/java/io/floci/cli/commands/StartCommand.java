@@ -471,7 +471,8 @@ public class StartCommand implements Callable<Integer> {
         // Checked here rather than left to 'docker run', whose bind error names neither the port
         // flag nor how to find what holds the port. A remote daemon publishes on another machine,
         // so a local probe would say nothing about it.
-        if (probesPortLocally(daemon, port) && !PortAvailableCheck.isPortFree(port)) {
+        if (probesPortLocally(daemon, port) && !(bind == null ? PortAvailableCheck.isPortFree(port)
+                : PortAvailableCheck.isPortFree(InetAddress.ofLiteral(bind), port))) {
             printer.error("Port " + port + " is already in use by another process.\n"
                     + "Run 'lsof -i :" + port + "' to find it, or pass --port <other> to use a different port.");
             return 1;

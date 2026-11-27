@@ -81,6 +81,36 @@ public class PortAvailableCheck implements Check {
         }
     }
 
+    /**
+     * {@link #isPortFree(int)} for a start that publishes on {@code address} alone. The wildcard
+     * probe cannot tell: Linux refuses it while another socket holds the port on any address,
+     * such as 127.0.0.1, even when {@code address} is free.
+     */
+    public static boolean isPortFree(InetAddress address, int port) {
+        // The wildcard is what isPortFree(port) binds, and its fallback connects to loopback.
+        // Java sends a connect to the wildcard to the host name's address, 127.0.1.1 on Debian.
+        if (address.isAnyLocalAddress()) return isPortFree(port);
+        try {
+            new ServerSocket(port, 0, address).close();
+        } catch (IOException e) {
+            // An address this machine does not have (a VM's, another host's) fails the bind too,
+            // and docker judges that one. isLocal tells the two apart, since Linux translates the
+            // error text.
+            return !isLocal(address) || !takenAfterFailedBind(port, e.getMessage(), () -> listensOn(address, port));
+        }
+        // macOS and Windows let that bind share the port with a listener on the wildcard address.
+        return !listensOn(address, port);
+    }
+
+    // Port 0 cannot be taken, so only the address can fail this bind.
+    private static boolean isLocal(InetAddress address) {
+        try (ServerSocket s = new ServerSocket(0, 0, address)) {
+            return true;
+        } catch (IOException e) {
+            return false;
+        }
+    }
+
     /** The ports a user may be refused for lack of privilege rather than because they are taken. */
     static final int FIRST_UNPRIVILEGED_PORT = 1024;
 
@@ -97,8 +127,13 @@ public class PortAvailableCheck implements Check {
 
     /** Whether something accepts a connection on {@code port} on this machine. */
     public static boolean listensOnLoopback(int port) {
+        return listensOn(InetAddress.getLoopbackAddress(), port);
+    }
+
+    /** Whether something accepts a connection on {@code address} at {@code port}. */
+    public static boolean listensOn(InetAddress address, int port) {
         try (Socket socket = new Socket()) {
-            socket.connect(new InetSocketAddress(InetAddress.getLoopbackAddress(), port), 500);
+            socket.connect(new InetSocketAddress(address, port), 500);
             return true;
         } catch (IOException e) {
             return false;
