@@ -86,8 +86,8 @@ lists supported operations and gaps. Report it instead of retrying.
 ## Exit codes worth knowing
 
 - `0` success; non-zero failure for every command.
-- `2` usage or validation error: bad profile, duration, namespace, port, `--pull`, `--shell` or an
-  inline `--security-opt seccomp=` profile.
+- `2` usage or validation error: bad profile, duration, namespace, port, `--pull`, `--shell`, a
+  `--bind` address or an inline `--security-opt seccomp=` profile.
 - `1` from every snapshot subcommand (`save`, `load`, `list`, `delete`, `export`, `import`) in
   every tree: not available server-side yet. A name that is a path (`.`, `..`, or with `/`) is
   `2`, and a bare `floci <tree> snapshot` just prints its usage and exits `0`.

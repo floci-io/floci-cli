@@ -1,12 +1,13 @@
-Usage: floci config profile [-hqvV] [--json] [--no-color] [--no-emoji] [--container=<name>]
-                            [--endpoint=<url>] [--image=<image>] [--namespace=<name>]
-                            [-o=text|json|yaml] [--persist=<dir>] [--port=<port>]
-                            [--profile=<name>] [--services=<csv>] list|show|create|edit|delete
-                            [<name>] [COMMAND]
+Usage: floci config profile [-hqvV] [--json] [--no-color] [--no-emoji] [--bind=<address>]
+                            [--container=<name>] [--endpoint=<url>] [--image=<image>]
+                            [--namespace=<name>] [-o=text|json|yaml] [--persist=<dir>]
+                            [--port=<port>] [--profile=<name>] [--services=<csv>]
+                            list|show|create|edit|delete [<name>] [COMMAND]
 Manage Floci AWS configuration profiles
       list|show|create|edit|delete
                            Action: list, show, create, edit, delete
       [<name>]             Profile name (required for show, create, edit, delete)
+      --bind=<address>     create: host address this instance's port is published on
       --container=<name>   Floci container name (default: floci)
       --endpoint=<url>     Floci server endpoint URL (default: http://localhost:4566)
   -h, --help               Show this help message and exit.

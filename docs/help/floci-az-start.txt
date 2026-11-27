@@ -1,8 +1,11 @@
-Usage: floci az start [-hqvV] [--detach] [--json] [--no-color] [--no-emoji] [--container=<name>]
-                      [--endpoint=<url>] [--image=<ref>] [--namespace=<name>] [-o=text|json|yaml]
-                      [--persist=<dir>] [--port=<port>] [--profile=<name>]
+Usage: floci az start [-hqvV] [--detach] [--json] [--no-color] [--no-emoji] [--bind=<address>]
+                      [--container=<name>] [--endpoint=<url>] [--image=<ref>] [--namespace=<name>]
+                      [-o=text|json|yaml] [--persist=<dir>] [--port=<port>] [--profile=<name>]
                       [--pull=always|missing|never] [--services=<csv>] [--security-opt=<opt>]...
 Start the Floci Azure emulator container
+      --bind=<address>       Host address to publish the API port on, such as 127.0.0.1, and on AWS
+                               the web console too (default: every interface). An address other
+                               than 127.0.0.1 or 0.0.0.0 also needs --endpoint
       --container=<name>     Floci container name (default: floci-az)
       --detach               Return immediately without waiting for readiness
       --endpoint=<url>       Floci server endpoint URL (default: http://localhost:4577)

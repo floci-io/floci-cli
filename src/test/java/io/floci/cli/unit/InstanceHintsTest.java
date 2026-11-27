@@ -85,10 +85,10 @@ class InstanceHintsTest {
         };
         Run start = run(new StartCommand(ProductProfile.AWS, docker), "--container", "other", "--port", "14566",
                 "--image", "my image:1", "--pull", "always", "--security-opt", "label=disable",
-                "--security-opt", "seccomp=/etc/my profile.json");
+                "--security-opt", "seccomp=/etc/my profile.json", "--bind", "[::1]");
         assertEquals(1, start.exit());
         assertTrue(start.err().contains("floci start --pull never --container other --port 14566 --image 'my image:1'"
-                + " --security-opt label=disable --security-opt 'seccomp=/etc/my profile.json'"), start.err());
+                + " --security-opt label=disable --security-opt 'seccomp=/etc/my profile.json' --bind '[::1]'"), start.err());
     }
     @Test
     void envLoadHintsPreserveTheProfileInAllFourTrees() throws Exception {

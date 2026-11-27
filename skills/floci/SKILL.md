@@ -79,11 +79,12 @@ clouds the user works with; suggest installing them, do not install them unasked
 6. **State is ephemeral** unless the instance was started with `--persist <dir>` or a profile
    with `persistDir`. Both `start` on a stopped container and `restart` remove the container
    and create a new one: `restart` keeps the settings (port, image, services, persist dir,
-   namespace) but not in-memory state, and on Azure the new container has a new certificate,
-   so `floci az setup` must be run again. `start` on a running container fails. Say so before
-   recreating anything. If restart fails after removal, follow stderr: a start command that
-   retries with the same settings, or `logs` and `wait` when the new container is up but not
-   ready. Neither restores in-memory state.
+   namespace, bind address) but not in-memory state, and on Azure the new container has a new
+   certificate, so `floci az setup` must be run again. `start` on a running container fails;
+   on a stopped one it uses only its own flags and profile, so a bind address meant to last
+   belongs in the profile. Say so before recreating anything. If restart fails after removal,
+   follow stderr: a start command that retries with the same settings, or `logs` and `wait`
+   when the new container is up but not ready. Neither restores in-memory state.
 7. **Never add `-q` to `env`**: it suppresses the exports themselves. Follow-up command hints
    keep the instance's flags; keep them when retrying.
 8. **Do not guess what an emulator supports.** Check `floci <tree> services -o json` and the

@@ -16,7 +16,9 @@ import org.junit.jupiter.params.provider.ValueSource;
 import picocli.CommandLine;
 
 import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.io.PrintStream;
+import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.nio.file.Files;
@@ -95,6 +97,15 @@ class StartPreflightTest {
         } finally {
             System.setOut(out);
             System.setErr(err);
+        }
+    }
+
+    // Linux has all of 127.0.0.0/8 on lo, macOS only 127.0.0.1; a host without IPv6 has no ::1.
+    private static boolean hasAddress(String address) {
+        try (ServerSocket s = new ServerSocket(0, 0, InetAddress.ofLiteral(address))) {
+            return true;
+        } catch (IOException e) {
+            return false;
         }
     }
 
@@ -203,6 +214,104 @@ class StartPreflightTest {
     void anAddressInUseErrorMeansTakenOnAnyPort() {
         assertTrue(PortAvailableCheck.takenAfterFailedBind(80, "Address already in use", () -> false));
         assertTrue(PortAvailableCheck.takenAfterFailedBind(443, "Address already in use: bind", () -> false));
+    }
+
+    /**
+     * With --bind only that address is probed. Linux refuses the wildcard probe while another
+     * socket holds the port on 127.0.0.1; macOS allows it, so there this passes either way.
+     */
+    @ParameterizedTest
+    @ValueSource(strings = {"127.0.0.2", "::1"})
+    void aStartWithBindProbesOnlyThatAddress(String address) throws Exception {
+        assumeTrue(hasAddress(address), address + " is not on this machine");
+        FakeDocker docker = new FakeDocker(LOCAL);
+        try (ServerSocket loopback = new ServerSocket(0, 0, InetAddress.ofLiteral("127.0.0.1"))) {
+            Out r = start(docker, "--bind", address, "--port", String.valueOf(loopback.getLocalPort()),
+                    "--container", "floci-gcp-preflight", "--detach");
+
+            assertEquals(0, r.exit(), r.err());
+            assertEquals(List.of("pull", "run"), docker.calls);
+        }
+    }
+
+    /** The other way round: a listener on the bind address itself, wildcard spellings included. */
+    @ParameterizedTest
+    @ValueSource(strings = {"127.0.0.1", "::1", "0.0.0.0", "::"})
+    void aListenerOnTheBindAddressStopsTheStart(String address) throws Exception {
+        assumeTrue(hasAddress(address), address + " is not on this machine");
+        FakeDocker docker = new FakeDocker(LOCAL);
+        try (ServerSocket taken = new ServerSocket(0, 0, InetAddress.ofLiteral(address))) {
+            int port = taken.getLocalPort();
+
+            Out r = start(docker, "--bind", address, "--port", String.valueOf(port),
+                    "--container", "floci-gcp-preflight", "--detach");
+
+            assertEquals(1, r.exit(), r.err());
+            assertTrue(r.err().contains("Port " + port + " is already in use"), r.err());
+            assertEquals(List.of(), docker.calls);
+        }
+    }
+
+    /**
+     * A listener on every address stops the start, although macOS and Windows let the bind on the
+     * --bind address share its port.
+     */
+    @ParameterizedTest
+    @ValueSource(strings = {"127.0.0.1", "::1"})
+    void aWildcardListenerStopsAStartWithBind(String address) throws Exception {
+        assumeTrue(hasAddress(address), address + " is not on this machine");
+        FakeDocker docker = new FakeDocker(LOCAL);
+        try (ServerSocket taken = new ServerSocket(0)) {
+            int port = taken.getLocalPort();
+
+            Out r = start(docker, "--bind", address, "--port", String.valueOf(port),
+                    "--container", "floci-gcp-preflight", "--detach");
+
+            assertEquals(1, r.exit(), r.err());
+            assertTrue(r.err().contains("Port " + port + " is already in use"), r.err());
+            assertEquals(List.of(), docker.calls);
+        }
+    }
+
+    /**
+     * An address this machine does not have (a VM's, another host's) fails the probe for that
+     * reason, not the port's, so docker decides. 192.0.2.10 is for documentation (RFC 5737).
+     */
+    @Test
+    void aBindAddressNotOnThisMachineIsLeftToDocker() throws Exception {
+        FakeDocker docker = new FakeDocker(LOCAL);
+        int port;
+        try (ServerSocket free = new ServerSocket(0)) {
+            port = free.getLocalPort();
+        }
+
+        Out r = start(docker, "--bind", "192.0.2.10", "--port", String.valueOf(port),
+                "--container", "floci-gcp-preflight", "--detach");
+
+        assertEquals(0, r.exit(), r.err());
+        assertEquals(List.of("pull", "run"), docker.calls);
+    }
+
+    /** 0.0.0.0 and :: get the probe start uses without --bind, whatever holds the port. */
+    @ParameterizedTest
+    @ValueSource(strings = {"0.0.0.0", "::"})
+    void aWildcardBindAddressGetsTheOldProbesAnswer(String address) throws Exception {
+        InetAddress wildcard = InetAddress.ofLiteral(address);
+        int port;
+        try (ServerSocket loopback = new ServerSocket(0, 0, InetAddress.ofLiteral("127.0.0.1"))) {
+            port = loopback.getLocalPort();
+            assertEquals(PortAvailableCheck.isPortFree(port), PortAvailableCheck.isPortFree(wildcard, port));
+        }
+        assertTrue(PortAvailableCheck.isPortFree(wildcard, port));
+    }
+
+    @Test
+    void aListenerIsFoundOnItsOwnAddressOnly() throws Exception {
+        try (ServerSocket listening = new ServerSocket(0, 0, InetAddress.ofLiteral("127.0.0.1"))) {
+            int port = listening.getLocalPort();
+            assertTrue(PortAvailableCheck.listensOn(InetAddress.ofLiteral("127.0.0.1"), port));
+            assertFalse(PortAvailableCheck.listensOn(InetAddress.ofLiteral("::1"), port));
+        }
     }
 
     @Test

@@ -68,11 +68,15 @@ public class DockerClient {
     /**
      * What a container was started with, as {@code restart} needs it back: the image, the host
      * port bound to {@code containerPort}, the host directory bind-mounted at {@code /app/data}
-     * (null for a docker volume), the environment and the {@code --security-opt} values. Any of them
-     * may be absent (null, or an empty map or list).
+     * (null for a docker volume), the environment, the {@code --security-opt} values and the
+     * {@code --bind} address start recorded in {@link #BIND_LABEL}. Any of them may be absent (null,
+     * or an empty map or list).
      */
     public record RunSettings(String image, Integer hostPort, String persistSource, Map<String, String> env,
-                              List<String> securityOpts) {}
+                              List<String> securityOpts, String bind) {}
+
+    /** The label {@code start --bind} records its address in, named like the emulator's own {@code floci_*} labels. */
+    public static final String BIND_LABEL = "floci_bind";
 
     private static final ObjectMapper JSON = new ObjectMapper();
 
@@ -106,7 +110,8 @@ public class DockerClient {
             }
             List<String> securityOpts = new ArrayList<>();
             for (JsonNode opt : c.path("HostConfig").path("SecurityOpt")) securityOpts.add(opt.asText());
-            return Optional.of(new RunSettings(image, hostPort, persist, Map.copyOf(env), List.copyOf(securityOpts)));
+            return Optional.of(new RunSettings(image, hostPort, persist, Map.copyOf(env), List.copyOf(securityOpts),
+                    textOrNull(c.path("Config").path("Labels").path(BIND_LABEL))));
         } catch (Exception e) {
             throw new DockerException("Could not read the settings of container '" + name + "': " + e.getMessage());
         }

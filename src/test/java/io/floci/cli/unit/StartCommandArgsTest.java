@@ -1,6 +1,7 @@
 package io.floci.cli.unit;
 
 import io.floci.cli.FlociCli;
+import io.floci.cli.ProductProfile;
 import io.floci.cli.commands.StartCommand;
 import io.floci.cli.config.ProfileStore;
 import io.floci.cli.docker.DockerClient;
@@ -9,7 +10,9 @@ import org.junit.jupiter.api.condition.DisabledOnOs;
 import org.junit.jupiter.api.condition.OS;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
+import picocli.CommandLine;
 import picocli.CommandLine.ParseResult;
 
 import java.io.ByteArrayOutputStream;
@@ -105,6 +108,99 @@ class StartCommandArgsTest {
         for (String tree : new String[]{"gcp", "az", "oci"}) {
             List<String> args = parse(tree, "start", "--security-opt", "label=disable").dockerRunArgs(SOCKET);
             assertEquals("label=disable", args.get(args.indexOf("--security-opt") + 1), tree);
+        }
+    }
+
+    /** The label records the choice for restart; the address itself is written the one way docker reads. */
+    @Test
+    void bindPublishesThePortOnThatAddress() {
+        assertEquals(List.of("-d", "--name", "floci", "-p", "127.0.0.1:4566:4566", "--label", "floci_bind=127.0.0.1",
+                        "-v", "/sock:/sock", "-e", "FLOCI_SERVICES_UI_BIND_ADDRESS=127.0.0.1", "floci/floci:latest"),
+                parse("start", "--bind", "127.0.0.1").dockerRunArgs(SOCKET));
+        assertTrue(parse("start", "--bind", "127.0.0.1", "--port", "14566").dockerRunArgs(SOCKET).contains("127.0.0.1:14566:4566"));
+        assertTrue(parse("start", "--bind", "0.0.0.0").dockerRunArgs(SOCKET).contains("0.0.0.0:4566:4566"));
+        assertTrue(parse("gcp", "start", "--bind", "192.0.2.10").dockerRunArgs(SOCKET).contains("192.0.2.10:4588:4588"));
+        assertTrue(parse("az", "start", "--bind", "127.0.0.1").dockerRunArgs(SOCKET).contains("127.0.0.1:4577:4577"));
+        assertTrue(parse("oci", "start", "--bind", "127.0.0.1").dockerRunArgs(SOCKET).contains("127.0.0.1:4599:4599"));
+        assertFalse(parse("start").dockerRunArgs(SOCKET).contains("--label"));
+    }
+
+    /**
+     * Any IPv6 spelling the JDK reads goes to docker in its full form, in brackets: docker and
+     * podman refuse some that Java takes (00001::1, ::01.2.3.4).
+     */
+    @ParameterizedTest
+    @CsvSource({"::1, 0:0:0:0:0:0:0:1", "[::1], 0:0:0:0:0:0:0:1", "::, 0:0:0:0:0:0:0:0", "FE80::1, fe80:0:0:0:0:0:0:1",
+            "1:2:3:4:5:6:7:8, 1:2:3:4:5:6:7:8", "00001::1, 1:0:0:0:0:0:0:1", "::01.2.3.4, 0:0:0:0:0:0:102:304"})
+    void anIpv6BindIsPassedOnInItsFullForm(String bind, String full) {
+        List<String> args = parse("start", "--bind", bind).dockerRunArgs(SOCKET);
+
+        assertEquals("[" + full + "]:4566:4566", args.get(args.indexOf("-p") + 1), bind);
+        assertTrue(args.contains("floci_bind=" + full), bind);
+        assertTrue(args.contains("FLOCI_SERVICES_UI_BIND_ADDRESS=" + full), bind);
+    }
+
+    /**
+     * The AWS emulator publishes its web console itself, on every interface unless told an
+     * address, so --bind gives it the same one, without brackets: it goes straight into docker's
+     * HostIp. The other emulators have no such setting.
+     */
+    @Test
+    void onAwsTheWebConsoleFollowsTheBindAddress() {
+        assertTrue(parse("start", "--bind", "[::1]").dockerRunArgs(SOCKET).contains("FLOCI_SERVICES_UI_BIND_ADDRESS=0:0:0:0:0:0:0:1"));
+        assertTrue(parse("aws", "start", "--bind", "0.0.0.0").dockerRunArgs(SOCKET).contains("FLOCI_SERVICES_UI_BIND_ADDRESS=0.0.0.0"));
+        for (String tree : new String[]{"aws", "gcp", "az", "oci"}) {
+            assertTrue(parse(tree, "start").dockerRunArgs(SOCKET).stream().noneMatch(a -> a.contains("UI_BIND_ADDRESS")), tree);
+        }
+        for (String tree : new String[]{"gcp", "az", "oci"}) {
+            assertTrue(parse(tree, "start", "--bind", "127.0.0.1").dockerRunArgs(SOCKET).stream()
+                    .noneMatch(a -> a.contains("UI_BIND_ADDRESS")), tree);
+        }
+    }
+
+    /** zsh reads an unquoted [::1] as a glob, so the retry and recovery commands quote it. */
+    @Test
+    void aBracketedBindIsQuotedInTheRecoveryCommand() {
+        assertTrue(parse("start", "--bind", "[::1]").recoveryCommand().endsWith(" --bind '[::1]'"));
+    }
+
+    /**
+     * One IP address: IPv4 typed dotted (Java also reads 127.1 and 2130706433), IPv6 without a
+     * zone. A blank one is refused too, so '--bind "$ADDR"' with ADDR unset cannot mean every interface.
+     */
+    @ParameterizedTest
+    @ValueSource(strings = {"", " ", "localhost", "999.1.1.1", "1.2.3.4.5", "127.0.0.1:4566", "fe80::1%1", "[::1",
+            "0x7f.0.0.1", " 127.0.0.1", "127.1", "0127.0.0.1", "2130706433", "::ffff:127.0.0.1", "[[::1]]", "[fe80::1%en0]",
+            "[127.0.0.1]"})
+    void aBindThatIsNotOneIpAddressIsRefused(String bind) {
+        String error = parse("start", "--bind", bind).validationError();
+
+        assertNotNull(error, bind);
+        assertTrue(error.startsWith("Invalid --bind '" + bind + "'"), error);
+    }
+
+    @Test
+    void theProfileBindAppliesAndTheFlagStillWins() throws Exception {
+        writeProfile("probe", "bind: 127.0.0.1\n");
+        writeProfile("blank", "bind: ''\n");
+
+        assertTrue(parse("start", "--profile", "probe").dockerRunArgs(SOCKET).contains("127.0.0.1:4566:4566"));
+        assertTrue(parse("start", "--profile", "probe", "--bind", "::1").dockerRunArgs(SOCKET).contains("[0:0:0:0:0:0:0:1]:4566:4566"));
+        assertNotNull(parse("start", "--profile", "blank").validationError());
+    }
+
+    /** The client has no binary, so a start that got past validation would fail with 1, not reach a daemon. */
+    @ParameterizedTest
+    @ValueSource(strings = {"", "[[::1]]"})
+    void anInvalidBindIsRejectedBeforeDockerIsTouched(String bind) {
+        StartCommand start = new StartCommand(ProductProfile.AWS, new DockerClient(tempDir.resolve("no-docker").toString()));
+        new CommandLine(start).parseArgs("--bind", bind);
+        PrintStream err = System.err;
+        System.setErr(new PrintStream(new ByteArrayOutputStream()));
+        try {
+            assertEquals(2, start.call());
+        } finally {
+            System.setErr(err);
         }
     }
 
@@ -228,6 +324,7 @@ class StartCommandArgsTest {
         assertTrue(parse("start", "--port", "0").validationError().contains("--port must be between 1 and 65535"));
         assertTrue(parse("start", "--port", "70000").validationError().contains("--port must be between 1 and 65535"));
         assertTrue(parse("start", "--pull", "alwayz").validationError().contains("Invalid --pull 'alwayz'"));
+        assertNull(parse("start", "--bind", "::").validationError());
     }
 
     /** Pull policies are plain ASCII words: a Turkish default locale lowercases "MISSING" with a dotless i. */
